@@ -1,0 +1,34 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #0f172a; }
+.page { min-height: 100vh; background: #f8fafc; padding: 24px; }
+.shell { max-width: 1200px; margin: 0 auto; display: grid; gap: 24px; }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+h1 { margin: 0; font-size: 32px; }
+p { margin: 4px 0 0; color: #475569; }
+button { display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 16px; background: #0f172a; color: white; padding: 10px 16px; cursor: pointer; }
+button:disabled { opacity: .6; cursor: not-allowed; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.alert, .mock, .panel, .card { background: white; border: 1px solid #e2e8f0; border-radius: 18px; box-shadow: 0 1px 2px rgba(15,23,42,.06); }
+.alert { display: flex; gap: 12px; padding: 16px; color: #b91c1c; border-color: #fecaca; }
+.alert p { color: #b91c1c; }
+.mock { background: #fffbeb; border-color: #fde68a; color: #92400e; padding: 14px 16px; }
+.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.card { padding: 20px; display: flex; justify-content: space-between; align-items: center; }
+.card span { display: block; font-size: 14px; color: #64748b; }
+.card b { display: block; font-size: 32px; margin-top: 4px; }
+.panel { padding: 20px; overflow-x: auto; }
+.panel h2 { margin: 0 0 16px; display: flex; align-items: center; gap: 8px; font-size: 20px; }
+.chart { height: 280px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { color: #64748b; text-align: left; border-bottom: 1px solid #e2e8f0; padding: 8px; }
+td { border-bottom: 1px solid #e2e8f0; padding: 8px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-badge { display: inline-flex; border-radius: 999px; padding: 4px 8px; font-size: 12px; font-weight: 700; }
+.status-badge.good { background: #ecfdf5; color: #047857; }
+.status-badge.ready { background: #eff6ff; color: #1d4ed8; }
+.status-badge.sent { background: #fffbeb; color: #b45309; }
+.status-badge.bad { background: #fef2f2; color: #b91c1c; }
+.status-badge.neutral { background: #f1f5f9; color: #475569; }
+.error-text { color: #b91c1c; }
+@media (max-width: 900px) { .cards, .grid { grid-template-columns: 1fr; } }
