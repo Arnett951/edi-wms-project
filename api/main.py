@@ -24,7 +24,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://brave-beach-07b122d1e.7.azurestaticapps.net"
+        "https://brave-beach-07b122d1e.7.azurestaticapps.net",
     ],
     allow_methods=["*"],
     allow_headers=["*"],
