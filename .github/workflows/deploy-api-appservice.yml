@@ -34,6 +34,6 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: ${{ secrets.AZURE_API_APP_NAME }}
-          publish-profile: ${{ secrets.AZURE_API_PUBLISH_PROFILE }}
-          package: api.zip
+          app-name: edi-wms-api
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
+          package: ./api
