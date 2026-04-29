@@ -35,7 +35,7 @@ def raw_connect():
         )
         return {"status": "connected"}
     except Exception as e:
-        return {"error": str(e)}
+        return {"errorFUCK": str(e)}
 
 app.add_middleware(
     CORSMiddleware,
