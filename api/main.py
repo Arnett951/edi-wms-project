@@ -72,7 +72,14 @@ def health():
 
 
 @app.get("/api/dashboard/summary")
-def summary():
+def dashboard_summary():
+    try:
+        result = rows("SELECT COUNT(*) AS total FROM EDI940_Raw")
+        return result
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
     raw = rows("""
         SELECT
             COUNT(*) AS filesReceived,
