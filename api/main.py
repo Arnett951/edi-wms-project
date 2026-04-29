@@ -20,23 +20,6 @@ def health():
     return {"status": "ok"}
 import pyodbc
 
-@app.get("/api/debug/raw-connect")
-def raw_connect():
-    try:
-        conn = pyodbc.connect(
-            "DRIVER={ODBC Driver 18 for SQL Server};"
-            "SERVER=tcp:sql-lab-data-eng-baby.database.windows.net,1433;"
-            "DATABASE=free-sql-db-5402162;"
-            "UID=azureadmin;"
-            "PWD=#ChupasKing0526;"
-            "Encrypt=yes;"
-            "TrustServerCertificate=yes;"
-            "Connection Timeout=10;"
-        )
-        return {"status": "connected"}
-    except Exception as e:
-        return {"errorFUCK": str(e)}
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
