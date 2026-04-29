@@ -18,14 +18,17 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
-    
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in allowed_origins if origin.strip()],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://brave-beach-07b122d1e.7.azurestaticapps.net"
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 def get_conn():
     server = os.getenv("SQL_SERVER")
