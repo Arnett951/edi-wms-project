@@ -24,4 +24,4 @@ jobs:
           api_location: ""
           output_location: dist
         env:
-          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
+         VITE_API_BASE: https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net
