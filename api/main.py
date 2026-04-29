@@ -10,16 +10,6 @@ def health():
     return {"status": "ok"}
     
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
-
-@app.get("/api/debug/env")
-def debug_env():
-    return {
-        "SQL_SERVER": repr(os.getenv("SQL_SERVER")),
-        "SQL_DATABASE": repr(os.getenv("SQL_DATABASE")),
-        "SQL_USER": repr(os.getenv("SQL_USER")),
-        "SQL_PASSWORD_SET": bool(os.getenv("SQL_PASSWORD")),
-        "SQL_PASSWORD_LENGTH": len(os.getenv("SQL_PASSWORD") or "")
-    }
     
 @app.get("/")
 def root():
@@ -40,13 +30,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def escape_odbc(value):
+    value = (value or "").strip()
+    return "{" + value.replace("}", "}}") + "}"
+
 def get_conn():
+    server = (os.getenv("SQL_SERVER") or "").strip()
+    database = (os.getenv("SQL_DATABASE") or "").strip()
+    user = (os.getenv("SQL_USER") or "").strip()
+    password = escape_odbc(os.getenv("SQL_PASSWORD"))
+
     return pyodbc.connect(
         f"DRIVER={{ODBC Driver 18 for SQL Server}};"
-        f"SERVER=tcp:{os.getenv('SQL_SERVER')},1433;"
-        f"DATABASE={os.getenv('SQL_DATABASE')};"
-        f"UID={os.getenv('SQL_USER')};"
-        f"PWD={os.getenv('SQL_PASSWORD')};"
+        f"SERVER=tcp:{server},1433;"
+        f"DATABASE={database};"
+        f"UID={user};"
+        f"PWD={password};"
         "Encrypt=yes;"
         "TrustServerCertificate=yes;"
         "Connection Timeout=30;"
