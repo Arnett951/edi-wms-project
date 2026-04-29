@@ -7,6 +7,14 @@ app = FastAPI(title="EDI WMS Dashboard API")
 
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
 
+@app.get("/")
+def root():
+    return {"status": "EDI WMS API running"}
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+    
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in allowed_origins if origin.strip()],
