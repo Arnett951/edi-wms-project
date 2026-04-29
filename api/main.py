@@ -5,6 +5,10 @@ import pyodbc
 
 app = FastAPI(title="EDI WMS Dashboard API")
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+    
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
 
 @app.get("/")
