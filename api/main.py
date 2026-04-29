@@ -44,6 +44,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+@app.get("/api/debug/logic-url")
+def debug_logic():
+    return {"url_set": bool(os.getenv("LOGIC_APP_TRIGGER_URL"))}
 
 def escape_odbc(value):
     value = (value or "").strip()
