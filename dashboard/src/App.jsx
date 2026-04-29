@@ -36,24 +36,7 @@ function Icon({ type, className = "" }) {
   if (type === "truck") return <svg {...props}><path d="M10 17h4V5H2v12h3"/><path d="M14 17h1"/><path d="M15 7h4l3 4v6h-3"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>;
   return <svg {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>;
 }
-async function triggerEdiFile() {
-  setLoading(true);
-  setError(null);
 
-  try {
-    const res = await fetch(`${API_BASE}/api/actions/trigger-edi`, {
-      method: "POST",
-    });
-
-    if (!res.ok) throw new Error("EDI trigger failed");
-
-    await loadDashboard();
-  } catch (err) {
-    setError(err.message || "Failed to trigger EDI file.");
-  } finally {
-    setLoading(false);
-  }
-}
 async function fetchJson(url) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`);
