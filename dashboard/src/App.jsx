@@ -108,7 +108,24 @@ export default function App() {
   ];
 
   return <div className="page"><main className="shell">
-    <header className="header"><div><h1>EDI 940 → WMS Dashboard</h1><p>Inbound files, parser status, staging queue, and WMS lifecycle visibility.</p></div><button onClick={loadDashboard} disabled={loading}><Icon type="refresh" className={loading ? "spin" : ""}/>Refresh</button></header>
+    <header className="header">
+  <div>
+    <h1>EDI 940 → WMS Dashboard</h1>
+    <p>Inbound files, parser status, staging queue, and WMS lifecycle visibility.</p>
+  </div>
+
+  <div className="header-actions">
+    <button onClick={triggerEdiFile} disabled={loading}>
+      <Icon type="play" />
+      Trigger EDI
+    </button>
+
+    <button onClick={loadDashboard} disabled={loading}>
+      <Icon type="refresh" className={loading ? "spin" : ""} />
+      Refresh
+    </button>
+  </div>
+</header>
     {error && <section className="alert"><Icon type="alert"/><div><strong>API connection issue</strong><p>{error}</p></div></section>}
     {usingMockData && <section className="mock">Mock mode is active. Start the FastAPI service at {API_BASE} to show live SQL data.</section>}
     <section className="cards">{cards.map(([label, value, icon]) => <article className="card" key={label}><div><span>{label}</span><b>{value}</b></div><Icon type={icon}/></article>)}</section>
