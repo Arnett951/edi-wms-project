@@ -10,7 +10,22 @@ def health():
     return {"status": "ok"}
     
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
-    
+
+import requests
+
+@app.post("/api/actions/trigger-edi")
+def trigger_edi():
+    url = os.getenv("LOGIC_APP_TRIGGER_URL")
+    if not url:
+        return {"success": False, "error": "LOGIC_APP_TRIGGER_URL not configured"}
+
+    response = requests.post(url, json={})
+    return {
+        "success": response.ok,
+        "status_code": response.status_code,
+        "response": response.text[:500]
+    }
+
 @app.get("/")
 def root():
     return {"status": "EDI WMS API running"}
