@@ -31,10 +31,16 @@ app.add_middleware(
 )
 
 def get_conn():
-    server = os.getenv("SQL_SERVER")
-    database = os.getenv("SQL_DATABASE")
-    user = os.getenv("SQL_USER")
-    password = os.getenv("SQL_PASSWORD")
+    return pyodbc.connect(
+        f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+        f"SERVER=tcp:{os.getenv('SQL_SERVER')},1433;"
+        f"DATABASE={os.getenv('SQL_DATABASE')};"
+        f"UID={os.getenv('SQL_USER')};"
+        f"PWD={os.getenv('SQL_PASSWORD')};"
+        "Encrypt=yes;"
+        "TrustServerCertificate=yes;"
+        "Connection Timeout=30;"
+    )
 
     missing = [
         name for name, value in {
