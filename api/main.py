@@ -11,6 +11,16 @@ def health():
     
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
 
+@app.get("/api/debug/env")
+def debug_env():
+    return {
+        "SQL_SERVER": repr(os.getenv("SQL_SERVER")),
+        "SQL_DATABASE": repr(os.getenv("SQL_DATABASE")),
+        "SQL_USER": repr(os.getenv("SQL_USER")),
+        "SQL_PASSWORD_SET": bool(os.getenv("SQL_PASSWORD")),
+        "SQL_PASSWORD_LENGTH": len(os.getenv("SQL_PASSWORD") or "")
+    }
+    
 @app.get("/")
 def root():
     return {"status": "EDI WMS API running"}
