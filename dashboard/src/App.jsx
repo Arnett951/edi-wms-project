@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { buildStatusChart, normalizeSummary, statusClass } from "./dashboardUtils";
+import ChatPanel from "./ChatPanel";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
@@ -96,6 +97,7 @@ export default function App() {
     {usingMockData && <section className="mock">Mock mode is active. Start the FastAPI service at {API_BASE} to show live SQL data.</section>}
     <section className="cards">{cards.map(([label, value, icon]) => <article className="card" key={label}><div><span>{label}</span><b>{value}</b></div><Icon type={icon}/></article>)}</section>
     <section className="panel"><h2><Icon type="database"/>Pipeline Status Counts</h2><div className="chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={statusChart}><XAxis dataKey="name" tick={{fontSize: 12}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="count" radius={[8,8,0,0]}/></BarChart></ResponsiveContainer></div></section>
+    <ChatPanel/>
     <section className="grid"><div className="panel"><h2>Recent EDI Files</h2><table><thead><tr><th>File</th><th>Status</th><th>Loaded</th><th>Error</th></tr></thead><tbody>{recentFiles.length === 0 ? <tr><td colSpan="4">No recent files found.</td></tr> : recentFiles.map(f => <tr key={f.rawId ?? f.fileName}><td>{f.fileName}</td><td><StatusBadge status={f.processStatus}/></td><td>{f.loadDateTime || "—"}</td><td className="error-text">{f.errorMessage || "—"}</td></tr>)}</tbody></table></div>
     <div className="panel"><h2>WMS Staging Queue</h2><table><thead><tr><th>Order</th><th>Status</th><th>Attempts</th><th>Error</th></tr></thead><tbody>{wmsOrders.length === 0 ? <tr><td colSpan="4">No WMS staging orders found.</td></tr> : wmsOrders.map(o => <tr key={o.wmsOrderHeaderStagingId ?? o.warehouseOrderNumber}><td>{o.warehouseOrderNumber}</td><td><StatusBadge status={o.integrationStatus}/></td><td>{o.attemptCount ?? 0}</td><td className="error-text">{o.errorMessage || "—"}</td></tr>)}</tbody></table></div></section>
   </main></div>;

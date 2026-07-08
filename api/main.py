@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional
 import os
+import re
 import pyodbc
 
 app = FastAPI(title="EDI WMS Dashboard API")
@@ -63,6 +66,14 @@ def rows(sql: str):
         return [dict(zip(columns, row)) for row in cur.fetchall()]
 
 
+def rows_params(sql: str, params: tuple):
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        columns = [column[0] for column in cur.description]
+        return [dict(zip(columns, row)) for row in cur.fetchall()]
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -117,3 +128,136 @@ def wms_orders():
         FROM wms.OrderHeader_Staging
         ORDER BY WMSOrderHeaderStagingId DESC
     """)
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 chat: rule-based lookups for "where is PO X" / "what happened with
+# ISA X" style questions. ISA control numbers aren't parsed into a column
+# yet, so they're pulled out of EDI940_Raw.RawContent on the fly.
+# ---------------------------------------------------------------------------
+
+class ChatRequest(BaseModel):
+    question: str
+
+
+PO_PATTERN = re.compile(r"\b(?:po|order|warehouse\s*order)\b[\s#:\-]*([a-z0-9\-]+)", re.IGNORECASE)
+ISA_PATTERN = re.compile(r"\bisa\b[\s#:\-]*([0-9]+)", re.IGNORECASE)
+
+WMS_STATUS_TEXT = {
+    "READY": "parsed and waiting to be sent to WMS",
+    "SENT": "sent to WMS and awaiting confirmation",
+    "SUCCESS": "successfully picked up by WMS",
+}
+
+
+def extract_isa_control_number(raw_content: Optional[str]) -> Optional[str]:
+    if not raw_content:
+        return None
+    for segment in raw_content.replace("\n", "").replace("\r", "").split("~"):
+        parts = segment.strip().split("*")
+        if parts and parts[0].strip().upper() == "ISA" and len(parts) > 13:
+            return parts[13].strip()
+    return None
+
+
+def describe_file_status(file_row: dict) -> str:
+    status = file_row.get("processStatus")
+    loaded = file_row.get("loadDateTime") or "an unknown time"
+    if status == "PARSED":
+        return f"File {file_row['fileName']} (ISA {file_row.get('isaControlNumber')}) was received and parsed successfully at {loaded}."
+    if status == "PARSE_FAILED":
+        error = file_row.get("errorMessage") or "no error message was recorded"
+        return f"File {file_row['fileName']} (ISA {file_row.get('isaControlNumber')}) was received at {loaded} but failed to parse: {error}"
+    return f"File {file_row['fileName']} (ISA {file_row.get('isaControlNumber')}) was received at {loaded}. Current status: {status or 'UNKNOWN'}."
+
+
+def handle_isa_lookup(isa_number: str) -> dict:
+    candidates = rows_params(
+        """
+        SELECT TOP 50
+            RawId AS rawId,
+            FileName AS fileName,
+            ProcessStatus AS processStatus,
+            CONVERT(varchar(19), LoadDateTime, 120) AS loadDateTime,
+            ErrorMessage AS errorMessage,
+            RawContent AS rawContent
+        FROM dbo.EDI940_Raw
+        WHERE RawContent LIKE ?
+        ORDER BY RawId DESC
+        """,
+        (f"%{isa_number}%",),
+    )
+
+    target = isa_number.lstrip("0") or "0"
+    match = None
+    for row in candidates:
+        control_number = extract_isa_control_number(row.get("rawContent"))
+        if control_number and control_number.lstrip("0") == target:
+            match = row
+            match["isaControlNumber"] = control_number
+            break
+
+    if not match:
+        return {
+            "intent": "isa_lookup",
+            "reply": f"I couldn't find any file with ISA control number {isa_number}.",
+            "matches": [],
+        }
+
+    match.pop("rawContent", None)
+    return {"intent": "isa_lookup", "reply": describe_file_status(match), "matches": [match]}
+
+
+def handle_po_lookup(po_number: str) -> dict:
+    wms_rows = rows_params(
+        """
+        SELECT TOP 5
+            WMSOrderHeaderStagingId AS wmsOrderHeaderStagingId,
+            WarehouseOrderNumber AS warehouseOrderNumber,
+            IntegrationStatus AS integrationStatus,
+            AttemptCount AS attemptCount,
+            ErrorMessage AS errorMessage
+        FROM wms.OrderHeader_Staging
+        WHERE WarehouseOrderNumber = ?
+        """,
+        (po_number,),
+    )
+
+    if not wms_rows:
+        return {
+            "intent": "po_lookup",
+            "reply": f"I couldn't find PO/order {po_number} in the WMS staging queue yet. It may not have been received or parsed.",
+            "matches": [],
+        }
+
+    wms_row = wms_rows[0]
+    status = wms_row["integrationStatus"]
+    if status == "FAILED":
+        status_text = f"picked up by WMS but failed: {wms_row.get('errorMessage') or 'no error message recorded'}"
+    else:
+        status_text = WMS_STATUS_TEXT.get(status, f"in status {status or 'UNKNOWN'}")
+
+    reply = f"PO/order {wms_row['warehouseOrderNumber']} is {status_text} (attempts: {wms_row.get('attemptCount') or 0})."
+    return {"intent": "po_lookup", "reply": reply, "matches": wms_rows}
+
+
+@app.post("/api/chat")
+def chat(request: ChatRequest):
+    question = request.question or ""
+
+    isa_match = ISA_PATTERN.search(question)
+    if isa_match:
+        return handle_isa_lookup(isa_match.group(1).strip())
+
+    po_match = PO_PATTERN.search(question)
+    if po_match:
+        return handle_po_lookup(po_match.group(1).strip())
+
+    return {
+        "intent": "unknown",
+        "reply": (
+            "I can look up a PO/order number (e.g. \"where is PO 12345\") or an ISA "
+            "control number (e.g. \"what happened with ISA 000012345\"). Try rephrasing your question."
+        ),
+        "matches": [],
+    }
