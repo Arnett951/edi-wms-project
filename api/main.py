@@ -74,6 +74,12 @@ app.add_middleware(
 def debug_logic():
     return {"url_set": bool(os.getenv("LOGIC_APP_TRIGGER_URL"))}
 
+@app.get("/api/test-env")
+def test_env():
+    return {
+        "api_key_loaded": bool(os.getenv("API_KEY"))
+    }
+
 def escape_odbc(value):
     value = (value or "").strip()
     return "{" + value.replace("}", "}}") + "}"
