@@ -1,50 +1,153 @@
-# EDI 940 to WMS Dashboard Project
+EDI 940 to WMS Integration Platform
 
-Portfolio project showing an EDI 940 pipeline with Azure SQL-backed dashboard visibility.
+End-to-end Azure integration project demonstrating EDI order ingestion, warehouse management system (WMS) integration, operational visibility, chatbot-based order lookup, and data lake reporting.
 
-## Structure
+The solution simulates a common logistics workflow where trading partners transmit EDI 940 Warehouse Shipping Orders that must be validated, transformed, loaded into a WMS, and exposed through operational dashboards and support tools.
 
-```text
-api/        FastAPI backend for dashboard APIs
-dashboard/  React/Vite dashboard frontend
-.github/    Example GitHub Actions workflows
-```
+Business Scenario
 
-## Local quick start
+A third-party logistics provider receives EDI 940 orders from customers and must:
 
-Terminal 1:
+Receive and validate inbound EDI transactions
+Parse EDI data into relational warehouse tables
+Load orders into a WMS staging environment
+Track processing status and failures
+Archive raw transactions for audit purposes
+Expose operational visibility through dashboards
+Allow support teams to quickly search orders and transaction history
 
-```bash
-cd api
-pip install -r requirements.txt
-uvicorn main:app --reload
-```
+This project demonstrates a cloud-native implementation of that workflow using Microsoft Azure services.
 
-Terminal 2:
+Solution Architecture
+EDI 940 File
+      │
+      ▼
+Azure Data Lake Storage Gen2
+      │
+      ▼
+Azure Data Factory
+      │
+      ├── Load Raw EDI
+      ├── Parse EDI 940
+      ├── Load WMS Staging
+      ├── Archive Files
+      └── Export Analytics Data
+      │
+      ▼
+Azure SQL Database
+      │
+      ├── Raw EDI Tables
+      ├── Parsed EDI Tables
+      ├── WMS Staging Tables
+      └── Processing Logs
+      │
+      ▼
+FastAPI Backend
+      │
+      ▼
+React Dashboard + Chatbot
+Technologies Used
+Azure
+Azure Data Factory
+Azure Data Lake Storage Gen2
+Azure SQL Database
+Azure Static Web Apps
+Azure App Service
+Event Grid
 
-```bash
-cd dashboard
-npm install
-npm run dev
-```
+Backend
+Python
+FastAPI
+SQL Server / T-SQL
 
-## Dashboard APIs
+Frontend
+React
+Vite
+JavaScript
 
-```text
+Data Integration
+ANSI X12 EDI 940
+Warehouse Shipping Orders
+Staging Architecture
+Data Lake Reporting
+
+Key Features
+EDI 940 Processing
+Inbound EDI file ingestion
+Raw transaction retention
+Segment-level parsing
+Header/detail extraction
+Control number validation
+WMS Integration
+Order header staging
+Order detail staging
+Integration status tracking
+Error logging and monitoring
+Operational Dashboard
+Files received
+Files processed
+Processing failures
+WMS integration status
+Recent transaction activity
+Support Chatbot
+
+Users can search operational data using natural language:
+
+Where is PO 12345?
+Show order 100234
+Lookup ISA 000123456
+
+The chatbot translates requests into SQL queries and returns transaction status information.
+
+Data Model
+Raw EDI Layer
+EDI940_Raw
+
+Stores original inbound EDI transactions.
+
+Parsed EDI Layer
+EDI940_Header
+EDI940_Detail
+EDI940_Address
+EDI940_Control
+
+Stores structured EDI business data.
+
+WMS Staging Layer
+OrderHeader_Staging
+OrderDetail_Staging
+
+Represents data prepared for warehouse execution systems.
+
+API Endpoints
 GET  /api/dashboard/summary
 GET  /api/dashboard/recent-files
 GET  /api/dashboard/wms-orders
-POST /api/chat            body: { "question": "Where is PO 12345?" }
-```
+POST /api/chat
 
-## Chatbot (phase 1)
+Example:
 
-Rule-based, no LLM: regex intent parsing on `POST /api/chat` recognizes
-"PO/order <number>" and "ISA <number>" questions.
+{
+  "question": "Where is PO 12345?"
+}
+## Performance / Orchestration Note
 
-- PO/order lookups query `wms.OrderHeader_Staging.WarehouseOrderNumber` directly.
-- ISA lookups scan `dbo.EDI940_Raw.RawContent` (pre-filtered with `LIKE`, then
-  parsed segment-by-segment) since ISA control numbers aren't stored in a
-  dedicated column yet.
+Direct SQL execution completed in milliseconds, but end-to-end ADF runs showed higher latency due to orchestration and activity startup overhead. This demo uses low-cost, serverless-style Azure components, so latency was not optimized.
 
-Anything else returns a fallback message describing what it can answer.
+Potential production options:
+- Scheduled micro-batching to reduce per-file pipeline overhead
+- Azure Functions for event-driven file processing
+- Managed VNet Integration Runtime TTL if ADF warm-start behavior is required
+- Fewer ADF activities per file
+
+The goal of this project was to demonstrate integration architecture, visibility, and operational support patterns while maintaining low Azure operating costs.
+
+Future Enhancements
+OpenAI-powered chatbot
+Multiple EDI transaction types (850, 856, 945)
+Customer-specific mapping configurations
+Role-based security
+Power BI reporting
+Automated exception handling workflows
+Real-time operational alerts
+
