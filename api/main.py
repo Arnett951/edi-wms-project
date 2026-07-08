@@ -216,9 +216,9 @@ def handle_isa_lookup(isa_number: str) -> dict:
             ProcessStatus AS processStatus,
             CONVERT(varchar(19), LoadDateTime, 120) AS loadDateTime,
             ErrorMessage AS errorMessage,
-            RawContent AS rawContent
+            RawEDIText AS rawContent
         FROM dbo.EDI940_Raw
-        WHERE RawContent LIKE ?
+        WHERE RawEDIText LIKE ?
         ORDER BY RawId DESC
         """,
         (f"%{isa_number}%",),
