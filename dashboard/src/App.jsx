@@ -35,6 +35,11 @@ function Icon({ type, className = "" }) {
   if (type === "check") return <svg {...props}><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="m9 11 3 3L22 4"/></svg>;
   if (type === "database") return <svg {...props}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></svg>;
   if (type === "truck") return <svg {...props}><path d="M10 17h4V5H2v12h3"/><path d="M14 17h1"/><path d="M15 7h4l3 4v6h-3"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>;
+  if (type === "play") return (
+  <svg {...props}>
+    <path d="M5 3l14 9-14 9V3z" />
+  </svg>
+);
   return <svg {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>;
 }
 
@@ -79,7 +84,28 @@ export default function App() {
       setLoading(false);
     }
   }
+async function triggerEdiFile() {
+  setLoading(true);
+  setError(null);
 
+  try {
+    const res = await fetch(`${API_BASE}/api/actions/trigger-edi`, {
+      method: "POST",
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || data.success === false) {
+      throw new Error(data.error || "EDI trigger failed");
+    }
+
+    await loadDashboard();
+  } catch (err) {
+    setError(err.message || "Failed to trigger EDI file.");
+  } finally {
+    setLoading(false);
+  }
+}
   useEffect(() => { loadDashboard(); }, []);
 
   const safeSummary = normalizeSummary(summary);
@@ -92,7 +118,25 @@ export default function App() {
   ];
 
   return <div className="page"><main className="shell">
-    <header className="header"><div><h1>EDI 940 → WMS Dashboard</h1><p>Inbound files, parser status, staging queue, and WMS lifecycle visibility.</p></div><button onClick={loadDashboard} disabled={loading}><Icon type="refresh" className={loading ? "spin" : ""}/>Refresh</button></header>
+    <header className="header">
+  <div>
+    <h1>EDI 940 → WMS Dashboard</h1>
+    <p>Inbound files, parser status, staging queue, and WMS lifecycle visibility.</p>
+  </div>
+
+  <div className="header-actions">
+    <button onClick={triggerEdiFile} disabled={loading}>
+      <Icon type="play" />
+      Trigger EDI
+    </button>
+    
+
+    <button onClick={loadDashboard} disabled={loading}>
+      <Icon type="refresh" className={loading ? "spin" : ""} />
+      Refresh
+    </button>
+  </div>
+</header>
     {error && <section className="alert"><Icon type="alert"/><div><strong>API connection issue</strong><p>{error}</p></div></section>}
     {usingMockData && <section className="mock">Mock mode is active. Start the FastAPI service at {API_BASE} to show live SQL data.</section>}
     <section className="cards">{cards.map(([label, value, icon]) => <article className="card" key={label}><div><span>{label}</span><b>{value}</b></div><Icon type={icon}/></article>)}</section>

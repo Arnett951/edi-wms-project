@@ -14,6 +14,21 @@ def health():
     
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
 
+import requests
+
+@app.post("/api/actions/trigger-edi")
+def trigger_edi():
+    url = os.getenv("LOGIC_APP_TRIGGER_URL")
+    if not url:
+        return {"success": False, "error": "LOGIC_APP_TRIGGER_URL not configured"}
+
+    response = requests.post(url, json={})
+    return {
+        "success": response.ok,
+        "status_code": response.status_code,
+        "response": response.text[:500]
+    }
+
 @app.get("/")
 def root():
     return {"status": "EDI WMS API running"}
@@ -21,20 +36,41 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
-    
+import pyodbc
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in allowed_origins if origin.strip()],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://brave-beach-07b122d1e.7.azurestaticapps.net",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+@app.get("/api/debug/logic-url")
+def debug_logic():
+    return {"url_set": bool(os.getenv("LOGIC_APP_TRIGGER_URL"))}
 
+def escape_odbc(value):
+    value = (value or "").strip()
+    return "{" + value.replace("}", "}}") + "}"
 
 def get_conn():
-    server = os.getenv("SQL_SERVER")
-    database = os.getenv("SQL_DATABASE")
-    user = os.getenv("SQL_USER")
-    password = os.getenv("SQL_PASSWORD")
+    server = (os.getenv("SQL_SERVER") or "").strip()
+    database = (os.getenv("SQL_DATABASE") or "").strip()
+    user = (os.getenv("SQL_USER") or "").strip()
+    password = escape_odbc(os.getenv("SQL_PASSWORD"))
+
+    return pyodbc.connect(
+        f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+        f"SERVER=tcp:{server},1433;"
+        f"DATABASE={database};"
+        f"UID={user};"
+        f"PWD={password};"
+        "Encrypt=yes;"
+        "TrustServerCertificate=yes;"
+        "Connection Timeout=30;"
+    )
 
     missing = [
         name for name, value in {
@@ -80,7 +116,7 @@ def health():
 
 
 @app.get("/api/dashboard/summary")
-def summary():
+def dashboard_summary():
     raw = rows("""
         SELECT
             COUNT(*) AS filesReceived,
