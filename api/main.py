@@ -38,6 +38,29 @@ def health():
     return {"status": "ok"}
 import pyodbc
 
+@app.post("/api/wms/simulate-pickup")
+def simulate_wms_pickup():
+    with get_conn() as conn:
+        cur = conn.cursor()
+
+        cur.execute("""
+            UPDATE wms.OrderHeader_Staging
+            SET
+                IntegrationStatus = 'SUCCESS',
+                AttemptCount = ISNULL(AttemptCount, 0) + 1,
+                ErrorMessage = NULL
+            WHERE IntegrationStatus = 'READY'
+        """)
+
+        updated = cur.rowcount
+        conn.commit()
+
+    return {
+        "success": True,
+        "pickedUp": updated,
+        "message": f"Simulated WMS pickup for {updated} staged order(s)."
+    }
+    
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
