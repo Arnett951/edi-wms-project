@@ -165,6 +165,9 @@ async function simulateWmsPickup() {
       <Icon type="refresh" className={loading ? "spin" : ""} />
       Refresh
     </button>
+    <button onClick={() => setChatOpen(true)}>
+      Ask about PO / ISA
+    </button>
   </div>
 </header>
     {error && <section className="alert"><Icon type="alert"/><div><strong>API connection issue</strong><p>{error}</p></div></section>}
@@ -174,10 +177,92 @@ async function simulateWmsPickup() {
     {simulateMessage}
   </section>
 )}
-    <section className="cards">{cards.map(([label, value, icon]) => <article className="card" key={label}><div><span>{label}</span><b>{value}</b></div><Icon type={icon}/></article>)}</section>
-    <section className="panel"><h2><Icon type="database"/>Pipeline Status Counts</h2><div className="chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={statusChart}><XAxis dataKey="name" tick={{fontSize: 12}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="count" radius={[8,8,0,0]}/></BarChart></ResponsiveContainer></div></section>
-    <ChatPanel/>
-    <section className="grid"><div className="panel"><h2>Recent EDI Files</h2><table><thead><tr><th>File</th><th>Status</th><th>Loaded</th><th>Error</th></tr></thead><tbody>{recentFiles.length === 0 ? <tr><td colSpan="4">No recent files found.</td></tr> : recentFiles.map(f => <tr key={f.rawId ?? f.fileName}><td>{f.fileName}</td><td><StatusBadge status={f.processStatus}/></td><td>{f.loadDateTime || "—"}</td><td className="error-text">{f.errorMessage || "—"}</td></tr>)}</tbody></table></div>
-    <div className="panel"><h2>WMS Staging Queue</h2><table><thead><tr><th>Order</th><th>Status</th><th>Attempts</th><th>Error</th></tr></thead><tbody>{wmsOrders.length === 0 ? <tr><td colSpan="4">No WMS staging orders found.</td></tr> : wmsOrders.map(o => <tr key={o.wmsOrderHeaderStagingId ?? o.warehouseOrderNumber}><td>{o.warehouseOrderNumber}</td><td><StatusBadge status={o.integrationStatus}/></td><td>{o.attemptCount ?? 0}</td><td className="error-text">{o.errorMessage || "—"}</td></tr>)}</tbody></table></div></section>
+<section className="cards">
+  {cards.map(([label, value, icon]) => (
+    <article className="card" key={label}>
+      <div>
+        <span>{label}</span>
+        <b>{value}</b>
+      </div>
+      <Icon type={icon} />
+    </article>
+  ))}
+</section>
+
+<section className="panel">
+  <h2><Icon type="database" />Pipeline Status Counts</h2>
+  <div className="chart">
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={statusChart}>
+        <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+        <YAxis allowDecimals={false} />
+        <Tooltip />
+        <Bar dataKey="count" radius={[8, 8, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  </div>
+</section>
+
+{chatOpen && <ChatPanel onClose={() => setChatOpen(false)} />}
+
+<section className="grid">
+  <div className="panel">
+    <h2>Recent EDI Files</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Status</th>
+          <th>Loaded</th>
+          <th>Error</th>
+        </tr>
+      </thead>
+      <tbody>
+        {recentFiles.length === 0 ? (
+          <tr><td colSpan="4">No recent files found.</td></tr>
+        ) : (
+          recentFiles.map(f => (
+            <tr key={f.rawId ?? f.fileName}>
+              <td className="file-name-cell" title={f.fileName}>
+                {f.fileName}
+              </td>
+              <td><StatusBadge status={f.processStatus} /></td>
+              <td>{f.loadDateTime || "—"}</td>
+              <td className="error-text">{f.errorMessage || "—"}</td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  </div>
+
+  <div className="panel">
+    <h2>WMS Staging Queue</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Order</th>
+          <th>Status</th>
+          <th>Attempts</th>
+          <th>Error</th>
+        </tr>
+      </thead>
+      <tbody>
+        {wmsOrders.length === 0 ? (
+          <tr><td colSpan="4">No WMS staging orders found.</td></tr>
+        ) : (
+          wmsOrders.map(o => (
+            <tr key={o.wmsOrderHeaderStagingId ?? o.warehouseOrderNumber}>
+              <td>{o.warehouseOrderNumber}</td>
+              <td><StatusBadge status={o.integrationStatus} /></td>
+              <td>{o.attemptCount ?? 0}</td>
+              <td className="error-text">{o.errorMessage || "—"}</td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  </div>
+</section>
   </main></div>;
 }
