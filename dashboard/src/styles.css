@@ -72,3 +72,47 @@ td { border-bottom: 1px solid #e2e8f0; padding: 8px; max-width: 240px; overflow:
 .chat-input input { flex: 1; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 14px; font-size: 14px; }
 .chat-input button { border-radius: 12px; }
 @media (max-width: 900px) { .cards, .grid { grid-template-columns: 1fr; } }
+.chat-side-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 420px;
+  max-width: 92vw;
+  height: 100vh;
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: -8px 0 24px rgba(15, 23, 42, 0.25);
+  z-index: 9999;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.chat-side-panel .chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chat-side-panel .chat-log {
+  flex: 1;
+  max-height: none;
+  overflow-y: auto;
+}
+
+.chat-side-panel .chat-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  padding: 0;
+  justify-content: center;
+  background: #0f172a;
+  color: white;
+  font-size: 22px;
+}
+
+.chat-side-panel .chat-input {
+  display: flex;
+  gap: 8px;
+}
