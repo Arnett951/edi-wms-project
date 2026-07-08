@@ -4,7 +4,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
 const SUGGESTIONS = ["Where is PO ORDER1001?", "What happened with ISA 000012345?"];
 
-export default function ChatPanel() {
+export default function ChatPanel({ onClose }) {
   const [messages, setMessages] = useState([
     { role: "bot", text: 'Ask me about a PO/order number or an ISA control number, e.g. "Where is PO 12345?"' },
   ]);
@@ -34,8 +34,13 @@ export default function ChatPanel() {
   }
 
   return (
-    <section className="panel chat-panel">
-      <h2>Ask about a PO or ISA #</h2>
+    <section className="chat-side-panel">
+      <div className="chat-header">
+        <h2>Ask about a PO or ISA #</h2>
+        <button className="chat-close" type="button" onClick={onClose}>
+          ×
+        </button>
+      </div>
       <div className="chat-log">
         {messages.map((m, i) => (
           <div key={i} className={`chat-bubble ${m.role}`}>{m.text}</div>
