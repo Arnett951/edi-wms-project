@@ -61,6 +61,7 @@ export default function App() {
   const [usingMockData, setUsingMockData] = useState(false);
   const [error, setError] = useState(null);
   const [simulateMessage, setSimulateMessage] = useState(null);
+  const [chatOpen, setChatOpen] = useState(false);
 
   async function loadDashboard() {
     setLoading(true);
