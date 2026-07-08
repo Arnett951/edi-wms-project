@@ -48,6 +48,7 @@ FastAPI Backend
 React Dashboard + Chatbot
 Technologies Used
 Azure
+Azure Managed Identity for service-to-service communication
 Azure Data Factory
 Azure Data Lake Storage Gen2
 Azure SQL Database
@@ -142,12 +143,31 @@ Potential production options:
 
 The goal of this project was to demonstrate integration architecture, visibility, and operational support patterns while maintaining low Azure operating costs.
 
+Current Features
+✓ EDI 940 ingestion
+✓ Azure Data Factory orchestration
+✓ Azure SQL processing
+✓ Data Lake parquet storage
+✓ React operational dashboard
+✓ FastAPI backend
+✓ Role-based security
+✓ Audit logging
+
 Future Enhancements
-OpenAI-powered chatbot
-Multiple EDI transaction types (850, 856, 945)
-Customer-specific mapping configurations
-Role-based security
-Power BI reporting
-Automated exception handling workflows
-Real-time operational alerts
+
+High Priority
+□ User-initiated reprocessing
+□ Real-time operational alerts
+□ Power BI analytics reporting
+□ Multi-transaction EDI support (850/856/945)
+
+Medium Priority
+□ Customer-specific mapping configuration
+□ Automated exception workflows
+□ CI/CD environment promotion (Dev/Test/Prod)
+
+Stretch Goals
+□ OpenAI-powered operations assistant
+□ Natural language transaction lookup
+□ Root cause analysis recommendations
 
