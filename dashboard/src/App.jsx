@@ -155,19 +155,11 @@ async function simulateWmsPickup() {
       <Icon type="play" />
       Trigger EDI
     </button>
-    
-    <button onClick={simulateWmsPickup} disabled={loading}>
-      <Icon type="truck" />
-      Simulate WMS Pickup
-    </button>
-
     <button onClick={loadDashboard} disabled={loading}>
       <Icon type="refresh" className={loading ? "spin" : ""} />
       Refresh
     </button>
-    <button onClick={() => setChatOpen(true)}>
-      Ask about PO / ISA
-    </button>
+
   </div>
 </header>
     {error && <section className="alert"><Icon type="alert"/><div><strong>API connection issue</strong><p>{error}</p></div></section>}
@@ -187,6 +179,27 @@ async function simulateWmsPickup() {
       <Icon type={icon} />
     </article>
   ))}
+
+  <article
+    className="card action-card"
+    onClick={() => setChatOpen(true)}
+  >
+    <div>
+      <span>Support</span>
+      <b>Ask PO / ISA</b>
+    </div>
+  </article>
+
+  <article
+    className="card action-card"
+    onClick={simulateWmsPickup}
+  >
+    <div>
+      <span>Simulation</span>
+      <b>WMS Pickup</b>
+    </div>
+    <Icon type="truck" />
+  </article>
 </section>
 
 <section className="panel">
