@@ -60,6 +60,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [usingMockData, setUsingMockData] = useState(false);
   const [error, setError] = useState(null);
+  const [simulateMessage, setSimulateMessage] = useState(null);
 
   async function loadDashboard() {
     setLoading(true);
@@ -106,6 +107,30 @@ async function triggerEdiFile() {
     setLoading(false);
   }
 }
+async function simulateWmsPickup() {
+  setLoading(true);
+  setError(null);
+  setSimulateMessage(null);
+
+  try {
+    const res = await fetch(`${API_BASE}/api/wms/simulate-pickup`, {
+      method: "POST",
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || data.success === false) {
+      throw new Error(data.error || "WMS pickup simulation failed");
+    }
+
+    setSimulateMessage(data.message || `Simulated WMS pickup for ${data.pickedUp ?? 0} order(s).`);
+    await loadDashboard();
+  } catch (err) {
+    setError(err.message || "Failed to simulate WMS pickup.");
+  } finally {
+    setLoading(false);
+  }
+}
   useEffect(() => { loadDashboard(); }, []);
 
   const safeSummary = normalizeSummary(summary);
@@ -130,6 +155,10 @@ async function triggerEdiFile() {
       Trigger EDI
     </button>
     
+    <button onClick={simulateWmsPickup} disabled={loading}>
+      <Icon type="truck" />
+      Simulate WMS Pickup
+    </button>
 
     <button onClick={loadDashboard} disabled={loading}>
       <Icon type="refresh" className={loading ? "spin" : ""} />
@@ -139,6 +168,11 @@ async function triggerEdiFile() {
 </header>
     {error && <section className="alert"><Icon type="alert"/><div><strong>API connection issue</strong><p>{error}</p></div></section>}
     {usingMockData && <section className="mock">Mock mode is active. Start the FastAPI service at {API_BASE} to show live SQL data.</section>}
+    {simulateMessage && (
+  <section className="mock">
+    {simulateMessage}
+  </section>
+)}
     <section className="cards">{cards.map(([label, value, icon]) => <article className="card" key={label}><div><span>{label}</span><b>{value}</b></div><Icon type={icon}/></article>)}</section>
     <section className="panel"><h2><Icon type="database"/>Pipeline Status Counts</h2><div className="chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={statusChart}><XAxis dataKey="name" tick={{fontSize: 12}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="count" radius={[8,8,0,0]}/></BarChart></ResponsiveContainer></div></section>
     <ChatPanel/>
