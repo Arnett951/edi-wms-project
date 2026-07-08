@@ -59,7 +59,22 @@ def get_conn():
     server = (os.getenv("SQL_SERVER") or "").strip()
     database = (os.getenv("SQL_DATABASE") or "").strip()
     user = (os.getenv("SQL_USER") or "").strip()
-    password = escape_odbc(os.getenv("SQL_PASSWORD"))
+    password_raw = os.getenv("SQL_PASSWORD")
+
+    missing = [
+        name for name, value in {
+            "SQL_SERVER": server,
+            "SQL_DATABASE": database,
+            "SQL_USER": user,
+            "SQL_PASSWORD": password_raw,
+        }.items()
+        if not value
+    ]
+
+    if missing:
+        raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+
+    password = escape_odbc(password_raw)
 
     return pyodbc.connect(
         f"DRIVER={{ODBC Driver 18 for SQL Server}};"
@@ -70,27 +85,6 @@ def get_conn():
         "Encrypt=yes;"
         "TrustServerCertificate=yes;"
         "Connection Timeout=30;"
-    )
-
-    missing = [
-        name for name, value in {
-            "SQL_SERVER": server,
-            "SQL_DATABASE": database,
-            "SQL_USER": user,
-            "SQL_PASSWORD": password,
-        }.items()
-        if not value
-    ]
-    if missing:
-        raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
-
-    return pyodbc.connect(
-        "DRIVER={ODBC Driver 18 for SQL Server};"
-        f"SERVER={server};"
-        f"DATABASE={database};"
-        f"UID={user};"
-        f"PWD={password};"
-        "Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
     )
 
 
@@ -176,8 +170,15 @@ class ChatRequest(BaseModel):
     question: str
 
 
-PO_PATTERN = re.compile(r"\b(?:po|order|warehouse\s*order)\b[\s#:\-]*([a-z0-9\-]+)", re.IGNORECASE)
-ISA_PATTERN = re.compile(r"\bisa\b[\s#:\-]*([0-9]+)", re.IGNORECASE)
+PO_PATTERN = re.compile(
+    r"\b(?:po|p\.o\.|purchase\s+order|order|warehouse\s+order)\b[\s#:\-]*([a-z0-9\-]+)",
+    re.IGNORECASE
+)
+
+ISA_PATTERN = re.compile(
+    r"\b(?:isa|isa\s+number|control\s+number|interchange|interchange\s+control\s+number)\b[\s#:\-]*([0-9]{1,9})",
+    re.IGNORECASE
+)
 
 WMS_STATUS_TEXT = {
     "READY": "parsed and waiting to be sent to WMS",
