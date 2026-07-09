@@ -37,7 +37,7 @@ import requests
 
 
 @app.post("/api/actions/trigger-edi")
-def trigger_edi(_: bool = Depends(require_api_key))
+def trigger_edi(_: bool = Depends(require_api_key)):
     url = os.getenv("LOGIC_APP_TRIGGER_URL")
     if not url:
         return {"success": False, "error": "LOGIC_APP_TRIGGER_URL not configured"}
