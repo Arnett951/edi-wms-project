@@ -157,6 +157,39 @@ def rows_params(sql: str, params: tuple):
         cur.execute(sql, params)
         columns = [column[0] for column in cur.description]
         return [dict(zip(columns, row)) for row in cur.fetchall()]
+#helper to get Blob metrics
+def get_blob_queue_metrics():
+    conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+
+    blob_service = BlobServiceClient.from_connection_string(conn_str)
+
+    container = blob_service.get_container_client("edi940-inbound")
+
+    blobs = list(container.list_blobs())
+
+    if not blobs:
+        return {
+            "filesWaiting": 0,
+            "oldestFileAgeSeconds": 0
+        }
+
+    oldest_blob = min(blobs, key=lambda b: b.last_modified)
+
+    age_seconds = int(
+        (
+            datetime.now(timezone.utc)
+            - oldest_blob.last_modified
+        ).total_seconds()
+    )
+
+    return {
+        "filesWaiting": len(blobs),
+        "oldestFileAgeSeconds": age_seconds
+    }
+#temp test blob metrics endpoint
+@app.get("/api/dashboard/blob-status")
+def blob_status():
+    return get_blob_queue_metrics()
 
 #To display the summary of the dashboard including files received, parsed, failed and WMS status
 @app.get("/api/dashboard/summary")
@@ -179,7 +212,13 @@ def dashboard_summary():
         FROM wms.OrderHeader_Staging
     """)[0]
 
-    return {**raw, **wms}
+    blob_metrics = get_blob_queue_metrics()
+
+    return {
+        **raw,
+        **wms,
+        **blob_metrics
+    }
 
 #To display the recent files received in the dashboard
 @app.get("/api/dashboard/recent-files")
