@@ -225,17 +225,18 @@ export default function App() {
         <p>Warehouse Integration Demo</p>
       </div>
 
-      <div className="auth-badge">
-        {user && (
-          <>
-            <span>👤 {user.userDetails}</span>
-            <span className="auth-status">
-              Authenticated
-            </span>
-          </>
-        )}
-      </div>
+<div className="auth-badge">
+  {user && (
+    <>
+      <span>👤 {user.userDetails}</span>
+      <span className="auth-status">
+        Authenticated
+      </span>
+    </>
+  )}
+</div>
 
+<div className="header-actions">
         <button onClick={triggerEdiFile} disabled={loading}>
           <Icon type="play" />
           Create Test Files
