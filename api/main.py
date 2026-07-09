@@ -7,11 +7,16 @@ import re
 import pyodbc
 from fastapi import Header, HTTPException, Depends
 import os
+from dotenv import load_dotenv
+from azure.storage.blob import BlobServiceClient
+from datetime import datetime, timezone
+import requests
+
+load_dotenv()
 
 app = FastAPI(title="EDI WMS Dashboard API")
 
 API_KEY = os.getenv("API_KEY")
-
 def require_api_key(x_api_key: str = Header(None)):
     if not API_KEY:
         raise HTTPException(
@@ -27,15 +32,24 @@ def require_api_key(x_api_key: str = Header(None)):
 
     return True
 
+# To check Health of the API
 @app.get("/health")
 def health():
     return {"status": "ok"}
-    
+
+   
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "https://brave-beach-07b122d1e.7.azurestaticapps.net",
+    ],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-import requests
-
-
+# To trigger the Logic App for EDI processing
 @app.post("/api/actions/trigger-edi")
 def trigger_edi(_: bool = Depends(require_api_key)):
     url = os.getenv("LOGIC_APP_TRIGGER_URL")
@@ -53,11 +67,7 @@ def trigger_edi(_: bool = Depends(require_api_key)):
 def root():
     return {"status": "EDI WMS API running"}
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-import pyodbc
-
+# To simulate WMS pickup for testing purposes on DB 
 @app.post("/api/wms/simulate-pickup")
 def simulate_pickup(_: bool = Depends(require_api_key)):
     with get_conn() as conn:
@@ -81,19 +91,12 @@ def simulate_pickup(_: bool = Depends(require_api_key)):
         "message": f"Simulated WMS pickup for {updated} staged order(s)."
     }
     
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "https://brave-beach-07b122d1e.7.azurestaticapps.net",
-    ],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
 @app.get("/api/debug/logic-url")
 def debug_logic():
     return {"url_set": bool(os.getenv("LOGIC_APP_TRIGGER_URL"))}
 
+#To test if the API key is loaded in the environment change often for various debugging reasons
 @app.get("/api/test-env")
 def test_env():
     return {
@@ -136,14 +139,12 @@ def get_conn():
         "Connection Timeout=30;"
     )
 
-
 def rows(sql: str):
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute(sql)
         columns = [column[0] for column in cur.description]
         return [dict(zip(columns, row)) for row in cur.fetchall()]
-
 
 def rows_params(sql: str, params: tuple):
     with get_conn() as conn:
@@ -152,12 +153,7 @@ def rows_params(sql: str, params: tuple):
         columns = [column[0] for column in cur.description]
         return [dict(zip(columns, row)) for row in cur.fetchall()]
 
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-
+#To display the summary of the dashboard including files received, parsed, failed and WMS status
 @app.get("/api/dashboard/summary")
 def dashboard_summary():
     raw = rows("""
@@ -180,7 +176,7 @@ def dashboard_summary():
 
     return {**raw, **wms}
 
-
+#To display the recent files received in the dashboard
 @app.get("/api/dashboard/recent-files")
 def recent_files():
     return rows("""
@@ -194,7 +190,35 @@ def recent_files():
         ORDER BY RawId DESC
     """)
 
+#To check the status of the blob storage including files waiting and oldest file age in seconds
+@app.get("/api/dashboard/blob-status")
+def blob_status():
+    conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+    container_name = os.getenv("BLOB_CONTAINER_NAME", "edi940-inbound")
 
+    if not conn_str:
+        raise HTTPException(status_code=500, detail="AZURE_STORAGE_CONNECTION_STRING is not set")
+
+    blob_service = BlobServiceClient.from_connection_string(conn_str)
+    container = blob_service.get_container_client(container_name)
+
+    blobs = list(container.list_blobs())
+
+    now = datetime.now(timezone.utc)
+    files_waiting = len(blobs)
+
+    oldest_age_seconds = 0
+    if blobs:
+        oldest_blob = min(blobs, key=lambda b: b.creation_time or b.last_modified)
+        blob_time = oldest_blob.creation_time or oldest_blob.last_modified
+        oldest_age_seconds = int((now - blob_time).total_seconds())
+
+    return {
+        "filesWaiting": files_waiting,
+        "oldestAgeSeconds": oldest_age_seconds
+    }
+
+#To display the recent WMS orders in the dashboard including their status and error messages if any
 @app.get("/api/dashboard/wms-orders")
 def wms_orders():
     return rows("""

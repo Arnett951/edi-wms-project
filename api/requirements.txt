@@ -3,3 +3,4 @@ uvicorn
 gunicorn
 pyodbc
 requests
+azure-storage-blob
