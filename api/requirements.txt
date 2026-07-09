@@ -4,3 +4,4 @@ gunicorn
 pyodbc
 requests
 azure-storage-blob
+python-dotenv
