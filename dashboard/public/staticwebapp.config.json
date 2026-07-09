@@ -20,13 +20,3 @@
     "exclude": ["/.auth/*"]
   }
 }
-  "responseOverrides": {
-    "401": {
-      "redirect": "/.auth/login/google",
-      "statusCode": 302
-    }
-  },
-  "navigationFallback": {
-    "rewrite": "/index.html"
-  }
-}
