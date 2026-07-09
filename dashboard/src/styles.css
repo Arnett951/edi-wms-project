@@ -328,3 +328,18 @@ td {
   display: flex;
   gap: 8px;
 }
+.auth-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.auth-status {
+  background: #dcfce7;
+  color: #166534;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+}

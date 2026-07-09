@@ -4,7 +4,7 @@ import { buildStatusChart, normalizeSummary, statusClass } from "./dashboardUtil
 import ChatPanel from "./ChatPanel";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
-
+const [user, setUser] = useState(null);
 const mockSummary = {
   filesReceived: 6,
   filesParsed: 5,
@@ -132,7 +132,18 @@ async function simulateWmsPickup() {
     setLoading(false);
   }
 }
-  useEffect(() => { loadDashboard(); }, []);
+useEffect(() => {
+  loadDashboard();
+
+  fetch("/.auth/me")
+    .then((r) => r.json())
+    .then((data) => {
+      if (data?.clientPrincipal) {
+        setUser(data.clientPrincipal);
+      }
+    })
+    .catch(console.error);
+}, []);
 
   const safeSummary = normalizeSummary(summary);
   const statusChart = useMemo(() => buildStatusChart(safeSummary), [summary]);
@@ -144,11 +155,23 @@ async function simulateWmsPickup() {
   ];
 
   return <div className="page"><main className="shell">
-    <header className="header">
+<div className="header">
   <div>
-    <h1>EDI 940 → WMS Dashboard</h1>
-    <p>Inbound files, parser status, staging queue, and WMS lifecycle visibility.</p>
+    <h1>EDI 940 Dashboard</h1>
+    <p>Warehouse Integration Demo</p>
   </div>
+
+  <div className="auth-badge">
+    {user && (
+      <>
+        <span>👤 {user.userDetails}</span>
+        <span className="auth-status">
+          Authenticated
+        </span>
+      </>
+    )}
+  </div>
+</div>
 
   <div className="header-actions">
     <button onClick={triggerEdiFile} disabled={loading}>
