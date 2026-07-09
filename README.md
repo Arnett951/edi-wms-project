@@ -153,6 +153,20 @@ Current Features
 ✓ Role-based security
 ✓ Audit logging
 
+Testing
+
+Backend (api/) — pytest, with the SQL/Azure calls mocked out so no live database or Azure credentials are needed:
+
+    cd api
+    .venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+    .venv\Scripts\python.exe -m pytest
+
+Frontend (dashboard/) — vitest + React Testing Library:
+
+    cd dashboard
+    npm install
+    npm test
+
 Future Enhancements
 
 High Priority

@@ -14,6 +14,9 @@
   },
   "devDependencies": {
     "vitest": "latest",
-    "jsdom": "latest"
+    "jsdom": "latest",
+    "@testing-library/react": "latest",
+    "@testing-library/jest-dom": "latest",
+    "@testing-library/user-event": "latest"
   }
 }
