@@ -343,3 +343,14 @@ td {
   border-radius: 999px;
   font-weight: 600;
 }
+.queue-green {
+  border-left: 6px solid #22c55e;
+}
+
+.queue-yellow {
+  border-left: 6px solid #eab308;
+}
+
+.queue-red {
+  border-left: 6px solid #ef4444;
+}
