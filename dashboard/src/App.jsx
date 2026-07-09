@@ -233,36 +233,11 @@ export default function App() {
         {simulateMessage}
       </section>
     )}
-    <section className="cards">
-      {cards.map((card) => (
-        <article
-          className={`card ${card.title === "Files Waiting"
-            ? queueClass(card.age)
-            : ""
-            }`}
-          key={card.title}
-        >
-          <div>
-            <span>{card.title}</span>
-            <b>{card.value}</b>
-
-            {card.title === "Files Waiting" && (
-              <small>
-                Oldest Age: {formatAge(card.age)}
-              </small>
-            )}
-          </div>
-
-          <Icon type={card.icon} />
-        </article>
-      ))}
 <section className="cards">
   {cards.map((card) => (
     <article
       className={`card ${
-        card.title === "Files Waiting"
-          ? queueClass(card.age)
-          : ""
+        card.title === "Files Waiting" ? queueClass(card.age) : ""
       }`}
       key={card.title}
     >
@@ -271,9 +246,7 @@ export default function App() {
         <b>{card.value}</b>
 
         {card.title === "Files Waiting" && (
-          <small>
-            Oldest Age: {formatAge(card.age)}
-          </small>
+          <small>Oldest Age: {formatAge(card.age)}</small>
         )}
       </div>
 
@@ -281,20 +254,14 @@ export default function App() {
     </article>
   ))}
 
-  <article
-    className="card action-card"
-    onClick={() => setChatOpen(true)}
-  >
+  <article className="card action-card" onClick={() => setChatOpen(true)}>
     <div>
       <span>Support</span>
       <b>Ask PO / ISA</b>
     </div>
   </article>
 
-  <article
-    className="card action-card"
-    onClick={simulateWmsPickup}
-  >
+  <article className="card action-card" onClick={simulateWmsPickup}>
     <div>
       <span>Simulation</span>
       <b>WMS Pickup</b>
