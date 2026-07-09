@@ -256,50 +256,52 @@ export default function App() {
           <Icon type={card.icon} />
         </article>
       ))}
-
-      <article
-        className="card action-card"
-        onClick={() => setChatOpen(true)}
-      >
-        <div>
-          <span>Support</span>
-          <b>Ask PO / ISA</b>
-        </div>
-      </article>
-
-      <article
-        className="card action-card"
-        onClick={simulateWmsPickup}
-      >
-        <div>
-          <span>Simulation</span>
-          <b>WMS Pickup</b>
-        </div>
-        <Icon type="truck" />
-      </article>
-    </section>
-
+<section className="cards">
+  {cards.map((card) => (
     <article
-      className="card action-card"
-      onClick={() => setChatOpen(true)}
+      className={`card ${
+        card.title === "Files Waiting"
+          ? queueClass(card.age)
+          : ""
+      }`}
+      key={card.title}
     >
       <div>
-        <span>Support</span>
-        <b>Ask PO / ISA</b>
-      </div>
-    </article>
+        <span>{card.title}</span>
+        <b>{card.value}</b>
 
-    <article
-      className="card action-card"
-      onClick={simulateWmsPickup}
-    >
-      <div>
-        <span>Simulation</span>
-        <b>WMS Pickup</b>
+        {card.title === "Files Waiting" && (
+          <small>
+            Oldest Age: {formatAge(card.age)}
+          </small>
+        )}
       </div>
-      <Icon type="truck" />
+
+      <Icon type={card.icon} />
     </article>
-  </section>
+  ))}
+
+  <article
+    className="card action-card"
+    onClick={() => setChatOpen(true)}
+  >
+    <div>
+      <span>Support</span>
+      <b>Ask PO / ISA</b>
+    </div>
+  </article>
+
+  <article
+    className="card action-card"
+    onClick={simulateWmsPickup}
+  >
+    <div>
+      <span>Simulation</span>
+      <b>WMS Pickup</b>
+    </div>
+    <Icon type="truck" />
+  </article>
+</section>
 
     <section className="panel">
       <h2><Icon type="database" />Pipeline Status Counts</h2>
