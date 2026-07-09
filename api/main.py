@@ -16,6 +16,22 @@ load_dotenv()
 
 app = FastAPI(title="EDI WMS Dashboard API")
 
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:5173,https://brave-beach-07b122d1e.7.azurestaticapps.net"
+    ).split(",")
+    if origin.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 API_KEY = os.getenv("API_KEY")
 def require_api_key(x_api_key: str = Header(None)):
     if not API_KEY:
@@ -38,17 +54,6 @@ def health():
     return {"status": "ok"}
 
    
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "https://brave-beach-07b122d1e.7.azurestaticapps.net",
-    ],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # To trigger the Logic App for EDI processing
 @app.post("/api/actions/trigger-edi")
 def trigger_edi(_: bool = Depends(require_api_key)):
