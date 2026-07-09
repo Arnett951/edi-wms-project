@@ -127,6 +127,28 @@ export default function App() {
       setLoading(false);
     }
   }
+  async function runEdiBatch() {
+  setLoading(true);
+  setError(null);
+
+  try {
+    const res = await fetch(`${API_BASE}/api/adf/run`, {
+      method: "POST",
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || data.success === false) {
+      throw new Error(data.error || "ADF batch run failed");
+    }
+
+    await loadDashboard();
+  } catch (err) {
+    setError(err.message || "Failed to start EDI batch.");
+  } finally {
+    setLoading(false);
+  }
+}
   async function simulateWmsPickup() {
     setLoading(true);
     setError(null);
@@ -214,10 +236,14 @@ export default function App() {
         )}
       </div>
 
-      <div className="header-actions">
         <button onClick={triggerEdiFile} disabled={loading}>
           <Icon type="play" />
-          Trigger EDI
+          Create Test Files
+        </button>
+
+        <button onClick={runEdiBatch} disabled={loading}>
+          <Icon type="database" />
+          Run EDI Batch
         </button>
 
         <button onClick={loadDashboard} disabled={loading}>

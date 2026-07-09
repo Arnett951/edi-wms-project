@@ -5,3 +5,5 @@ pyodbc
 requests
 azure-storage-blob
 python-dotenv
+azure-mgmt-datafactory
+azure-identity

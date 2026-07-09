@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 from azure.storage.blob import BlobServiceClient
 from datetime import datetime, timezone
 import requests
+from azure.identity import DefaultAzureCredential
+from azure.mgmt.datafactory import DataFactoryManagementClient
 
 load_dotenv()
 
@@ -282,6 +284,34 @@ def wms_orders():
         ORDER BY WMSOrderHeaderStagingId DESC
     """)
 
+#top allow remote start of ADF Pipeline for testing purposes
+@app.post("/api/adf/run")
+def run_adf_pipeline():
+    try:
+        credential = DefaultAzureCredential()
+
+        client = DataFactoryManagementClient(
+            credential,
+            os.environ["AZURE_SUBSCRIPTION_ID"]
+        )
+
+        run_response = client.pipelines.create_run(
+            resource_group_name=os.environ["ADF_RESOURCE_GROUP"],
+            factory_name=os.environ["ADF_FACTORY_NAME"],
+            pipeline_name=os.environ["ADF_PIPELINE_NAME"],
+        )
+
+        return {
+            "success": True,
+            "message": "ADF pipeline started.",
+            "runId": run_response.run_id
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 # ---------------------------------------------------------------------------
 # Phase 1 chat: rule-based lookups for "where is PO X" / "what happened with
