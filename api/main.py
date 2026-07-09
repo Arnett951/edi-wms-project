@@ -212,8 +212,14 @@ def dashboard_summary():
         FROM wms.OrderHeader_Staging
     """)[0]
 
-    blob_metrics = get_blob_queue_metrics()
-
+    try:
+        blob_metrics = get_blob_queue_metrics()
+    except Exception as e:
+        blob_metrics = {
+            "filesWaiting": 0,
+            "oldestFileAgeSeconds": 0,
+            "blobStatusError": str(e)
+        }
     return {
         **raw,
         **wms,
