@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
-const SUGGESTIONS = ["Where is PO ORDER1001?", "What happened with ISA 000012345?"];
+const DEFAULT_ISA_SUGGESTION = "What happened with ISA 000012345?";
 
 export default function ChatPanel({ onClose }) {
   const [messages, setMessages] = useState([
@@ -10,6 +10,21 @@ export default function ChatPanel({ onClose }) {
   ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [suggestions, setSuggestions] = useState(["Where is PO ORDER1001?", DEFAULT_ISA_SUGGESTION]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/chat/sample-isa`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.isaControlNumber) return;
+        setSuggestions((s) => [s[0], `What happened with ISA ${data.isaControlNumber}?`]);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function send(question) {
     const text = (question ?? input).trim();
@@ -47,7 +62,7 @@ export default function ChatPanel({ onClose }) {
         ))}
       </div>
       <div className="chat-suggestions">
-        {SUGGESTIONS.map((s) => (
+        {suggestions.map((s) => (
           <button key={s} type="button" onClick={() => send(s)} disabled={sending}>{s}</button>
         ))}
       </div>

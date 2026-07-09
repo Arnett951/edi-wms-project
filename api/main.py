@@ -447,6 +447,11 @@ def handle_po_lookup(po_number: str) -> dict:
     return {"intent": "po_lookup", "reply": reply, "matches": wms_rows}
 
 
+@app.get("/api/chat/sample-isa")
+def sample_isa():
+    return {"isaControlNumber": get_latest_failed_isa()}
+
+
 @app.post("/api/chat")
 def chat(request: ChatRequest):
     question = request.question or ""
