@@ -169,10 +169,10 @@ export default function App() {
   const cards = [
     {
       title: "Files Waiting",
-      value: safeSummary.filesWaiting || 0,
-      age: safeSummary.oldestFileAgeSeconds || 0,
+      value: safeSummary.filesWaiting ?? 0,
+      age: safeSummary.oldestFileAgeSeconds ?? 0,
       icon: "clock",
-      status: safeSummary.queueStatus || "GREEN"
+      status: safeSummary.queueStatus ?? "GREEN"
     },
     {
       title: "Files Received",

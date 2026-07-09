@@ -8,6 +8,9 @@ export function normalizeSummary(data) {
     wmsSuccess: Number(data?.wmsSuccess ?? 0),
     wmsFailed: Number(data?.wmsFailed ?? 0),
     wmsPickedUp: Number(data?.wmsPickedUp ?? 0),
+    filesWaiting: Number(data?.filesWaiting ?? 0),
+    oldestFileAgeSeconds: Number(data?.oldestFileAgeSeconds ?? 0),
+    queueStatus: data?.queueStatus ?? "GREEN"
   };
 }
 
