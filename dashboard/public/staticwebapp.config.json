@@ -11,7 +11,7 @@
   ],
   "responseOverrides": {
     "401": {
-      "redirect": "/.auth/login/google?post_login_redirect_uri=/",
+      "redirect": "/.auth/login/aad?post_login_redirect_uri=/",
       "statusCode": 302
     }
   },
