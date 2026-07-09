@@ -13,11 +13,19 @@ app = FastAPI(title="EDI WMS Dashboard API")
 API_KEY = os.getenv("API_KEY")
 
 def require_api_key(x_api_key: str = Header(None)):
+    if not API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="API key not configured"
+        )
+
     if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized"
+        )
+
     return True
-
-
 
 @app.get("/health")
 def health():
@@ -27,8 +35,9 @@ allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",
 
 import requests
 
+
 @app.post("/api/actions/trigger-edi")
-def trigger_edi():
+def trigger_edi(_: bool = Depends(require_api_key))
     url = os.getenv("LOGIC_APP_TRIGGER_URL")
     if not url:
         return {"success": False, "error": "LOGIC_APP_TRIGGER_URL not configured"}
