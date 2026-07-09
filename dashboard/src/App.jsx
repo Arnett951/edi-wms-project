@@ -4,7 +4,7 @@ import { buildStatusChart, normalizeSummary, statusClass } from "./dashboardUtil
 import ChatPanel from "./ChatPanel";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
-const [user, setUser] = useState(null);
+
 const mockSummary = {
   filesReceived: 6,
   filesParsed: 5,
@@ -54,6 +54,7 @@ function StatusBadge({ status }) {
 }
 
 export default function App() {
+  const [user, setUser] = useState(null);
   const [summary, setSummary] = useState(null);
   const [recentFiles, setRecentFiles] = useState([]);
   const [wmsOrders, setWmsOrders] = useState([]);
@@ -155,7 +156,7 @@ useEffect(() => {
   ];
 
   return <div className="page"><main className="shell">
-<div className="header">
+<header className="header">
   <div>
     <h1>EDI 940 Dashboard</h1>
     <p>Warehouse Integration Demo</p>
@@ -171,18 +172,17 @@ useEffect(() => {
       </>
     )}
   </div>
-</div>
 
   <div className="header-actions">
     <button onClick={triggerEdiFile} disabled={loading}>
       <Icon type="play" />
       Trigger EDI
     </button>
+
     <button onClick={loadDashboard} disabled={loading}>
       <Icon type="refresh" className={loading ? "spin" : ""} />
       Refresh
     </button>
-
   </div>
 </header>
     {error && <section className="alert"><Icon type="alert"/><div><strong>API connection issue</strong><p>{error}</p></div></section>}
