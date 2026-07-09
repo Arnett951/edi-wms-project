@@ -159,6 +159,20 @@ def rows_params(sql: str, params: tuple):
         cur.execute(sql, params)
         columns = [column[0] for column in cur.description]
         return [dict(zip(columns, row)) for row in cur.fetchall()]
+#helper to get latest failed ISA control number for chat suggestions
+def get_latest_failed_isa():
+    result = rows("""
+        SELECT TOP 1
+            ISA_ControlNumber AS isaControlNumber
+        FROM dbo.EDI940_Raw
+        WHERE ProcessStatus LIKE '%FAIL%'
+        ORDER BY RawId DESC
+    """)
+
+    if result:
+        return result[0].get("isaControlNumber")
+
+    return None
 #helper to get Blob metrics
 def get_blob_queue_metrics():
     conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
@@ -324,7 +338,6 @@ def run_adf_pipeline():
 class ChatRequest(BaseModel):
     question: str
 
-
 PO_PATTERN = re.compile(
     r"\b(?:po|p\.o\.|purchase\s+order|order|warehouse\s+order)\b[\s#:\-]*([a-z0-9\-]+)",
     re.IGNORECASE
@@ -361,6 +374,7 @@ def describe_file_status(file_row: dict) -> str:
         error = file_row.get("errorMessage") or "no error message was recorded"
         return f"File {file_row['fileName']} (ISA {file_row.get('isaControlNumber')}) was received at {loaded} but failed to parse: {error}"
     return f"File {file_row['fileName']} (ISA {file_row.get('isaControlNumber')}) was received at {loaded}. Current status: {status or 'UNKNOWN'}."
+
 
 
 def handle_isa_lookup(isa_number: str) -> dict:
@@ -445,11 +459,15 @@ def chat(request: ChatRequest):
     if po_match:
         return handle_po_lookup(po_match.group(1).strip())
 
+    latest_failed = get_latest_failed_isa()
+
+    example_isa = latest_failed or "000012345"
+
     return {
         "intent": "unknown",
         "reply": (
-            "I can look up a PO/order number (e.g. \"where is PO 12345\") or an ISA "
-            "control number (e.g. \"what happened with ISA 000012345\"). Try rephrasing your question."
+            f'Try asking "Why did ISA {example_isa} fail?" '
+            'or "Where is PO 12345?"'
         ),
         "matches": [],
     }
