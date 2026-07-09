@@ -5,8 +5,19 @@ from typing import Optional
 import os
 import re
 import pyodbc
+from fastapi import Header, HTTPException, Depends
+import os
 
 app = FastAPI(title="EDI WMS Dashboard API")
+
+API_KEY = os.getenv("API_KEY")
+
+def require_api_key(x_api_key: str = Header(None)):
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return True
+
+
 
 @app.get("/health")
 def health():
@@ -39,7 +50,7 @@ def health():
 import pyodbc
 
 @app.post("/api/wms/simulate-pickup")
-def simulate_wms_pickup():
+def simulate_pickup(_: bool = Depends(require_api_key)):
     with get_conn() as conn:
         cur = conn.cursor()
 
