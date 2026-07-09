@@ -234,6 +234,8 @@ def recent_files():
     return rows("""
         SELECT TOP 20
             RawId AS rawId,
+            ISA_ControlNumber AS isaControlNumber,
+            ISASender AS isaSender,
             FileName AS fileName,
             ProcessStatus AS processStatus,
             CONVERT(varchar(19), LoadDateTime, 120) AS loadDateTime,

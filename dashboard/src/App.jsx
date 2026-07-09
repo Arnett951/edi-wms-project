@@ -319,6 +319,8 @@ export default function App() {
         <table>
           <thead>
             <tr>
+              <th>ISA</th>
+              <th>Sender</th>
               <th>File</th>
               <th>Status</th>
               <th>Loaded</th>
@@ -327,13 +329,17 @@ export default function App() {
           </thead>
           <tbody>
             {recentFiles.length === 0 ? (
-              <tr><td colSpan="4">No recent files found.</td></tr>
+              <tr><td colSpan="6">No recent files found.</td></tr>
             ) : (
               recentFiles.map(f => (
                 <tr key={f.rawId ?? f.fileName}>
+                  <td>{f.isaControlNumber || "—"}</td>
+                  <td>{f.isaSender || "—"}</td>
+
                   <td className="file-name-cell" title={f.fileName}>
                     {f.fileName}
                   </td>
+
                   <td><StatusBadge status={f.processStatus} /></td>
                   <td>{f.loadDateTime || "—"}</td>
                   <td className="error-text">{f.errorMessage || "—"}</td>
