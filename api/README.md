@@ -15,6 +15,7 @@ SQL_DATABASE=your-database
 SQL_USER=your-user
 SQL_PASSWORD=your-password
 ALLOWED_ORIGINS=http://localhost:5173,https://your-static-web-app.azurestaticapps.net
+ANTHROPIC_API_KEY=your-anthropic-api-key   # optional: enables the AI chat fallback
 ```
 
 ## Azure App Service startup command

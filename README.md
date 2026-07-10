@@ -97,8 +97,9 @@ Users can search operational data using natural language:
 Where is PO 12345?
 Show order 100234
 Lookup ISA 000123456
+Give me the failed orders
 
-The chatbot translates requests into SQL queries and returns transaction status information.
+Regex intent parsing handles the PO/ISA lookup patterns directly against SQL. Anything that doesn't match falls back to Claude (Anthropic), which picks from a fixed set of backend query tools rather than generating SQL itself - so free-form phrasing ("what's failing right now?") is handled without hardcoding a new regex for every way to ask. The AI fallback is optional: without an `ANTHROPIC_API_KEY` configured, the bot still works using the regex path alone.
 
 Data Model
 Raw EDI Layer
@@ -152,6 +153,7 @@ Current Features
 ✓ FastAPI backend
 ✓ Role-based security
 ✓ Audit logging
+✓ AI-powered chatbot fallback (Claude tool-calling) for natural language transaction lookup
 
 Testing
 
@@ -181,7 +183,5 @@ Medium Priority
 □ CI/CD environment promotion (Dev/Test/Prod)
 
 Stretch Goals
-□ OpenAI-powered operations assistant
-□ Natural language transaction lookup
 □ Root cause analysis recommendations
 

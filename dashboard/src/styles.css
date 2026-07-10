@@ -231,6 +231,20 @@ td {
   font-size: 14px;
   max-width: 75%;
   line-height: 1.4;
+  white-space: pre-line;
+}
+
+.ai-badge {
+  display: inline-block;
+  background: #7c3aed;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  border-radius: 999px;
+  padding: 2px 6px;
+  margin-right: 6px;
+  vertical-align: middle;
 }
 
 .chat-bubble.bot {

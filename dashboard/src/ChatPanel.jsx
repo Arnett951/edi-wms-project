@@ -3,14 +3,25 @@ import React, { useEffect, useState } from "react";
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
 const DEFAULT_ISA_SUGGESTION = "What happened with ISA 000012345?";
+const FAILED_ORDERS_SUGGESTION = "Give me the failed orders";
 
 export default function ChatPanel({ onClose }) {
   const [messages, setMessages] = useState([
-    { role: "bot", text: 'Ask me about a PO/order number or an ISA control number, e.g. "Where is PO 12345?"' },
+    {
+      role: "bot",
+      text:
+        'Ask me about a PO/order number or an ISA control number, e.g. "Where is PO 12345?" ' +
+        'You can also ask things like "give me the failed orders" in plain English — an AI fallback ' +
+        "handles anything the quick lookups don't recognize.",
+    },
   ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [suggestions, setSuggestions] = useState(["Where is PO ORDER1001?", DEFAULT_ISA_SUGGESTION]);
+  const [suggestions, setSuggestions] = useState([
+    "Where is PO ORDER1001?",
+    DEFAULT_ISA_SUGGESTION,
+    FAILED_ORDERS_SUGGESTION,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -18,7 +29,7 @@ export default function ChatPanel({ onClose }) {
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
         if (cancelled || !data?.isaControlNumber) return;
-        setSuggestions((s) => [s[0], `What happened with ISA ${data.isaControlNumber}?`]);
+        setSuggestions((s) => [s[0], `What happened with ISA ${data.isaControlNumber}?`, s[2]]);
       })
       .catch(() => {});
     return () => {
@@ -40,7 +51,10 @@ export default function ChatPanel({ onClose }) {
       });
       if (!response.ok) throw new Error(`Chat API returned HTTP ${response.status}`);
       const data = await response.json();
-      setMessages((m) => [...m, { role: "bot", text: data.reply || "No answer returned." }]);
+      setMessages((m) => [
+        ...m,
+        { role: "bot", text: data.reply || "No answer returned.", source: data.source },
+      ]);
     } catch (err) {
       setMessages((m) => [...m, { role: "bot", text: `Couldn't reach the chat API: ${err.message}` }]);
     } finally {
@@ -58,7 +72,10 @@ export default function ChatPanel({ onClose }) {
       </div>
       <div className="chat-log">
         {messages.map((m, i) => (
-          <div key={i} className={`chat-bubble ${m.role}`}>{m.text}</div>
+          <div key={i} className={`chat-bubble ${m.role}`}>
+            {m.source === "ai" && <span className="ai-badge">AI</span>}
+            {m.text}
+          </div>
         ))}
       </div>
       <div className="chat-suggestions">

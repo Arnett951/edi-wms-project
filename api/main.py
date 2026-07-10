@@ -1,9 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
+import json
 import os
 import re
+import time
 import pyodbc
 from fastapi import Header, HTTPException, Depends
 import os
@@ -13,6 +15,7 @@ from datetime import datetime, timezone
 import requests
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.datafactory import DataFactoryManagementClient
+from anthropic import Anthropic
 
 load_dotenv()
 
@@ -447,32 +450,198 @@ def handle_po_lookup(po_number: str) -> dict:
     return {"intent": "po_lookup", "reply": reply, "matches": wms_rows}
 
 
+def handle_failed_orders() -> dict:
+    wms_rows = rows("""
+        SELECT TOP 20
+            WarehouseOrderNumber AS warehouseOrderNumber,
+            IntegrationStatus AS integrationStatus,
+            AttemptCount AS attemptCount,
+            ErrorMessage AS errorMessage
+        FROM wms.OrderHeader_Staging
+        WHERE IntegrationStatus = 'FAILED'
+        ORDER BY WMSOrderHeaderStagingId DESC
+    """)
+
+    if not wms_rows:
+        return {"intent": "failed_orders", "reply": "No failed orders in the WMS staging queue right now.", "matches": []}
+
+    lines = [
+        f"- {r['warehouseOrderNumber']}: {r.get('errorMessage') or 'no error message recorded'} "
+        f"(attempts: {r.get('attemptCount') or 0})"
+        for r in wms_rows
+    ]
+    reply = f"There are {len(wms_rows)} failed order(s):\n" + "\n".join(lines)
+    return {"intent": "failed_orders", "reply": reply, "matches": wms_rows}
+
+
+def build_unknown_reply() -> str:
+    latest_failed = get_latest_failed_isa()
+    example_isa = latest_failed or "000012345"
+    return f'Try asking "Why did ISA {example_isa} fail?" or "Where is PO 12345?"'
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 chat: AI fallback. When the regex patterns above don't match, hand
+# the question to Claude with a fixed set of tools (the same lookup functions
+# used by the regex path, plus list_failed_orders). Claude only ever picks a
+# tool and supplies its arguments - it never sees or writes SQL - so the
+# backend stays in full control of what gets queried.
+# ---------------------------------------------------------------------------
+
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+_anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
+
+AI_SYSTEM_PROMPT = (
+    "You are an assistant for a warehouse EDI operations dashboard. Use the available tools "
+    "to answer questions about a specific PO/order's status, a specific ISA file's status, or "
+    "the current list of failed orders. Only call a tool when the question is clearly about one "
+    "of those topics. Otherwise, reply directly and briefly explaining you can only help with "
+    "PO lookups, ISA lookups, and failed order lists."
+)
+
+AI_TOOLS = [
+    {
+        "name": "lookup_po",
+        "description": "Look up the WMS integration status of a specific PO/warehouse order number.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"po_number": {"type": "string", "description": "The PO or warehouse order number"}},
+            "required": ["po_number"],
+        },
+    },
+    {
+        "name": "lookup_isa",
+        "description": "Look up the parse status of a specific EDI file by its ISA control number.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"isa_number": {"type": "string", "description": "The ISA control number"}},
+            "required": ["isa_number"],
+        },
+    },
+    {
+        "name": "list_failed_orders",
+        "description": "List orders that failed WMS integration, most recent first.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+]
+
+AI_TOOL_DISPATCH = {
+    "lookup_po": lambda tool_input: handle_po_lookup(tool_input["po_number"]),
+    "lookup_isa": lambda tool_input: handle_isa_lookup(tool_input["isa_number"]),
+    "list_failed_orders": lambda tool_input: handle_failed_orders(),
+}
+
+# In-memory, per-process rate limit on the AI fallback path only - the regex
+# fast path is free and unlimited. This resets per Azure App Service worker
+# process (gunicorn runs 2), so the effective ceiling is roughly 2x the
+# configured value. That's an acceptable tradeoff for a portfolio-scale app;
+# a shared store (e.g. Redis) would be needed for an exact global limit.
+AI_RATE_LIMIT_WINDOW_SECONDS = 60 * 60
+AI_RATE_LIMIT_MAX_REQUESTS = 20
+_ai_rate_limit_state: dict[str, tuple[float, int]] = {}
+
+
+def get_client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def is_ai_rate_limited(client_ip: str) -> bool:
+    now = time.time()
+    window_start, count = _ai_rate_limit_state.get(client_ip, (now, 0))
+    if now - window_start > AI_RATE_LIMIT_WINDOW_SECONDS:
+        window_start, count = now, 0
+    count += 1
+    _ai_rate_limit_state[client_ip] = (window_start, count)
+    return count > AI_RATE_LIMIT_MAX_REQUESTS
+
+
+def handle_ai_fallback(question: str) -> Optional[dict]:
+    if not _anthropic_client:
+        return None
+
+    try:
+        messages = [{"role": "user", "content": question}]
+        response = _anthropic_client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=400,
+            system=AI_SYSTEM_PROMPT,
+            tools=AI_TOOLS,
+            messages=messages,
+        )
+
+        tool_use = next((block for block in response.content if block.type == "tool_use"), None)
+        if not tool_use:
+            text = "".join(block.text for block in response.content if block.type == "text")
+            return {
+                "intent": "ai_unhandled",
+                "reply": text or build_unknown_reply(),
+                "matches": [],
+                "source": "ai",
+            }
+
+        tool_fn = AI_TOOL_DISPATCH.get(tool_use.name)
+        if not tool_fn:
+            return {"intent": "ai_unhandled", "reply": build_unknown_reply(), "matches": [], "source": "ai"}
+
+        tool_result = tool_fn(tool_use.input)
+
+        messages.append({"role": "assistant", "content": response.content})
+        messages.append({
+            "role": "user",
+            "content": [{
+                "type": "tool_result",
+                "tool_use_id": tool_use.id,
+                "content": json.dumps(tool_result),
+            }],
+        })
+
+        final = _anthropic_client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=300,
+            system=AI_SYSTEM_PROMPT,
+            tools=AI_TOOLS,
+            messages=messages,
+        )
+        final_text = "".join(block.text for block in final.content if block.type == "text")
+
+        return {
+            "intent": f"ai_{tool_use.name}",
+            "reply": final_text or tool_result.get("reply", ""),
+            "matches": tool_result.get("matches", []),
+            "source": "ai",
+        }
+    except Exception as exc:
+        # Don't leak exception details (e.g. a billing/quota error) to the chat UI -
+        # degrade to the same message the regex path gives when it can't help.
+        print(f"[chat] AI fallback error: {exc}")
+        return {"intent": "ai_error", "reply": build_unknown_reply(), "matches": [], "source": "regex"}
+
+
 @app.get("/api/chat/sample-isa")
 def sample_isa():
     return {"isaControlNumber": get_latest_failed_isa()}
 
 
 @app.post("/api/chat")
-def chat(request: ChatRequest):
+def chat(request: ChatRequest, http_request: Request):
     question = request.question or ""
 
     isa_match = ISA_PATTERN.search(question)
     if isa_match:
-        return handle_isa_lookup(isa_match.group(1).strip())
+        return {**handle_isa_lookup(isa_match.group(1).strip()), "source": "regex"}
 
     po_match = PO_PATTERN.search(question)
     if po_match:
-        return handle_po_lookup(po_match.group(1).strip())
+        return {**handle_po_lookup(po_match.group(1).strip()), "source": "regex"}
 
-    latest_failed = get_latest_failed_isa()
+    if _anthropic_client and is_ai_rate_limited(get_client_ip(http_request)):
+        return {"intent": "ai_rate_limited", "reply": build_unknown_reply(), "matches": [], "source": "regex"}
 
-    example_isa = latest_failed or "000012345"
+    ai_result = handle_ai_fallback(question)
+    if ai_result:
+        return ai_result
 
-    return {
-        "intent": "unknown",
-        "reply": (
-            f'Try asking "Why did ISA {example_isa} fail?" '
-            'or "Where is PO 12345?"'
-        ),
-        "matches": [],
-    }
+    return {"intent": "unknown", "reply": build_unknown_reply(), "matches": [], "source": "regex"}
