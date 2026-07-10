@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>EDI 940 App Troubleshooting Runbook</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --text: #152238;
+  --muted: #627087;
+  --border: #dbe2ec;
+  --accent: #2457d6;
+  --code: #111827;
+  --code-text: #e5edf7;
+  --shadow: 0 10px 28px rgba(25, 45, 85, .08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0c1220;
+    --panel: #141d2c;
+    --text: #ecf2fb;
+    --muted: #a6b4ca;
+    --border: #29364b;
+    --accent: #7aa2ff;
+    --code: #090d15;
+    --code-text: #dbeafe;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+header {
+  padding: 42px 24px 26px;
+  background: linear-gradient(135deg, #173a8f, #3178e0);
+  color: white;
+}
+.header-inner { max-width: 1180px; margin: auto; }
+h1 { margin: 0 0 8px; font-size: clamp(2rem, 5vw, 3.4rem); }
+.subtitle { margin: 0; max-width: 760px; opacity: .9; }
+.toolbar {
+  max-width: 1180px;
+  margin: -18px auto 20px;
+  padding: 0 24px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.toolbar-inner {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+input {
+  flex: 1 1 320px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 13px;
+  background: transparent;
+  color: var(--text);
+  font-size: 1rem;
+}
+.print-btn {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+.layout {
+  max-width: 1180px;
+  margin: auto;
+  padding: 0 24px 56px;
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  gap: 28px;
+}
+nav {
+  position: sticky;
+  top: 88px;
+  align-self: start;
+  display: grid;
+  gap: 8px;
+}
+nav a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 7px 10px;
+  border-radius: 8px;
+}
+nav a:hover { background: var(--panel); color: var(--accent); }
+main section { margin-bottom: 34px; scroll-margin-top: 110px; }
+h2 { margin: 0 0 14px; font-size: 1.55rem; }
+.grid { display: grid; gap: 14px; }
+.command-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+}
+.card-head h3 { margin: 0 0 2px; font-size: 1rem; }
+.card-head span { color: var(--muted); font-size: .82rem; text-transform: uppercase; }
+.card-head button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 7px 11px;
+  cursor: pointer;
+}
+pre {
+  margin: 0;
+  background: var(--code);
+  color: var(--code-text);
+  padding: 16px;
+  overflow-x: auto;
+  font: 0.91rem/1.55 Consolas, "Courier New", monospace;
+}
+.hidden { display: none !important; }
+.empty {
+  display: none;
+  padding: 22px;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  color: var(--muted);
+}
+footer {
+  max-width: 1180px;
+  margin: auto;
+  padding: 0 24px 40px;
+  color: var(--muted);
+}
+@media (max-width: 800px) {
+  .layout { grid-template-columns: 1fr; }
+  nav { display: none; }
+}
+@media print {
+  .toolbar, nav, .card-head button { display: none !important; }
+  body { background: white; color: black; }
+  header { background: white; color: black; padding: 20px 0; }
+  .layout { display: block; max-width: none; padding: 0; }
+  .command-card { break-inside: avoid; box-shadow: none; }
+  pre { white-space: pre-wrap; background: #f3f4f6; color: black; }
+  footer { padding-left: 0; }
+}
+</style>
+</head>
+<body>
+<header>
+<div class="header-inner">
+<h1>EDI 940 App Troubleshooting Runbook</h1>
+<p class="subtitle">Local startup, Git, PowerShell, Azure, SQL, API, authentication, deployment, and troubleshooting commands used while building the EDI 940 → WMS demo, plus the Claude-powered AI chat fallback.</p>
+</div>
+</header>
+<div class="toolbar">
+<div class="toolbar-inner">
+<input id="search" oninput="filterCommands()" placeholder="Search commands, routes, SQL tables, errors..." type="search"/>
+<button class="print-btn" onclick="window.print()" type="button">Print / Save PDF</button>
+</div>
+</div>
+<div class="layout">
+<nav><a href="#1">Local Development</a>
+<a href="#2">Git Commands</a>
+<a href="#3">PowerShell Search Commands</a>
+<a href="#4">Azure SQL</a>
+<a href="#5">API Testing</a>
+<a href="#6">Authentication</a>
+<a href="#7">Environment Variables</a>
+<a href="#8">Azure App Service and CLI</a>
+<a href="#9">ADF and Storage Checks</a>
+<a href="#10">Logic App Testing</a>
+<a href="#11">Build Failure Checklist</a><a href="#ai-claude">AI / Claude Chat Fallback</a></nav>
+<main>
+<div class="empty" id="empty">No commands matched your search.</div>
+<section id="1">
+<h2>Local Development</h2>
+<div class="grid">
+<article class="command-card" data-search="local development start fastapi api cd api
+uvicorn main:app --reload">
+<div class="card-head">
+<div>
+<h3>Start FastAPI API</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-1-1', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-1-1">cd api
+uvicorn main:app --reload</code></pre>
+</article>
+<article class="command-card" data-search="local development test health invoke-restmethod http://127.0.0.1:8000/health">
+<div class="card-head">
+<div>
+<h3>Test health</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-1-2', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-1-2">Invoke-RestMethod http://127.0.0.1:8000/health</code></pre>
+</article>
+<article class="command-card" data-search="local development test dashboard summary invoke-restmethod http://127.0.0.1:8000/api/dashboard/summary">
+<div class="card-head">
+<div>
+<h3>Test dashboard summary</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-1-3', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-1-3">Invoke-RestMethod http://127.0.0.1:8000/api/dashboard/summary</code></pre>
+</article>
+<article class="command-card" data-search="local development test blob status invoke-restmethod http://127.0.0.1:8000/api/dashboard/blob-status">
+<div class="card-head">
+<div>
+<h3>Test blob status</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-1-4', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-1-4">Invoke-RestMethod http://127.0.0.1:8000/api/dashboard/blob-status</code></pre>
+</article>
+<article class="command-card" data-search="local development start react dashboard cd dashboard
+npm install
+npm run dev">
+<div class="card-head">
+<div>
+<h3>Start React dashboard</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-1-5', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-1-5">cd dashboard
+npm install
+npm run dev</code></pre>
+</article>
+<article class="command-card" data-search="local development production build test npm run build">
+<div class="card-head">
+<div>
+<h3>Production build test</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-1-6', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-1-6">npm run build</code></pre>
+</article>
+<article class="command-card" data-search="local development preview production build npm run preview">
+<div class="card-head">
+<div>
+<h3>Preview production build</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-1-7', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-1-7">npm run preview</code></pre>
+</article>
+</div>
+</section>
+<section id="2">
+<h2>Git Commands</h2>
+<div class="grid">
+<article class="command-card" data-search="git commands check repository status git status">
+<div class="card-head">
+<div>
+<h3>Check repository status</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-2-1', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-2-1">git status</code></pre>
+</article>
+<article class="command-card" data-search="git commands pull latest changes git pull">
+<div class="card-head">
+<div>
+<h3>Pull latest changes</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-2-2', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-2-2">git pull</code></pre>
+</article>
+<article class="command-card" data-search="git commands stage all changes git add .">
+<div class="card-head">
+<div>
+<h3>Stage all changes</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-2-3', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-2-3">git add .</code></pre>
+</article>
+<article class="command-card" data-search='git commands commit changes git commit -m "message"'>
+<div class="card-head">
+<div>
+<h3>Commit changes</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-2-4', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-2-4">git commit -m "message"</code></pre>
+</article>
+<article class="command-card" data-search="git commands push changes git push">
+<div class="card-head">
+<div>
+<h3>Push changes</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-2-5', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-2-5">git push</code></pre>
+</article>
+<article class="command-card" data-search="git commands view branches git branch">
+<div class="card-head">
+<div>
+<h3>View branches</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-2-6', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-2-6">git branch</code></pre>
+</article>
+<article class="command-card" data-search='git commands search repository for edi940 git grep "edi940"'>
+<div class="card-head">
+<div>
+<h3>Search repository for EDI940</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-2-7', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-2-7">git grep "EDI940"</code></pre>
+</article>
+<article class="command-card" data-search='git commands search for triggeredifile git grep "triggeredifile"'>
+<div class="card-head">
+<div>
+<h3>Search for triggerEdiFile</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-2-8', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-2-8">git grep "triggerEdiFile"</code></pre>
+</article>
+<article class="command-card" data-search='git commands search for runedibatch git grep "runedibatch"'>
+<div class="card-head">
+<div>
+<h3>Search for runEdiBatch</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-2-9', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-2-9">git grep "runEdiBatch"</code></pre>
+</article>
+</div>
+</section>
+<section id="3">
+<h2>PowerShell Search Commands</h2>
+<div class="grid">
+<article class="command-card" data-search='powershell search commands search sql files for isa control number select-string -path *.sql -pattern "isa_controlnumber"'>
+<div class="card-head">
+<div>
+<h3>Search SQL files for ISA control number</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-3-1', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-3-1">Select-String -Path *.sql -Pattern "ISA_ControlNumber"</code></pre>
+</article>
+<article class="command-card" data-search='powershell search commands recursive text search get-childitem -recurse -file | select-string "isa_controlnumber"'>
+<div class="card-head">
+<div>
+<h3>Recursive text search</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-3-2', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-3-2">Get-ChildItem -Recurse -File | Select-String "ISA_ControlNumber"</code></pre>
+</article>
+<article class="command-card" data-search='powershell search commands search for dashboard heading get-childitem -recurse -file | select-string "edi 940 dashboard"'>
+<div class="card-head">
+<div>
+<h3>Search for dashboard heading</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-3-3', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-3-3">Get-ChildItem -Recurse -File | Select-String "EDI 940 Dashboard"</code></pre>
+</article>
+<article class="command-card" data-search='powershell search commands search for api routes get-childitem -recurse -file | select-string "/api/dashboard"'>
+<div class="card-head">
+<div>
+<h3>Search for API routes</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-3-4', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-3-4">Get-ChildItem -Recurse -File | Select-String "/api/dashboard"</code></pre>
+</article>
+<article class="command-card" data-search='powershell search commands avoid folder access errors get-childitem -recurse -file |
+    select-string -pattern "edi 940 dashboard" '>
+<div class="card-head">
+<div>
+<h3>Avoid folder access errors</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-3-5', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-3-5">Get-ChildItem -Recurse -File |
+    Select-String -Pattern "EDI 940 Dashboard" </code></pre>
+</article>
+</div>
+</section>
+<section id="4">
+<h2>Azure SQL</h2>
+<div class="grid">
+<article class="command-card" data-search="azure sql check compatibility level select name, compatibility_level
+from sys.databases;">
+<div class="card-head">
+<div>
+<h3>Check compatibility level</h3>
+<span>sql</span>
+</div>
+<button onclick="copyCode('code-4-1', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-4-1">SELECT name, compatibility_level
+FROM sys.databases;</code></pre>
+</article>
+<article class="command-card" data-search="azure sql check recent files select top 100 *
+from dbo.edi940_raw
+order by rawid desc;">
+<div class="card-head">
+<div>
+<h3>Check recent files</h3>
+<span>sql</span>
+</div>
+<button onclick="copyCode('code-4-2', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-4-2">SELECT TOP 100 *
+FROM dbo.EDI940_Raw
+ORDER BY RawId DESC;</code></pre>
+</article>
+<article class="command-card" data-search="azure sql check failed files select *
+from dbo.edi940_raw
+where processstatus like '%fail%'
+order by rawid desc;">
+<div class="card-head">
+<div>
+<h3>Check failed files</h3>
+<span>sql</span>
+</div>
+<button onclick="copyCode('code-4-3', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-4-3">SELECT *
+FROM dbo.EDI940_Raw
+WHERE ProcessStatus LIKE '%FAIL%'
+ORDER BY RawId DESC;</code></pre>
+</article>
+<article class="command-card" data-search="azure sql latest failed isa select top 1 isa_controlnumber
+from dbo.edi940_raw
+where processstatus like '%fail%'
+order by rawid desc;">
+<div class="card-head">
+<div>
+<h3>Latest failed ISA</h3>
+<span>sql</span>
+</div>
+<button onclick="copyCode('code-4-4', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-4-4">SELECT TOP 1 ISA_ControlNumber
+FROM dbo.EDI940_Raw
+WHERE ProcessStatus LIKE '%FAIL%'
+ORDER BY RawId DESC;</code></pre>
+</article>
+<article class="command-card" data-search="azure sql latest failed file details select top 1
+    isa_controlnumber,
+    errormessage,
+    filename
+from dbo.edi940_raw
+where processstatus like '%fail%'
+order by rawid desc;">
+<div class="card-head">
+<div>
+<h3>Latest failed file details</h3>
+<span>sql</span>
+</div>
+<button onclick="copyCode('code-4-5', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-4-5">SELECT TOP 1
+    ISA_ControlNumber,
+    ErrorMessage,
+    FileName
+FROM dbo.EDI940_Raw
+WHERE ProcessStatus LIKE '%FAIL%'
+ORDER BY RawId DESC;</code></pre>
+</article>
+<article class="command-card" data-search="azure sql files waiting to process select *
+from dbo.edi940_raw
+where processstatus = 'raw_loaded';">
+<div class="card-head">
+<div>
+<h3>Files waiting to process</h3>
+<span>sql</span>
+</div>
+<button onclick="copyCode('code-4-6', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-4-6">SELECT *
+FROM dbo.EDI940_Raw
+WHERE ProcessStatus = 'RAW_LOADED';</code></pre>
+</article>
+<article class="command-card" data-search="azure sql parse status counts select
+    processstatus,
+    count(*) as qty
+from dbo.edi940_raw
+group by processstatus
+order by processstatus;">
+<div class="card-head">
+<div>
+<h3>Parse status counts</h3>
+<span>sql</span>
+</div>
+<button onclick="copyCode('code-4-7', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-4-7">SELECT
+    ProcessStatus,
+    COUNT(*) AS Qty
+FROM dbo.EDI940_Raw
+GROUP BY ProcessStatus
+ORDER BY ProcessStatus;</code></pre>
+</article>
+<article class="command-card" data-search="azure sql wms status counts select
+    status,
+    count(*) as qty
+from wms.orderintegrationlog
+group by status;">
+<div class="card-head">
+<div>
+<h3>WMS status counts</h3>
+<span>sql</span>
+</div>
+<button onclick="copyCode('code-4-8', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-4-8">SELECT
+    Status,
+    COUNT(*) AS Qty
+FROM wms.OrderIntegrationLog
+GROUP BY Status;</code></pre>
+</article>
+<article class="command-card" data-search="azure sql check staged orders select *
+from wms.orderheader_staging
+order by createddate desc;">
+<div class="card-head">
+<div>
+<h3>Check staged orders</h3>
+<span>sql</span>
+</div>
+<button onclick="copyCode('code-4-9', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-4-9">SELECT *
+FROM wms.OrderHeader_Staging
+ORDER BY CreatedDate DESC;</code></pre>
+</article>
+</div>
+</section>
+<section id="5">
+<h2>API Testing</h2>
+<div class="grid">
+<article class="command-card" data-search="api testing dashboard summary invoke-restmethod `
+    https://&lt;api&gt;/api/dashboard/summary">
+<div class="card-head">
+<div>
+<h3>Dashboard summary</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-5-1', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-5-1">Invoke-RestMethod `
+    https://&lt;api&gt;/api/dashboard/summary</code></pre>
+</article>
+<article class="command-card" data-search="api testing recent files invoke-restmethod `
+    https://&lt;api&gt;/api/dashboard/recent-files">
+<div class="card-head">
+<div>
+<h3>Recent files</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-5-2', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-5-2">Invoke-RestMethod `
+    https://&lt;api&gt;/api/dashboard/recent-files</code></pre>
+</article>
+<article class="command-card" data-search="api testing wms orders invoke-restmethod `
+    https://&lt;api&gt;/api/dashboard/wms-orders">
+<div class="card-head">
+<div>
+<h3>WMS orders</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-5-3', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-5-3">Invoke-RestMethod `
+    https://&lt;api&gt;/api/dashboard/wms-orders</code></pre>
+</article>
+<article class="command-card" data-search="api testing chat endpoint invoke-restmethod `
+    -method post `
+    -uri https://&lt;api&gt;/api/chat `
+    -contenttype &quot;application/json&quot; `
+    -body '{&quot;question&quot;:&quot;where is po order1001?&quot;}'">
+<div class="card-head">
+<div>
+<h3>Chat endpoint</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-5-4', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-5-4">Invoke-RestMethod `
+    -Method POST `
+    -Uri https://&lt;api&gt;/api/chat `
+    -ContentType "application/json" `
+    -Body '{"question":"Where is PO ORDER1001?"}'</code></pre>
+</article>
+</div>
+</section>
+<section id="6">
+<h2>Authentication</h2>
+<div class="grid">
+<article class="command-card" data-search="authentication view authenticated static web app user /.auth/me">
+<div class="card-head">
+<div>
+<h3>View authenticated Static Web App user</h3>
+<span>text</span>
+</div>
+<button onclick="copyCode('code-6-1', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-6-1">/.auth/me</code></pre>
+</article>
+<article class="command-card" data-search="authentication google login /.auth/login/google">
+<div class="card-head">
+<div>
+<h3>Google login</h3>
+<span>text</span>
+</div>
+<button onclick="copyCode('code-6-2', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-6-2">/.auth/login/google</code></pre>
+</article>
+<article class="command-card" data-search="authentication logout /.auth/logout">
+<div class="card-head">
+<div>
+<h3>Logout</h3>
+<span>text</span>
+</div>
+<button onclick="copyCode('code-6-3', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-6-3">/.auth/logout</code></pre>
+</article>
+<article class="command-card" data-search='authentication expected user response {
+  "clientprincipal": {
+    "userdetails": "user@gmail.com"
+  }
+}'>
+<div class="card-head">
+<div>
+<h3>Expected user response</h3>
+<span>json</span>
+</div>
+<button onclick="copyCode('code-6-4', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-6-4">{
+  "clientPrincipal": {
+    "userDetails": "user@gmail.com"
+  }
+}</code></pre>
+</article>
+<article class="command-card" data-search="authentication entra sql authentication microsoft entra id - universal with mfa
+or
+azure active directory - universal with mfa">
+<div class="card-head">
+<div>
+<h3>Entra SQL authentication</h3>
+<span>text</span>
+</div>
+<button onclick="copyCode('code-6-5', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-6-5">Microsoft Entra ID - Universal with MFA
+or
+Azure Active Directory - Universal with MFA</code></pre>
+</article>
+</div>
+</section>
+<section id="7">
+<h2>Environment Variables</h2>
+<div class="grid">
+<article class="command-card" data-search="environment variables typical local .env values sql_connection_string=
+storage_connection_string=
+accountname=
+logic_app_url=
+api_key=">
+<div class="card-head">
+<div>
+<h3>Typical local .env values</h3>
+<span>env</span>
+</div>
+<button onclick="copyCode('code-7-1', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-7-1">SQL_CONNECTION_STRING=
+STORAGE_CONNECTION_STRING=
+ACCOUNTNAME=
+LOGIC_APP_URL=
+API_KEY=</code></pre>
+</article>
+<article class="command-card" data-search="environment variables common missing variable error keyerror: 'accountname'">
+<div class="card-head">
+<div>
+<h3>Common missing variable error</h3>
+<span>text</span>
+</div>
+<button onclick="copyCode('code-7-2', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-7-2">KeyError: 'ACCOUNTNAME'</code></pre>
+</article>
+<article class="command-card" data-search="environment variables do not commit .env # .gitignore
+.env
+*.env
+.env.*">
+<div class="card-head">
+<div>
+<h3>Do not commit .env</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-7-3', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-7-3"># .gitignore
+.env
+*.env
+.env.*</code></pre>
+</article>
+</div>
+</section>
+<section id="8">
+<h2>Azure App Service and CLI</h2>
+<div class="grid">
+<article class="command-card" data-search="azure app service and cli tail application logs az webapp log tail `
+    --name edi-wms-api `
+    --resource-group rg-azurelab">
+<div class="card-head">
+<div>
+<h3>Tail application logs</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-8-1', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-8-1">az webapp log tail `
+    --name edi-wms-api `
+    --resource-group rg-azurelab</code></pre>
+</article>
+<article class="command-card" data-search="azure app service and cli restart application az webapp restart `
+    --name edi-wms-api `
+    --resource-group rg-azurelab">
+<div class="card-head">
+<div>
+<h3>Restart application</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-8-2', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-8-2">az webapp restart `
+    --name edi-wms-api `
+    --resource-group rg-azurelab</code></pre>
+</article>
+</div>
+</section>
+<section id="9">
+<h2>ADF and Storage Checks</h2>
+<div class="grid">
+<article class="command-card" data-search="adf and storage checks adf manual run path adf → author → edi940_blobtosql_pipeline → debug or trigger now">
+<div class="card-head">
+<div>
+<h3>ADF manual run path</h3>
+<span>text</span>
+</div>
+<button onclick="copyCode('code-9-1', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-9-1">ADF → Author → EDI940_BlobToSQL_Pipeline → Debug or Trigger Now</code></pre>
+</article>
+<article class="command-card" data-search="adf and storage checks adf monitoring path adf → monitor → pipeline runs → activity runs">
+<div class="card-head">
+<div>
+<h3>ADF monitoring path</h3>
+<span>text</span>
+</div>
+<button onclick="copyCode('code-9-2', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-9-2">ADF → Monitor → Pipeline Runs → Activity Runs</code></pre>
+</article>
+<article class="command-card" data-search="adf and storage checks common blob containers incoming
+processed">
+<div class="card-head">
+<div>
+<h3>Common blob containers</h3>
+<span>text</span>
+</div>
+<button onclick="copyCode('code-9-3', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-9-3">incoming
+processed</code></pre>
+</article>
+<article class="command-card" data-search="adf and storage checks blob status api invoke-restmethod `
+    http://127.0.0.1:8000/api/dashboard/blob-status">
+<div class="card-head">
+<div>
+<h3>Blob status API</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-9-4', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-9-4">Invoke-RestMethod `
+    http://127.0.0.1:8000/api/dashboard/blob-status</code></pre>
+</article>
+<article class="command-card" data-search='adf and storage checks expected blob response {
+  "fileswaiting": 3,
+  "oldestageseconds": 155
+}'>
+<div class="card-head">
+<div>
+<h3>Expected blob response</h3>
+<span>json</span>
+</div>
+<button onclick="copyCode('code-9-5', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-9-5">{
+  "filesWaiting": 3,
+  "oldestAgeSeconds": 155
+}</code></pre>
+</article>
+</div>
+</section>
+<section id="10">
+<h2>Logic App Testing</h2>
+<div class="grid">
+<article class="command-card" data-search='logic app testing trigger the logic app invoke-webrequest "&lt;logic-app-url&gt;" -usebasicparsing'>
+<div class="card-head">
+<div>
+<h3>Trigger the Logic App</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-10-1', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-10-1">Invoke-WebRequest "&lt;logic-app-url&gt;" -UseBasicParsing</code></pre>
+</article>
+<article class="command-card" data-search="logic app testing dashboard action create test files">
+<div class="card-head">
+<div>
+<h3>Dashboard action</h3>
+<span>text</span>
+</div>
+<button onclick="copyCode('code-10-2', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-10-2">Create Test Files</code></pre>
+</article>
+</div>
+</section>
+<section id="11">
+<h2>Build Failure Checklist</h2>
+<div class="grid">
+<article class="command-card" data-search="build failure checklist react build check npm run build">
+<div class="card-head">
+<div>
+<h3>React build check</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-11-1', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-11-1">npm run build</code></pre>
+</article>
+<article class="command-card" data-search="build failure checklist common react causes missing closing &lt;/div&gt;
+missing closing &lt;/main&gt;
+duplicate jsx
+extra }
+extra ]">
+<div class="card-head">
+<div>
+<h3>Common React causes</h3>
+<span>text</span>
+</div>
+<button onclick="copyCode('code-11-2', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-11-2">Missing closing &lt;/div&gt;
+Missing closing &lt;/main&gt;
+Duplicate JSX
+Extra }
+Extra ]</code></pre>
+</article>
+<article class="command-card" data-search="build failure checklist fastapi startup check uvicorn main:app --reload">
+<div class="card-head">
+<div>
+<h3>FastAPI startup check</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-11-3', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-11-3">uvicorn main:app --reload</code></pre>
+</article>
+<article class="command-card" data-search="build failure checklist common fastapi causes missing environment variable
+invalid sql connection string
+import error
+python syntax error
+incorrect working directory">
+<div class="card-head">
+<div>
+<h3>Common FastAPI causes</h3>
+<span>text</span>
+</div>
+<button onclick="copyCode('code-11-4', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-11-4">Missing environment variable
+Invalid SQL connection string
+Import error
+Python syntax error
+Incorrect working directory</code></pre>
+</article>
+</div>
+</section>
+<section id="ai-claude"><h2>AI / Claude Chat Fallback</h2><div class="grid"><article class="command-card" data-search="ai claude anthropic chat fallback install the anthropic sdk cd api
+pip install anthropic"><div class="card-head"><div><h3>Install the Anthropic SDK</h3><span>powershell</span></div><button onclick="copyCode('code-100-1', this)" type="button">Copy</button></div><pre><code id="code-100-1">cd api
+pip install anthropic</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback add dependency to requirements.txt anthropic
+python-dotenv
+fastapi
+uvicorn
+pyodbc
+azure-storage-blob
+azure-identity
+azure-mgmt-datafactory
+requests"><div class="card-head"><div><h3>Add dependency to requirements.txt</h3><span>text</span></div><button onclick="copyCode('code-100-2', this)" type="button">Copy</button></div><pre><code id="code-100-2">anthropic
+python-dotenv
+fastapi
+uvicorn
+pyodbc
+azure-storage-blob
+azure-identity
+azure-mgmt-datafactory
+requests</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback local ai environment variable anthropic_api_key=your_api_key_here"><div class="card-head"><div><h3>Local AI environment variable</h3><span>env</span></div><button onclick="copyCode('code-100-3', this)" type="button">Copy</button></div><pre><code id="code-100-3">ANTHROPIC_API_KEY=your_api_key_here</code></pre></article><article class="command-card" data-search='ai claude anthropic chat fallback powershell temporary environment variable $env:anthropic_api_key="your_api_key_here"
+uvicorn main:app --reload'><div class="card-head"><div><h3>PowerShell temporary environment variable</h3><span>powershell</span></div><button onclick="copyCode('code-100-4', this)" type="button">Copy</button></div><pre><code id="code-100-4">$env:ANTHROPIC_API_KEY="your_api_key_here"
+uvicorn main:app --reload</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback confirm the environment variable is loaded python -c &quot;import os; from dotenv import load_dotenv; load_dotenv(); print(bool(os.getenv('anthropic_api_key')))&quot; "><div class="card-head"><div><h3>Confirm the environment variable is loaded</h3><span>powershell</span></div><button onclick="copyCode('code-100-5', this)" type="button">Copy</button></div><pre><code id="code-100-5">python -c "import os; from dotenv import load_dotenv; load_dotenv(); print(bool(os.getenv('ANTHROPIC_API_KEY')))" </code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback test the regex po fast path invoke-restmethod `
+    -method post `
+    -uri http://127.0.0.1:8000/api/chat `
+    -contenttype &quot;application/json&quot; `
+    -body '{&quot;question&quot;:&quot;where is po order1001?&quot;}'"><div class="card-head"><div><h3>Test the regex PO fast path</h3><span>powershell</span></div><button onclick="copyCode('code-100-6', this)" type="button">Copy</button></div><pre><code id="code-100-6">Invoke-RestMethod `
+    -Method POST `
+    -Uri http://127.0.0.1:8000/api/chat `
+    -ContentType "application/json" `
+    -Body '{"question":"Where is PO ORDER1001?"}'</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback test the regex isa fast path invoke-restmethod `
+    -method post `
+    -uri http://127.0.0.1:8000/api/chat `
+    -contenttype &quot;application/json&quot; `
+    -body '{&quot;question&quot;:&quot;why did isa 000012345 fail?&quot;}'"><div class="card-head"><div><h3>Test the regex ISA fast path</h3><span>powershell</span></div><button onclick="copyCode('code-100-7', this)" type="button">Copy</button></div><pre><code id="code-100-7">Invoke-RestMethod `
+    -Method POST `
+    -Uri http://127.0.0.1:8000/api/chat `
+    -ContentType "application/json" `
+    -Body '{"question":"Why did ISA 000012345 fail?"}'</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback test the ai fallback path invoke-restmethod `
+    -method post `
+    -uri http://127.0.0.1:8000/api/chat `
+    -contenttype &quot;application/json&quot; `
+    -body '{&quot;question&quot;:&quot;show me the most recent failed edi files&quot;}'"><div class="card-head"><div><h3>Test the AI fallback path</h3><span>powershell</span></div><button onclick="copyCode('code-100-8', this)" type="button">Copy</button></div><pre><code id="code-100-8">Invoke-RestMethod `
+    -Method POST `
+    -Uri http://127.0.0.1:8000/api/chat `
+    -ContentType "application/json" `
+    -Body '{"question":"Show me the most recent failed EDI files"}'</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback test a question outside the supported ai tools invoke-restmethod `
+    -method post `
+    -uri http://127.0.0.1:8000/api/chat `
+    -contenttype &quot;application/json&quot; `
+    -body '{&quot;question&quot;:&quot;explain the weather today&quot;}'"><div class="card-head"><div><h3>Test a question outside the supported AI tools</h3><span>powershell</span></div><button onclick="copyCode('code-100-9', this)" type="button">Copy</button></div><pre><code id="code-100-9">Invoke-RestMethod `
+    -Method POST `
+    -Uri http://127.0.0.1:8000/api/chat `
+    -ContentType "application/json" `
+    -Body '{"question":"Explain the weather today"}'</code></pre></article><article class="command-card" data-search='ai claude anthropic chat fallback expected source values {
+  "source": "regex"
+}
+
+{
+  "source": "ai"
+}'><div class="card-head"><div><h3>Expected source values</h3><span>json</span></div><button onclick="copyCode('code-100-10', this)" type="button">Copy</button></div><pre><code id="code-100-10">{
+  "source": "regex"
+}
+
+{
+  "source": "ai"
+}</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback check the dynamic sample isa endpoint invoke-restmethod `
+    http://127.0.0.1:8000/api/chat/sample-isa"><div class="card-head"><div><h3>Check the dynamic sample ISA endpoint</h3><span>powershell</span></div><button onclick="copyCode('code-100-11', this)" type="button">Copy</button></div><pre><code id="code-100-11">Invoke-RestMethod `
+    http://127.0.0.1:8000/api/chat/sample-isa</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback ai-supported tool routes lookup_po
+lookup_isa
+list_failed_orders"><div class="card-head"><div><h3>AI-supported tool routes</h3><span>text</span></div><button onclick="copyCode('code-100-12', this)" type="button">Copy</button></div><pre><code id="code-100-12">lookup_po
+lookup_isa
+list_failed_orders</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback current in-memory rate limit 20 ai fallback requests per client ip per hour, per application worker process.
+
+regex po and isa lookups bypass this limit."><div class="card-head"><div><h3>Current in-memory rate limit</h3><span>text</span></div><button onclick="copyCode('code-100-13', this)" type="button">Copy</button></div><pre><code id="code-100-13">20 AI fallback requests per client IP per hour, per application worker process.
+
+Regex PO and ISA lookups bypass this limit.</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback common ai fallback log message [chat] ai fallback error: &lt;exception&gt;
+
+the api intentionally hides provider, quota, billing, and authentication details from the browser response."><div class="card-head"><div><h3>Common AI fallback log message</h3><span>text</span></div><button onclick="copyCode('code-100-14', this)" type="button">Copy</button></div><pre><code id="code-100-14">[chat] AI fallback error: &lt;exception&gt;
+
+The API intentionally hides provider, quota, billing, and authentication details from the browser response.</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback tail deployed api logs for ai errors az webapp log tail `
+    --name edi-wms-api `
+    --resource-group rg-azurelab"><div class="card-head"><div><h3>Tail deployed API logs for AI errors</h3><span>powershell</span></div><button onclick="copyCode('code-100-15', this)" type="button">Copy</button></div><pre><code id="code-100-15">az webapp log tail `
+    --name edi-wms-api `
+    --resource-group rg-azurelab</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback azure app service setting azure portal
+→ app service
+→ configuration / environment variables
+→ add anthropic_api_key
+→ save
+→ restart the app service"><div class="card-head"><div><h3>Azure App Service setting</h3><span>text</span></div><button onclick="copyCode('code-100-16', this)" type="button">Copy</button></div><pre><code id="code-100-16">Azure Portal
+→ App Service
+→ Configuration / Environment variables
+→ Add ANTHROPIC_API_KEY
+→ Save
+→ Restart the App Service</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback restart after adding the key az webapp restart `
+    --name edi-wms-api `
+    --resource-group rg-azurelab"><div class="card-head"><div><h3>Restart after adding the key</h3><span>powershell</span></div><button onclick="copyCode('code-100-17', this)" type="button">Copy</button></div><pre><code id="code-100-17">az webapp restart `
+    --name edi-wms-api `
+    --resource-group rg-azurelab</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback ai chat routing flow 1. check isa regex.
+2. check po regex.
+3. apply the ai-only rate limit.
+4. send unmatched questions to claude.
+5. claude selects an approved tool.
+6. fastapi executes the controlled sql helper.
+7. claude summarizes the tool result.
+8. on provider failure, return the normal regex help message."><div class="card-head"><div><h3>AI chat routing flow</h3><span>text</span></div><button onclick="copyCode('code-100-18', this)" type="button">Copy</button></div><pre><code id="code-100-18">1. Check ISA regex.
+2. Check PO regex.
+3. Apply the AI-only rate limit.
+4. Send unmatched questions to Claude.
+5. Claude selects an approved tool.
+6. FastAPI executes the controlled SQL helper.
+7. Claude summarizes the tool result.
+8. On provider failure, return the normal regex help message.</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback important security rule the ai model does not receive database credentials and does not write sql.
+
+it may only choose from the backend-defined tools:
+- lookup_po
+- lookup_isa
+- list_failed_orders
+
+the fastapi backend remains responsible for parameterized sql and authorization."><div class="card-head"><div><h3>Important security rule</h3><span>text</span></div><button onclick="copyCode('code-100-19', this)" type="button">Copy</button></div><pre><code id="code-100-19">The AI model does not receive database credentials and does not write SQL.
+
+It may only choose from the backend-defined tools:
+- lookup_po
+- lookup_isa
+- list_failed_orders
+
+The FastAPI backend remains responsible for parameterized SQL and authorization.</code></pre></article><article class="command-card" data-search="ai claude anthropic chat fallback do not commit the ai key # .gitignore
+.env
+*.env
+.env.*
+"><div class="card-head"><div><h3>Do not commit the AI key</h3><span>powershell</span></div><button onclick="copyCode('code-100-20', this)" type="button">Copy</button></div><pre><code id="code-100-20"># .gitignore
+.env
+*.env
+.env.*
+</code></pre></article></div></section></main>
+</div>
+<footer>
+  Update this file as the project grows. Keep secrets, API keys, passwords, and full connection strings out of the runbook.
+</footer>
+<script>
+function copyCode(id, button) {
+  const text = document.getElementById(id).innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const old = button.innerText;
+    button.innerText = "Copied";
+    setTimeout(() => button.innerText = old, 1200);
+  });
+}
+function filterCommands() {
+  const term = document.getElementById("search").value.trim().toLowerCase();
+  const cards = [...document.querySelectorAll(".command-card")];
+  let visible = 0;
+  cards.forEach(card => {
+    const match = !term || card.dataset.search.includes(term);
+    card.classList.toggle("hidden", !match);
+    if (match) visible++;
+  });
+  document.querySelectorAll("main section").forEach(section => {
+    const hasVisible = section.querySelector(".command-card:not(.hidden)");
+    section.classList.toggle("hidden", !hasVisible);
+  });
+  document.getElementById("empty").style.display = visible ? "none" : "block";
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,800 @@
+# EDI 940 to WMS Architecture
+
+## Overview
+
+This project demonstrates an end-to-end EDI 940 warehouse order processing solution built with Azure services, a FastAPI backend, and a React dashboard.
+
+The architecture is designed to simulate a production integration flow:
+
+1. EDI 940 files are generated or received.
+2. Files are placed into Azure Blob Storage.
+3. Azure Data Factory loads the files into Azure SQL.
+4. SQL stored procedures parse and validate the EDI content.
+5. Valid orders are staged for WMS pickup.
+6. Operational status is exposed through a FastAPI service.
+7. A React dashboard provides monitoring, manual actions, and chat-based support.
+8. Parsed data is also written to Azure Data Lake in Parquet format for analytics.
+
+---
+
+## High-Level Architecture
+
+```text
+                        ┌───────────────────────────┐
+                        │        End User           │
+                        │   Browser / Dashboard     │
+                        └─────────────┬─────────────┘
+                                      │
+                                      ▼
+                        ┌───────────────────────────┐
+                        │ Azure Static Web Apps     │
+                        │ React / Vite Dashboard    │
+                        │ Google Authentication     │
+                        └─────────────┬─────────────┘
+                                      │ HTTPS
+                                      ▼
+                        ┌───────────────────────────┐
+                        │ Azure App Service         │
+                        │ FastAPI Backend           │
+                        │ REST API / Chat / Actions │
+                        └───────┬─────────┬─────────┘
+                                │         │
+                                │         ├─────────────────────┐
+                                │         │                     │
+                                ▼         ▼                     ▼
+                    ┌────────────────┐  ┌────────────────┐  ┌──────────────────┐
+                    │ Azure SQL DB   │  │ Azure Blob    │  │ Anthropic Claude │
+                    │ Raw / Parsed   │  │ Queue Metrics │  │ AI Tool Routing  │
+                    │ WMS Staging    │  │ File Status   │  │ Controlled Tools │
+                    └───────┬────────┘  └───────┬────────┘  └──────────────────┘
+                            │                   │
+                            │                   │
+                            ▼                   ▼
+                    ┌────────────────┐  ┌───────────────────────┐
+                    │ WMS Simulation │  │ Azure Data Factory    │
+                    │ Pickup Status  │  │ Batch Orchestration   │
+                    └────────────────┘  └───────────┬───────────┘
+                                                   │
+                                                   ▼
+                                       ┌────────────────────────┐
+                                       │ Azure SQL Procedures   │
+                                       │ Parse / Validate / Load│
+                                       └───────────┬────────────┘
+                                                   │
+                                                   ▼
+                                       ┌────────────────────────┐
+                                       │ ADLS Gen2              │
+                                       │ Parquet Analytics Data │
+                                       └────────────────────────┘
+```
+
+---
+
+## Core Components
+
+## 1. React Dashboard
+
+The frontend is built with React and Vite and hosted in Azure Static Web Apps.
+
+### Responsibilities
+
+- Display operational summary cards
+- Show recent EDI files and processing status
+- Show WMS staging status
+- Display blob queue metrics
+- Trigger test file generation
+- Start the ADF batch pipeline
+- Simulate WMS pickup
+- Provide PO and ISA chat support
+- Display authenticated user information
+
+### Main Dashboard Metrics
+
+- Files Received
+- Files Parsed
+- Parse Errors
+- Files Waiting
+- Oldest File Age
+- WMS Ready
+- WMS Sent
+- WMS Success
+- WMS Failed
+- WMS Picked Up
+
+---
+
+## 2. FastAPI Backend
+
+The backend is hosted in Azure App Service.
+
+### Responsibilities
+
+- Provide dashboard REST endpoints
+- Query Azure SQL
+- Read Azure Blob Storage queue metrics
+- Trigger the Logic App
+- Trigger Azure Data Factory
+- Simulate WMS pickup
+- Handle PO and ISA lookups
+- Route unmatched chat questions to the AI fallback
+- Enforce API key protection on write actions
+- Restrict browser access using CORS
+
+### Main API Endpoints
+
+```text
+GET  /health
+GET  /api/dashboard/summary
+GET  /api/dashboard/recent-files
+GET  /api/dashboard/blob-status
+GET  /api/dashboard/wms-orders
+GET  /api/chat/sample-isa
+
+POST /api/chat
+POST /api/actions/trigger-edi
+POST /api/wms/simulate-pickup
+POST /api/adf/run
+```
+
+---
+
+## 3. Azure Logic Apps
+
+The Logic App is used to generate test EDI 940 files.
+
+### Responsibilities
+
+- Create sample EDI 940 payloads
+- Generate dynamic ISA control numbers
+- Write files into the inbound Blob Storage container
+- Simulate an external trading partner, VAN, API, or SFTP source
+
+### Production Equivalent
+
+In a production system, the Logic App test generator could be replaced by:
+
+- VAN delivery
+- SFTP
+- AS2
+- API upload
+- Partner portal
+- Azure Function
+- Event-driven integration service
+
+---
+
+## 4. Azure Blob Storage
+
+Blob Storage acts as the inbound file landing zone.
+
+### Primary Container
+
+```text
+edi940-inbound
+```
+
+### Responsibilities
+
+- Store inbound EDI files
+- Provide queue depth metrics
+- Provide oldest-file age metrics
+- Serve as the source for the ADF batch pipeline
+
+### Operational Metrics
+
+The FastAPI backend calculates:
+
+```text
+filesWaiting
+oldestFileAgeSeconds
+```
+
+These values are displayed on the dashboard to show whether files are accumulating.
+
+---
+
+## 5. Azure Data Factory
+
+Azure Data Factory orchestrates the batch processing workflow.
+
+### Responsibilities
+
+- Enumerate inbound files
+- Copy file contents into Azure SQL
+- Execute parsing stored procedures
+- Load valid orders into WMS staging
+- Write analytics output to ADLS Gen2
+- Move or remove processed files
+- Record pipeline execution status
+
+### Current Orchestration Model
+
+The current implementation uses a manually triggered batch pipeline.
+
+This avoids duplicate processing that occurred during earlier Event Grid testing.
+
+### Design Note
+
+ADF introduces noticeable orchestration overhead for small files. SQL parsing completes quickly, but pipeline startup and activity scheduling can take significantly longer.
+
+Potential production alternatives include:
+
+- Scheduled micro-batching
+- Azure Functions
+- Event Grid with idempotent processing
+- Durable Functions
+- Fewer ADF activities
+- Managed Integration Runtime TTL
+
+---
+
+## 6. Azure SQL Database
+
+Azure SQL stores raw EDI data, parse results, WMS staging data, and integration status.
+
+### Raw EDI Table
+
+```text
+dbo.EDI940_Raw
+```
+
+Typical fields include:
+
+- RawId
+- FileName
+- RawEDIText
+- ProcessStatus
+- LoadDateTime
+- ErrorMessage
+- ISASender
+- ISAReceiver
+- ISA_ControlNumber
+
+### WMS Staging Tables
+
+```text
+wms.OrderHeader_Staging
+wms.OrderDetail_Staging
+wms.OrderIntegrationLog
+```
+
+### Main Stored Procedures and Functions
+
+```text
+dbo.ParseEDI940RawByFile
+dbo.LoadEDI940ToWMSStaging
+wms.LoadEDI940ToWMSStaging
+dbo.GetEDIElement
+```
+
+### Processing Status Flow
+
+```text
+RAW_LOADED
+    ↓
+PARSED
+    ↓
+STAGED
+    ↓
+READY
+    ↓
+SENT
+    ↓
+SUCCESS
+```
+
+Failure states include:
+
+```text
+PARSE_FAILED
+FAILED
+```
+
+---
+
+## 7. WMS Simulation
+
+The WMS pickup endpoint simulates an external WMS consuming staged orders.
+
+### Behavior
+
+Orders in:
+
+```text
+READY
+```
+
+are updated to:
+
+```text
+SUCCESS
+```
+
+The simulation also increments the attempt count and clears prior error messages.
+
+### Production Equivalent
+
+A real WMS integration could use:
+
+- REST API
+- SOAP
+- Message queue
+- SFTP
+- EDI 945 response
+- Middleware platform
+- Direct database integration
+- Enterprise service bus
+
+---
+
+## 8. Data Lake and Analytics
+
+Parsed data is written to Azure Data Lake Storage Gen2 in Parquet format.
+
+### Purpose
+
+- Historical reporting
+- Power BI integration
+- Trend analysis
+- SLA reporting
+- Customer scorecards
+- Future machine learning or forecasting
+
+### Partitioning Pattern
+
+```text
+year=<YYYY>/
+month=<MM>/
+day=<DD>/
+```
+
+Example:
+
+```text
+year=2026/month=07/day=10/
+```
+
+---
+
+## Chat Architecture
+
+The chat service uses a two-stage design.
+
+## Stage 1: Regex Fast Path
+
+The backend first attempts deterministic pattern matching for:
+
+- PO or warehouse order number
+- ISA control number
+
+Examples:
+
+```text
+Where is PO ORDER1001?
+What happened with ISA 000012345?
+```
+
+These lookups are handled directly by FastAPI and Azure SQL without using AI.
+
+### Benefits
+
+- Fast
+- Predictable
+- No AI cost
+- No model dependency
+- Easy to troubleshoot
+
+---
+
+## Stage 2: AI Fallback
+
+Questions that do not match the regex patterns are sent to Anthropic Claude.
+
+The AI model does not receive database credentials and does not write SQL.
+
+It may only select from approved backend tools:
+
+```text
+lookup_po
+lookup_isa
+list_failed_orders
+```
+
+FastAPI executes the selected tool and returns only the controlled result.
+
+### AI Flow
+
+```text
+User Question
+    ↓
+Regex PO / ISA Check
+    ↓
+No Match
+    ↓
+AI Rate Limit Check
+    ↓
+Claude Tool Selection
+    ↓
+FastAPI Executes Approved Tool
+    ↓
+Claude Summarizes Result
+    ↓
+Dashboard Response
+```
+
+### Rate Limiting
+
+The current implementation limits AI fallback traffic to:
+
+```text
+20 requests per client IP per hour
+```
+
+This limit is stored in application memory and applies per App Service worker process.
+
+The regex fast path is not rate limited.
+
+### AI Failure Behavior
+
+If the AI provider is unavailable, misconfigured, or over quota, the API returns the normal deterministic help message instead of exposing provider error details to the user.
+
+---
+
+## Security Architecture
+
+## Frontend Authentication
+
+Azure Static Web Apps provides user authentication.
+
+The current dashboard uses Google authentication through the Static Web Apps authentication layer.
+
+Authenticated user information is available through:
+
+```text
+/.auth/me
+```
+
+---
+
+## API Protection
+
+Write endpoints use an API key header.
+
+Protected actions include:
+
+```text
+POST /api/actions/trigger-edi
+POST /api/wms/simulate-pickup
+```
+
+The key is expected in:
+
+```text
+x-api-key
+```
+
+### Important
+
+API keys and secrets must be stored in:
+
+- Local `.env`
+- Azure App Service environment variables
+- Azure Key Vault in a future production design
+
+They must never be committed to Git.
+
+---
+
+## CORS
+
+The FastAPI service restricts allowed browser origins using the `ALLOWED_ORIGINS` environment variable.
+
+Typical values include:
+
+```text
+http://localhost:5173
+https://<static-web-app>.azurestaticapps.net
+```
+
+---
+
+## Azure Identity
+
+Azure Data Factory triggering uses:
+
+```text
+DefaultAzureCredential
+```
+
+In Azure, the preferred design is Managed Identity.
+
+The App Service identity requires permission to start the ADF pipeline.
+
+Typical Azure role access includes permission for:
+
+```text
+Microsoft.DataFactory/factories/pipelines/createRun/action
+```
+
+---
+
+## SQL Authentication
+
+The current application uses SQL credentials through environment variables.
+
+Required values include:
+
+```text
+SQL_SERVER
+SQL_DATABASE
+SQL_USER
+SQL_PASSWORD
+```
+
+A stronger production design would use Microsoft Entra authentication and Managed Identity instead of a SQL username and password.
+
+---
+
+## Environment Variables
+
+Typical backend configuration:
+
+```text
+SQL_SERVER
+SQL_DATABASE
+SQL_USER
+SQL_PASSWORD
+
+AZURE_STORAGE_CONNECTION_STRING
+BLOB_CONTAINER_NAME
+
+LOGIC_APP_TRIGGER_URL
+API_KEY
+ALLOWED_ORIGINS
+
+AZURE_SUBSCRIPTION_ID
+ADF_RESOURCE_GROUP
+ADF_FACTORY_NAME
+ADF_PIPELINE_NAME
+
+ANTHROPIC_API_KEY
+```
+
+---
+
+## Deployment Architecture
+
+## Frontend
+
+```text
+dashboard/
+    React
+    Vite
+    Azure Static Web Apps
+```
+
+## Backend
+
+```text
+api/
+    FastAPI
+    Uvicorn / Gunicorn
+    Azure App Service
+```
+
+## Infrastructure
+
+```text
+Azure Blob Storage
+Azure Data Factory
+Azure SQL Database
+Azure Data Lake Storage Gen2
+Azure Logic Apps
+Azure Static Web Apps
+Azure App Service
+```
+
+## CI/CD
+
+GitHub Actions is used to deploy:
+
+- React dashboard
+- FastAPI backend
+
+---
+
+## Repository Structure
+
+```text
+edi-wms-project/
+│
+├── api/
+│   ├── main.py
+│   ├── requirements.txt
+│   └── .env
+│
+├── dashboard/
+│   ├── src/
+│   ├── package.json
+│   └── vite.config.js
+│
+├── docs/
+│   ├── Architecture.md
+│   ├── Troubleshooting.html
+│   ├── DemoScript.md
+│   ├── KnownIssues.md
+│   └── LessonsLearned.md
+│
+├── .github/
+│   └── workflows/
+│
+└── README.md
+```
+
+---
+
+## Operational Flow
+
+### File Intake
+
+```text
+Logic App or external sender
+    ↓
+Blob Storage
+    ↓
+File waits in edi940-inbound
+```
+
+### Batch Processing
+
+```text
+Dashboard Run Batch button
+    ↓
+FastAPI
+    ↓
+Azure Data Factory
+    ↓
+Read inbound files
+    ↓
+Insert into dbo.EDI940_Raw
+```
+
+### Parsing
+
+```text
+Raw EDI record
+    ↓
+ParseEDI940RawByFile
+    ↓
+Validate control segments and quantities
+    ↓
+Update status
+```
+
+### WMS Staging
+
+```text
+Parsed order
+    ↓
+OrderHeader_Staging
+OrderDetail_Staging
+    ↓
+IntegrationStatus = READY
+```
+
+### WMS Pickup
+
+```text
+READY
+    ↓
+Simulated or real WMS pickup
+    ↓
+SUCCESS or FAILED
+```
+
+### Dashboard Monitoring
+
+```text
+React Dashboard
+    ↓
+FastAPI
+    ↓
+Azure SQL and Blob Storage
+    ↓
+Operational status cards and tables
+```
+
+---
+
+## Design Principles
+
+### Backend-Controlled AI
+
+The model can select approved tools, but it cannot execute arbitrary SQL or access credentials.
+
+### Parameterized SQL
+
+User-supplied PO and ISA values are passed through parameterized queries.
+
+### Separation of Concerns
+
+- React handles presentation
+- FastAPI handles API logic
+- SQL handles parsing and persistence
+- ADF handles orchestration
+- Blob Storage handles file intake
+- ADLS handles analytics storage
+- Claude handles natural-language interpretation only
+
+### Graceful Degradation
+
+If Blob Storage, ADF, or the AI provider is unavailable, the API returns controlled error information rather than exposing secrets or crashing the entire dashboard.
+
+### Operational Visibility
+
+The system prioritizes visibility into:
+
+- Backlog
+- File age
+- Parse failure
+- WMS status
+- Retry attempts
+- Error messages
+
+---
+
+## Current Limitations
+
+- AI rate limiting is stored in memory and is not globally shared across workers.
+- SQL authentication still uses credentials rather than Managed Identity.
+- ADF startup overhead is high for small files.
+- The current WMS integration is simulated.
+- The solution currently focuses on EDI 940.
+- Some administrative actions still require stronger role-based authorization.
+- Full idempotency and duplicate detection require additional hardening.
+- Production alerting and automated remediation are not yet implemented.
+
+---
+
+## Future Enhancements
+
+- Microsoft Entra authentication for the API
+- Managed Identity for Azure SQL
+- Role-based admin actions
+- Azure Key Vault for secrets
+- Redis-backed global rate limiting
+- Event-driven processing with idempotency
+- Automated retry and reprocessing
+- Power BI dashboards
+- Operational alerts
+- Additional EDI transactions:
+  - 850
+  - 856
+  - 945
+- Customer-specific mapping configuration
+- JSON mapping layer
+- Real WMS API integration
+- OpenTelemetry and Application Insights
+- Dead-letter queue handling
+- Automated exception workflows
+
+---
+
+## Architecture Summary
+
+This project demonstrates more than EDI parsing.
+
+It shows how an operational integration platform can combine:
+
+- File ingestion
+- Cloud orchestration
+- SQL-based transformation
+- WMS staging
+- API design
+- Web monitoring
+- Authentication
+- Controlled AI assistance
+- Data lake analytics
+- Deployment automation
+
+The architecture is intentionally small enough for a portfolio project while still reflecting common enterprise integration patterns.
