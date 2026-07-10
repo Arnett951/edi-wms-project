@@ -191,6 +191,12 @@ export default function App() {
     instance.logoutRedirect();
   }
 
+  // Every hook (including this useMemo) must run on every render regardless
+  // of auth state - the isAuthenticated gate below is a plain conditional
+  // return, not a hook, so it's safe to place after all hooks are called.
+  const safeSummary = normalizeSummary(summary);
+  const statusChart = useMemo(() => buildStatusChart(safeSummary), [summary]);
+
   if (!isAuthenticated) {
     return (
       <div className="page">
@@ -205,8 +211,6 @@ export default function App() {
     );
   }
 
-  const safeSummary = normalizeSummary(summary);
-  const statusChart = useMemo(() => buildStatusChart(safeSummary), [summary]);
   const cards = [
     {
       title: "Files Waiting",
