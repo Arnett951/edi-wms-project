@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api",
+      "runtimeExecutable": "C:\\Users\\chich\\OneDrive\\Documents\\GitHub\\edi-wms-project\\api\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "main:app", "--reload", "--app-dir", "C:\\Users\\chich\\OneDrive\\Documents\\GitHub\\edi-wms-project\\api", "--port", "8000"],
+      "port": 8000
+    },
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "C:\\Users\\chich\\OneDrive\\Documents\\GitHub\\edi-wms-project\\dashboard"],
+      "port": 5173
+    }
+  ]
+}

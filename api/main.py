@@ -1,14 +1,15 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional
 import json
 import os
 import re
 import time
+import jwt
+from jwt import PyJWKClient
 import pyodbc
-from fastapi import Header, HTTPException, Depends
-import os
 from dotenv import load_dotenv
 from azure.storage.blob import BlobServiceClient
 from datetime import datetime, timezone
@@ -17,7 +18,10 @@ from azure.identity import DefaultAzureCredential
 from azure.mgmt.datafactory import DataFactoryManagementClient
 from anthropic import Anthropic
 
-load_dotenv()
+# Explicit path (relative to this file, not the process's working directory) -
+# load_dotenv()'s default search depends on cwd, which is unreliable across
+# different ways of launching this app (uvicorn --app-dir, gunicorn, etc.).
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 app = FastAPI(title="EDI WMS Dashboard API")
 
@@ -37,31 +41,58 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-API_KEY = os.getenv("API_KEY")
-def require_api_key(x_api_key: str = Header(None)):
-    if not API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="API key not configured"
-        )
+# ---------------------------------------------------------------------------
+# Auth: validate Azure AD-issued JWTs (v2.0 access tokens) sent as
+# `Authorization: Bearer <token>` by the React app after an MSAL login.
+# The backend never sees a password or a shared secret - it just verifies
+# the token's signature (against Azure AD's public JWKS), audience, and
+# issuer. Applied to every route below except /health, which Azure's own
+# monitoring probes need to reach unauthenticated.
+# ---------------------------------------------------------------------------
 
-    if x_api_key != API_KEY:
-        raise HTTPException(
-            status_code=401,
-            detail="Unauthorized"
-        )
+AZURE_AD_TENANT_ID = os.getenv("AZURE_AD_TENANT_ID")
+AZURE_AD_CLIENT_ID = os.getenv("AZURE_AD_CLIENT_ID")
 
-    return True
+_jwks_client = (
+    PyJWKClient(f"https://login.microsoftonline.com/{AZURE_AD_TENANT_ID}/discovery/v2.0/keys")
+    if AZURE_AD_TENANT_ID
+    else None
+)
+
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def require_auth(credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme)):
+    if not AZURE_AD_TENANT_ID or not AZURE_AD_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Azure AD auth is not configured")
+
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+
+    try:
+        signing_key = _jwks_client.get_signing_key_from_jwt(credentials.credentials)
+        payload = jwt.decode(
+            credentials.credentials,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=AZURE_AD_CLIENT_ID,
+            issuer=f"https://login.microsoftonline.com/{AZURE_AD_TENANT_ID}/v2.0",
+        )
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    return payload
+
 
 # To check Health of the API
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
-   
+
 # To trigger the Logic App for EDI processing
 @app.post("/api/actions/trigger-edi")
-def trigger_edi(_: bool = Depends(require_api_key)):
+def trigger_edi(_: dict = Depends(require_auth)):
     url = os.getenv("LOGIC_APP_TRIGGER_URL")
     if not url:
         return {"success": False, "error": "LOGIC_APP_TRIGGER_URL not configured"}
@@ -74,12 +105,12 @@ def trigger_edi(_: bool = Depends(require_api_key)):
     }
 
 @app.get("/")
-def root():
+def root(_: dict = Depends(require_auth)):
     return {"status": "EDI WMS API running"}
 
-# To simulate WMS pickup for testing purposes on DB 
+# To simulate WMS pickup for testing purposes on DB
 @app.post("/api/wms/simulate-pickup")
-def simulate_pickup(_: bool = Depends(require_api_key)):
+def simulate_pickup(_: dict = Depends(require_auth)):
     with get_conn() as conn:
         cur = conn.cursor()
 
@@ -103,14 +134,14 @@ def simulate_pickup(_: bool = Depends(require_api_key)):
     
 
 @app.get("/api/debug/logic-url")
-def debug_logic():
+def debug_logic(_: dict = Depends(require_auth)):
     return {"url_set": bool(os.getenv("LOGIC_APP_TRIGGER_URL"))}
 
-#To test if the API key is loaded in the environment change often for various debugging reasons
+#To check whether Azure AD auth env vars are loaded, for debugging deployment config
 @app.get("/api/test-env")
-def test_env():
+def test_env(_: dict = Depends(require_auth)):
     return {
-        "api_key_loaded": bool(os.getenv("API_KEY"))
+        "azure_ad_configured": bool(AZURE_AD_TENANT_ID and AZURE_AD_CLIENT_ID)
     }
 
 def escape_odbc(value):
@@ -205,14 +236,9 @@ def get_blob_queue_metrics():
         "filesWaiting": len(blobs),
         "oldestFileAgeSeconds": age_seconds
     }
-#temp test blob metrics endpoint
-@app.get("/api/dashboard/blob-status")
-def blob_status():
-    return get_blob_queue_metrics()
-
 #To display the summary of the dashboard including files received, parsed, failed and WMS status
 @app.get("/api/dashboard/summary")
-def dashboard_summary():
+def dashboard_summary(_: dict = Depends(require_auth)):
     raw = rows("""
         SELECT
             COUNT(*) AS filesReceived,
@@ -247,7 +273,7 @@ def dashboard_summary():
 
 #To display the recent files received in the dashboard
 @app.get("/api/dashboard/recent-files")
-def recent_files():
+def recent_files(_: dict = Depends(require_auth)):
     return rows("""
         SELECT TOP 20
             RawId AS rawId,
@@ -263,7 +289,7 @@ def recent_files():
 
 #To check the status of the blob storage including files waiting and oldest file age in seconds
 @app.get("/api/dashboard/blob-status")
-def blob_status():
+def blob_status(_: dict = Depends(require_auth)):
     conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
     container_name = os.getenv("BLOB_CONTAINER_NAME", "edi940-inbound")
 
@@ -291,7 +317,7 @@ def blob_status():
 
 #To display the recent WMS orders in the dashboard including their status and error messages if any
 @app.get("/api/dashboard/wms-orders")
-def wms_orders():
+def wms_orders(_: dict = Depends(require_auth)):
     return rows("""
         SELECT TOP 20
             WMSOrderHeaderStagingId AS wmsOrderHeaderStagingId,
@@ -305,13 +331,12 @@ def wms_orders():
 
 #top allow remote start of ADF Pipeline for testing purposes
 @app.post("/api/adf/run")
-def run_adf_pipeline():
+def run_adf_pipeline(_: dict = Depends(require_auth)):
     try:
         credential = DefaultAzureCredential()
-
         client = DataFactoryManagementClient(
             credential,
-            os.environ["AZURE_SUBSCRIPTION_ID"]
+            os.environ["AZURE_SUBSCRIPTION_ID"],
         )
 
         run_response = client.pipelines.create_run(
@@ -323,14 +348,13 @@ def run_adf_pipeline():
         return {
             "success": True,
             "message": "ADF pipeline started.",
-            "runId": run_response.run_id
+            "runId": run_response.run_id,
         }
-
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to start the ADF pipeline.",
+        )
 
 # ---------------------------------------------------------------------------
 # Phase 1 chat: rule-based lookups for "where is PO X" / "what happened with
@@ -620,12 +644,12 @@ def handle_ai_fallback(question: str) -> Optional[dict]:
 
 
 @app.get("/api/chat/sample-isa")
-def sample_isa():
+def sample_isa(_: dict = Depends(require_auth)):
     return {"isaControlNumber": get_latest_failed_isa()}
 
 
 @app.post("/api/chat")
-def chat(request: ChatRequest, http_request: Request):
+def chat(request: ChatRequest, http_request: Request, _: dict = Depends(require_auth)):
     question = request.question or ""
 
     isa_match = ISA_PATTERN.search(question)

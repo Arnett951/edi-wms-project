@@ -6,6 +6,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@azure/msal-browser": "latest",
+    "@azure/msal-react": "latest",
     "@vitejs/plugin-react": "latest",
     "vite": "latest",
     "react": "latest",

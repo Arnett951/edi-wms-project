@@ -18,6 +18,9 @@ jobs:
         uses: Azure/static-web-apps-deploy@v1
         env:
           VITE_API_BASE: https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net
+          VITE_AZURE_AD_CLIENT_ID: 6853b18e-d56f-41d1-b614-e709fe2e501d
+          VITE_AZURE_AD_TENANT_ID: c1d96dba-7290-496d-8a9f-3f745b2492d4
+          VITE_AZURE_AD_API_SCOPE: api://6853b18e-d56f-41d1-b614-e709fe2e501d/access_as_user
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}

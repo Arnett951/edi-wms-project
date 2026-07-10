@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { buildStatusChart, normalizeSummary, statusClass } from "./dashboardUtils";
+import { authFetch } from "./apiClient.js";
+import { loginRequest } from "./authConfig.js";
 import ChatPanel from "./ChatPanel";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
@@ -62,7 +65,7 @@ function queueClass(seconds = 0) {
 }
 
 async function fetchJson(url) {
-  const response = await fetch(url);
+  const response = await authFetch(url);
   if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`);
   return response.json();
 }
@@ -72,7 +75,8 @@ function StatusBadge({ status }) {
 }
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  const { instance, accounts } = useMsal();
+  const isAuthenticated = useIsAuthenticated();
   const [summary, setSummary] = useState(null);
   const [recentFiles, setRecentFiles] = useState([]);
   const [wmsOrders, setWmsOrders] = useState([]);
@@ -110,7 +114,7 @@ export default function App() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/actions/trigger-edi`, {
+      const res = await authFetch(`${API_BASE}/api/actions/trigger-edi`, {
         method: "POST",
       });
 
@@ -132,7 +136,7 @@ export default function App() {
   setError(null);
 
   try {
-    const res = await fetch(`${API_BASE}/api/adf/run`, {
+    const res = await authFetch(`${API_BASE}/api/adf/run`, {
       method: "POST",
     });
 
@@ -155,7 +159,7 @@ export default function App() {
     setSimulateMessage(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/wms/simulate-pickup`, {
+      const res = await authFetch(`${API_BASE}/api/wms/simulate-pickup`, {
         method: "POST",
       });
 
@@ -174,17 +178,32 @@ export default function App() {
     }
   }
   useEffect(() => {
-    loadDashboard();
+    if (isAuthenticated) {
+      loadDashboard();
+    }
+  }, [isAuthenticated]);
 
-    fetch("/.auth/me")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data?.clientPrincipal) {
-          setUser(data.clientPrincipal);
-        }
-      })
-      .catch(console.error);
-  }, []);
+  function signIn() {
+    instance.loginRedirect(loginRequest).catch(console.error);
+  }
+
+  function signOut() {
+    instance.logoutRedirect();
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="page">
+        <main className="shell">
+          <section className="panel" style={{ textAlign: "center", padding: "48px 24px" }}>
+            <h1>EDI 940 Dashboard</h1>
+            <p>Sign in with your Microsoft account to view live warehouse integration data.</p>
+            <button onClick={signIn}>Sign in with Microsoft</button>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   const safeSummary = normalizeSummary(summary);
   const statusChart = useMemo(() => buildStatusChart(safeSummary), [summary]);
@@ -226,14 +245,11 @@ export default function App() {
       </div>
 
 <div className="auth-badge">
-  {user && (
-    <>
-      <span>👤 {user.userDetails}</span>
-      <span className="auth-status">
-        Authenticated
-      </span>
-    </>
-  )}
+  <span>👤 {accounts[0]?.username}</span>
+  <span className="auth-status">
+    Authenticated
+  </span>
+  <button onClick={signOut}>Sign out</button>
 </div>
 
 <div className="header-actions">

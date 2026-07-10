@@ -8,3 +8,4 @@ python-dotenv
 azure-mgmt-datafactory
 azure-identity
 anthropic
+PyJWT[crypto]

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { authFetch } from "./apiClient.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
@@ -25,7 +26,7 @@ export default function ChatPanel({ onClose }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`${API_BASE}/api/chat/sample-isa`)
+    authFetch(`${API_BASE}/api/chat/sample-isa`)
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
         if (cancelled || !data?.isaControlNumber) return;
@@ -44,7 +45,7 @@ export default function ChatPanel({ onClose }) {
     setInput("");
     setSending(true);
     try {
-      const response = await fetch(`${API_BASE}/api/chat`, {
+      const response = await authFetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: text }),

@@ -2,7 +2,23 @@ import React from "react";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useIsAuthenticated } from "@azure/msal-react";
 import App from "./App";
+
+vi.mock("@azure/msal-react", () => ({
+  useMsal: () => ({
+    instance: { loginPopup: vi.fn(), logoutPopup: vi.fn() },
+    accounts: [{ username: "test.user@example.com" }],
+  }),
+  useIsAuthenticated: vi.fn(() => true),
+}));
+
+// authFetch normally attaches a real Azure AD bearer token via MSAL; in
+// tests it just forwards to the already-mocked global.fetch below, so
+// component tests can focus on UI <-> API behavior, not token acquisition.
+vi.mock("./apiClient.js", () => ({
+  authFetch: (url, options) => global.fetch(url, options),
+}));
 
 const summaryPayload = {
   filesReceived: 10,
@@ -46,7 +62,6 @@ function jsonResponse(body, ok = true) {
 
 function mockDashboardFetch({ failDashboard = false } = {}) {
   global.fetch = vi.fn((url) => {
-    if (url.includes("/.auth/me")) return jsonResponse({});
     if (url.includes("/api/dashboard/summary")) return failDashboard ? jsonResponse({}, false) : jsonResponse(summaryPayload);
     if (url.includes("/api/dashboard/recent-files")) return failDashboard ? jsonResponse({}, false) : jsonResponse(recentFilesPayload);
     if (url.includes("/api/dashboard/wms-orders")) return failDashboard ? jsonResponse({}, false) : jsonResponse(wmsOrdersPayload);
@@ -61,6 +76,14 @@ function mockDashboardFetch({ failDashboard = false } = {}) {
 describe("App", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("shows a sign-in prompt instead of the dashboard when not authenticated", () => {
+    useIsAuthenticated.mockReturnValueOnce(false);
+    render(<App />);
+
+    expect(screen.getByText("Sign in with Microsoft")).toBeInTheDocument();
+    expect(screen.queryByText("Files Waiting")).not.toBeInTheDocument();
   });
 
   it("renders live dashboard data on successful load", async () => {

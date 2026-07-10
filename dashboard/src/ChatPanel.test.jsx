@@ -4,6 +4,12 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ChatPanel from "./ChatPanel";
 
+// authFetch normally attaches a real Azure AD bearer token via MSAL; in
+// tests it just forwards to the already-mocked global.fetch below.
+vi.mock("./apiClient.js", () => ({
+  authFetch: (url, options) => global.fetch(url, options),
+}));
+
 function jsonResponse(body, ok = true) {
   return Promise.resolve({ ok, status: ok ? 200 : 500, json: () => Promise.resolve(body) });
 }

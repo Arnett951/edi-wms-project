@@ -151,7 +151,7 @@ Current Features
 ✓ Data Lake parquet storage
 ✓ React operational dashboard
 ✓ FastAPI backend
-✓ Role-based security
+✓ Azure AD (MSAL.js) sign-in with JWT-validated API access - every backend route except /health requires a token
 ✓ Audit logging
 ✓ AI-powered chatbot fallback (Claude tool-calling) for natural language transaction lookup
 

@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 import main
 
 
@@ -93,14 +95,36 @@ def test_wms_orders_returns_rows_from_db(client, monkeypatch):
 
 
 def test_blob_status_endpoint_reports_metrics(client, monkeypatch):
-    # Note: main.py registers /api/dashboard/blob-status twice; Starlette
-    # dispatches to the first-registered handler (get_blob_queue_metrics()),
-    # so that's the one under test here.
+    monkeypatch.setenv("AZURE_STORAGE_CONNECTION_STRING", "fake-conn-str")
+
+    class FakeBlob:
+        def __init__(self, age_seconds):
+            self.creation_time = datetime.now(timezone.utc) - timedelta(seconds=age_seconds)
+            self.last_modified = self.creation_time
+
+    class FakeContainer:
+        def list_blobs(self):
+            return [FakeBlob(120), FakeBlob(30)]
+
+    class FakeBlobService:
+        def get_container_client(self, name):
+            return FakeContainer()
+
     monkeypatch.setattr(
-        main, "get_blob_queue_metrics", lambda: {"filesWaiting": 3, "oldestFileAgeSeconds": 120}
+        main.BlobServiceClient, "from_connection_string", lambda conn_str: FakeBlobService()
     )
 
     response = client.get("/api/dashboard/blob-status")
+    body = response.json()
 
     assert response.status_code == 200
-    assert response.json() == {"filesWaiting": 3, "oldestFileAgeSeconds": 120}
+    assert body["filesWaiting"] == 2
+    assert body["oldestAgeSeconds"] >= 120
+
+
+def test_blob_status_endpoint_requires_connection_string(client, monkeypatch):
+    monkeypatch.delenv("AZURE_STORAGE_CONNECTION_STRING", raising=False)
+
+    response = client.get("/api/dashboard/blob-status")
+
+    assert response.status_code == 500
