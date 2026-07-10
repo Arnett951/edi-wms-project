@@ -451,27 +451,25 @@ def handle_po_lookup(po_number: str) -> dict:
 
 
 def handle_failed_orders() -> dict:
-    wms_rows = rows("""
+    failed_rows = rows("""
         SELECT TOP 20
-            WarehouseOrderNumber AS warehouseOrderNumber,
-            IntegrationStatus AS integrationStatus,
-            AttemptCount AS attemptCount,
+            FileName AS fileName,
+            ProcessStatus AS processStatus,
             ErrorMessage AS errorMessage
-        FROM wms.OrderHeader_Staging
-        WHERE IntegrationStatus = 'FAILED'
-        ORDER BY WMSOrderHeaderStagingId DESC
+        FROM dbo.EDI940_Raw
+        WHERE ProcessStatus = 'PARSE_FAILED'
+        ORDER BY RawId DESC
     """)
 
-    if not wms_rows:
-        return {"intent": "failed_orders", "reply": "No failed orders in the WMS staging queue right now.", "matches": []}
+    if not failed_rows:
+        return {"intent": "failed_orders", "reply": "No failed files in the EDI intake right now.", "matches": []}
 
     lines = [
-        f"- {r['warehouseOrderNumber']}: {r.get('errorMessage') or 'no error message recorded'} "
-        f"(attempts: {r.get('attemptCount') or 0})"
-        for r in wms_rows
+        f"- {r['fileName']}: {r.get('errorMessage') or 'no error message recorded'}"
+        for r in failed_rows
     ]
-    reply = f"There are {len(wms_rows)} failed order(s):\n" + "\n".join(lines)
-    return {"intent": "failed_orders", "reply": reply, "matches": wms_rows}
+    reply = f"There are {len(failed_rows)} failed file(s):\n" + "\n".join(lines)
+    return {"intent": "failed_orders", "reply": reply, "matches": failed_rows}
 
 
 def build_unknown_reply() -> str:
@@ -494,9 +492,10 @@ _anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY el
 AI_SYSTEM_PROMPT = (
     "You are an assistant for a warehouse EDI operations dashboard. Use the available tools "
     "to answer questions about a specific PO/order's status, a specific ISA file's status, or "
-    "the current list of failed orders. Only call a tool when the question is clearly about one "
-    "of those topics. Otherwise, reply directly and briefly explaining you can only help with "
-    "PO lookups, ISA lookups, and failed order lists."
+    "the current list of EDI files that failed to parse. Only call a tool when the question is "
+    "clearly about one of those topics,  If you call a tool, use the exact input schema specified "
+    "for that tool and do not make up any other fields. Otherwise, reply directly and briefly "
+    "explaining you can only help with PO lookups, ISA lookups, and failed file lists, at this time."
 )
 
 AI_TOOLS = [
@@ -520,7 +519,7 @@ AI_TOOLS = [
     },
     {
         "name": "list_failed_orders",
-        "description": "List orders that failed WMS integration, most recent first.",
+        "description": "List EDI files that failed to parse (ProcessStatus = PARSE_FAILED), most recent first.",
         "input_schema": {"type": "object", "properties": {}},
     },
 ]
