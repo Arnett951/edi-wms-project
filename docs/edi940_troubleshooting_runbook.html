@@ -583,59 +583,139 @@ ORDER BY CreatedDate DESC;</code></pre>
 <section id="5">
 <h2>API Testing</h2>
 <div class="grid">
-<article class="command-card" data-search="api testing dashboard summary invoke-restmethod `
-    https://&lt;api&gt;/api/dashboard/summary">
+<article class="command-card" data-search="api testing browser production deployed health endpoint azure app service https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net/health">
 <div class="card-head">
 <div>
-<h3>Dashboard summary</h3>
-<span>powershell</span>
+<h3>Browser: Production health endpoint</h3>
+<span>url</span>
 </div>
 <button onclick="copyCode('code-5-1', this)" type="button">Copy</button>
 </div>
-<pre><code id="code-5-1">Invoke-RestMethod `
-    https://&lt;api&gt;/api/dashboard/summary</code></pre>
+<pre><code id="code-5-1">https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net/health</code></pre>
 </article>
-<article class="command-card" data-search="api testing recent files invoke-restmethod `
-    https://&lt;api&gt;/api/dashboard/recent-files">
+<article class="command-card" data-search="api testing browser swagger docs fastapi production deployed https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net/docs">
 <div class="card-head">
 <div>
-<h3>Recent files</h3>
-<span>powershell</span>
+<h3>Browser: Swagger API documentation</h3>
+<span>url</span>
 </div>
 <button onclick="copyCode('code-5-2', this)" type="button">Copy</button>
 </div>
-<pre><code id="code-5-2">Invoke-RestMethod `
-    https://&lt;api&gt;/api/dashboard/recent-files</code></pre>
+<pre><code id="code-5-2">https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net/docs</code></pre>
 </article>
-<article class="command-card" data-search="api testing wms orders invoke-restmethod `
-    https://&lt;api&gt;/api/dashboard/wms-orders">
+<article class="command-card" data-search="api testing browser openapi json schema production deployed https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net/openapi.json">
 <div class="card-head">
 <div>
-<h3>WMS orders</h3>
-<span>powershell</span>
+<h3>Browser: OpenAPI JSON schema</h3>
+<span>url</span>
 </div>
 <button onclick="copyCode('code-5-3', this)" type="button">Copy</button>
 </div>
-<pre><code id="code-5-3">Invoke-RestMethod `
-    https://&lt;api&gt;/api/dashboard/wms-orders</code></pre>
+<pre><code id="code-5-3">https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net/openapi.json</code></pre>
 </article>
-<article class="command-card" data-search="api testing chat endpoint invoke-restmethod `
-    -method post `
-    -uri https://&lt;api&gt;/api/chat `
-    -contenttype &quot;application/json&quot; `
-    -body '{&quot;question&quot;:&quot;where is po order1001?&quot;}'">
+<article class="command-card" data-search="api testing powershell production health invoke-restmethod azure app service">
 <div class="card-head">
 <div>
-<h3>Chat endpoint</h3>
+<h3>PowerShell: Production health check</h3>
 <span>powershell</span>
 </div>
 <button onclick="copyCode('code-5-4', this)" type="button">Copy</button>
 </div>
 <pre><code id="code-5-4">Invoke-RestMethod `
+    "https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net/health"</code></pre>
+</article>
+<article class="command-card" data-search="api testing powershell dashboard summary production invoke-restmethod">
+<div class="card-head">
+<div>
+<h3>PowerShell: Dashboard summary</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-5-5', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-5-5">Invoke-RestMethod `
+    "https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net/api/dashboard/summary"</code></pre>
+</article>
+<article class="command-card" data-search="api testing powershell recent files production invoke-restmethod">
+<div class="card-head">
+<div>
+<h3>PowerShell: Recent files</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-5-6', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-5-6">Invoke-RestMethod `
+    "https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net/api/dashboard/recent-files"</code></pre>
+</article>
+<article class="command-card" data-search="api testing powershell wms orders production invoke-restmethod">
+<div class="card-head">
+<div>
+<h3>PowerShell: WMS orders</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-5-7', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-5-7">Invoke-RestMethod `
+    "https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net/api/dashboard/wms-orders"</code></pre>
+</article>
+<article class="command-card" data-search="api testing powershell blob status production invoke-restmethod queue files waiting oldest age">
+<div class="card-head">
+<div>
+<h3>PowerShell: Blob status</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-5-8', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-5-8">Invoke-RestMethod `
+    "https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net/api/dashboard/blob-status"</code></pre>
+</article>
+<article class="command-card" data-search="api testing powershell chat endpoint production post order1001 invoke-restmethod json">
+<div class="card-head">
+<div>
+<h3>PowerShell: Chat endpoint</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-5-9', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-5-9">Invoke-RestMethod `
     -Method POST `
-    -Uri https://&lt;api&gt;/api/chat `
+    -Uri "https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net/api/chat" `
     -ContentType "application/json" `
     -Body '{"question":"Where is PO ORDER1001?"}'</code></pre>
+</article>
+<article class="command-card" data-search="api testing powershell api key protected endpoint header x-api-key example">
+<div class="card-head">
+<div>
+<h3>PowerShell: Protected endpoint with API key</h3>
+<span>powershell</span>
+</div>
+<button onclick="copyCode('code-5-10', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-5-10">$headers = @{ "x-api-key" = $env:API_KEY }
+
+Invoke-RestMethod `
+    -Method POST `
+    -Uri "https://edi-wms-api-f8anghh8a7czhhfa.westus3-01.azurewebsites.net/api/adf/run-batch" `
+    -Headers $headers</code></pre>
+</article>
+<article class="command-card" data-search="api testing deployment validation checklist health docs summary recent files blob status chat react login adf sql">
+<div class="card-head">
+<div>
+<h3>Deployment validation checklist</h3>
+<span>checklist</span>
+</div>
+<button onclick="copyCode('code-5-11', this)" type="button">Copy</button>
+</div>
+<pre><code id="code-5-11">[ ] /health returns HTTP 200
+[ ] /docs loads successfully
+[ ] /openapi.json returns the API schema
+[ ] Dashboard Summary returns JSON
+[ ] Recent Files returns rows
+[ ] Blob Status returns queue metrics
+[ ] Chat endpoint responds
+[ ] React dashboard loads
+[ ] Login authentication succeeds
+[ ] ADF pipeline can be triggered
+[ ] Azure SQL connectivity is confirmed</code></pre>
 </article>
 </div>
 </section>
