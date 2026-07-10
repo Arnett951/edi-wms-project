@@ -786,6 +786,45 @@ Azure Active Directory - Universal with MFA</code></pre>
 </article>
 </div>
 </section>
+
+<section id="security-auth">
+<h2>Security & Authentication</h2>
+<div class="grid">
+<article class="command-card">
+<div class="card-head"><div><h3>Microsoft Entra ID Authentication</h3><span>security</span></div></div>
+<pre><code>Users must authenticate through Microsoft Entra ID before accessing protected dashboard functionality.</code></pre>
+</article>
+
+<article class="command-card">
+<div class="card-head"><div><h3>JWT Bearer Authorization</h3><span>security</span></div></div>
+<pre><code>Backend APIs validate JWT bearer tokens, issuer, audience, and expiration before processing requests.</code></pre>
+</article>
+
+<article class="command-card">
+<div class="card-head"><div><h3>Developer API Testing</h3><span>jwt</span></div></div>
+<pre><code>1. Sign into the dashboard.
+2. Open DevTools (F12).
+3. Navigate to Application → Session Storage.
+4. Locate the MSAL access token entry.
+5. Copy the token value.
+6. Add to Postman or Swagger:
+
+Authorization: Bearer &lt;access_token&gt;
+
+7. Obtain a new token after expiration.</code></pre>
+</article>
+
+<article class="command-card">
+<div class="card-head"><div><h3>Security Notes</h3><span>best practice</span></div></div>
+<pre><code>- Never commit JWT tokens to source control.
+- Never include tokens in screenshots or documentation.
+- Use HTTPS for all API traffic.
+- Production integrations should use OAuth2, Managed Identity, or Service Principals.
+- Reauthenticate when tokens expire.</code></pre>
+</article>
+</div>
+</section>
+
 <section id="7">
 <h2>Environment Variables</h2>
 <div class="grid">
