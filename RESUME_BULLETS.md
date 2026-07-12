@@ -13,6 +13,7 @@ EDI 940 Warehouse Order Integration Pipeline with WMS Dashboard
 - Implemented portfolio-ready deployment architecture using Azure App Service for APIs and Azure Static Web Apps for the React dashboard.
 - Added an AI fallback to the chatbot using Claude's tool-calling API: free-form questions the regex parser doesn't recognize (e.g. "give me the failed orders") are routed to Claude, which selects from a fixed set of backend query tools rather than generating SQL directly, keeping the LLM sandboxed while extending the bot beyond hardcoded intents.
 - Replaced a broken shared-secret API key with real Azure AD authentication: registered an Azure AD app exposing an OAuth2 scope, wired MSAL.js into the React SPA for sign-in and token acquisition, and added FastAPI middleware that validates each request's JWT (signature, audience, issuer) against Azure AD's public JWKS - no shared secret between frontend and backend, and every route except the health check requires a verified token.
+- Built a second dashboard tab exposing a linear regression staffing/throughput estimator (cross-validated R² 0.91): live sliders drive a client-side projection with an 80% confidence interval, a status badge comparing projected capacity to forecast, and a Chart.js trend view - a self-contained analytics tool alongside the operational EDI/WMS views.
 
 ## Interview explanation
 

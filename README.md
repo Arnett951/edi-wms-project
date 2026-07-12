@@ -101,6 +101,18 @@ Give me the failed orders
 
 Regex intent parsing handles the PO/ISA lookup patterns directly against SQL. Anything that doesn't match falls back to Claude (Anthropic), which picks from a fixed set of backend query tools rather than generating SQL itself - so free-form phrasing ("what's failing right now?") is handled without hardcoding a new regex for every way to ask. The AI fallback is optional: without an `ANTHROPIC_API_KEY` configured, the bot still works using the regex path alone.
 
+Capacity Planning
+
+A second dashboard tab, separate from live EDI/WMS operations. A linear regression model (trained offline on 30 days of pick/pack activity, cross-validated R² 0.91) estimates how many orders today's crew can ship, from adjustable inputs:
+
+Packers on shift
+Shift length
+Receiving hours pulled (reduces packer availability)
+Order complexity (avg lines/order)
+Today's forecasted order volume
+
+The estimator shows a live projection with an 80% confidence range, a status badge (ON TRACK / TIGHT / AT RISK) comparing that range to the forecast, and a 30-day trend chart (Chart.js) of shipped vs. forecasted orders with today's projection highlighted. This is a self-contained, client-side "what-if" tool - it doesn't call the API, so it works the same whether the FastAPI backend has live data or not.
+
 Data Model
 Raw EDI Layer
 EDI940_Raw
@@ -164,6 +176,7 @@ Current Features
 ✓ Azure AD (MSAL.js) sign-in with JWT-validated API access - every backend route except /health requires a token
 ✓ Audit logging
 ✓ AI-powered chatbot fallback (Claude tool-calling) for natural language transaction lookup
+✓ Capacity Planning tab - linear regression staffing/throughput estimator with a live Chart.js trend view
 
 Testing
 

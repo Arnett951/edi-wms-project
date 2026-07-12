@@ -20,6 +20,18 @@ vi.mock("./apiClient.js", () => ({
   authFetch: (url, options) => global.fetch(url, options),
 }));
 
+// jsdom doesn't implement canvas 2D contexts - only relevant once a test
+// switches to the Capacity Planning tab, which mounts CapacityDashboard.
+vi.mock("chart.js/auto", () => ({
+  Chart: vi.fn(function FakeChart() {
+    return {
+      data: { datasets: [{}, { data: [] }, { data: [] }] },
+      update: vi.fn(),
+      destroy: vi.fn(),
+    };
+  }),
+}));
+
 const summaryPayload = {
   filesReceived: 10,
   filesParsed: 8,
@@ -126,5 +138,21 @@ describe("App", () => {
     await user.click(screen.getByText("WMS Pickup"));
 
     expect(await screen.findByText("Simulated WMS pickup for 2 order(s).")).toBeInTheDocument();
+  });
+
+  it("switches to the Capacity Planning tab and back to Operations", async () => {
+    mockDashboardFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("a.edi");
+
+    await user.click(screen.getByRole("button", { name: "Capacity Planning" }));
+    expect(screen.getByText("Will today's crew ship today's orders?")).toBeInTheDocument();
+    expect(screen.queryByText("a.edi")).not.toBeInTheDocument();
+    expect(screen.queryByText("Create Test Files")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Operations" }));
+    expect(screen.getByText("a.edi")).toBeInTheDocument();
+    expect(screen.queryByText("Will today's crew ship today's orders?")).not.toBeInTheDocument();
   });
 });

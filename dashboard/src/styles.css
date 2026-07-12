@@ -368,3 +368,340 @@ td {
 .queue-red {
   border-left: 6px solid #ef4444;
 }
+
+.tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.tabs button {
+  background: white;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
+}
+
+.tabs button.tab-active {
+  background: #0f172a;
+  color: white;
+}
+
+/* ---------------------------------------------------------------------------
+   Capacity Planning tab. All rules are scoped under .capacity-widget with a
+   cap- class prefix so they can't collide with the light-theme classes above
+   (e.g. .panel, .status-badge) even though this widget uses a dark theme.
+--------------------------------------------------------------------------- */
+
+.capacity-widget {
+  --cap-dock-shadow: #14171c;
+  --cap-panel: #1b2028;
+  --cap-panel-raised: #232935;
+  --cap-panel-border: #323a47;
+  --cap-amber: #f5a623;
+  --cap-green: #3fa66b;
+  --cap-red: #e5533d;
+  --cap-text-primary: #eceff3;
+  --cap-text-muted: #7e8896;
+  --cap-text-faint: #4d5561;
+
+  background: var(--cap-dock-shadow);
+  color: var(--cap-text-primary);
+  font-family: 'IBM Plex Sans', sans-serif;
+  padding: 28px 20px 60px;
+  border-radius: 18px;
+}
+
+.capacity-widget .cap-eyebrow {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  color: var(--cap-amber);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.capacity-widget .cap-eyebrow::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cap-amber);
+  box-shadow: 0 0 8px 1px var(--cap-amber);
+}
+
+.capacity-widget .cap-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 30px;
+  line-height: 1.15;
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+  color: var(--cap-text-primary);
+}
+
+.capacity-widget .cap-subtitle {
+  color: var(--cap-text-muted);
+  font-size: 14.5px;
+  margin: 0 0 28px;
+  max-width: 640px;
+}
+
+.capacity-widget .cap-panel {
+  background: var(--cap-panel);
+  border: 1px solid var(--cap-panel-border);
+  border-radius: 10px;
+  padding: 22px 24px;
+  margin-bottom: 18px;
+}
+
+.capacity-widget .cap-panel-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cap-text-faint);
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.capacity-widget .cap-hero {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 18px;
+}
+
+@media (max-width: 760px) {
+  .capacity-widget .cap-hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+.capacity-widget .cap-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  margin-bottom: 18px;
+}
+
+.capacity-widget .cap-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.capacity-widget .cap-status-on {
+  color: var(--cap-green);
+}
+
+.capacity-widget .cap-status-tight {
+  color: var(--cap-amber);
+}
+
+.capacity-widget .cap-status-risk {
+  color: var(--cap-red);
+}
+
+.capacity-widget .cap-readout-row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.capacity-widget .cap-readout-main {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+  font-size: 58px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.capacity-widget .cap-readout-unit {
+  color: var(--cap-text-muted);
+  font-size: 15px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.capacity-widget .cap-readout-caption {
+  color: var(--cap-text-muted);
+  font-size: 13.5px;
+  margin-top: 6px;
+}
+
+.capacity-widget .cap-readout-range {
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--cap-text-muted);
+  font-size: 13.5px;
+  margin-top: 14px;
+}
+
+.capacity-widget .cap-scale {
+  margin-top: 22px;
+  position: relative;
+  height: 46px;
+}
+
+.capacity-widget .cap-scale-track {
+  position: absolute;
+  top: 18px;
+  left: 0;
+  right: 0;
+  height: 10px;
+  background: var(--cap-panel-raised);
+  border: 1px solid var(--cap-panel-border);
+  border-radius: 5px;
+  overflow: visible;
+}
+
+.capacity-widget .cap-scale-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 5px;
+  background: linear-gradient(90deg, rgba(63, 166, 107, 0.35), rgba(63, 166, 107, 0.7));
+  transition: left 0.25s ease, width 0.25s ease;
+}
+
+.capacity-widget .cap-scale-marker {
+  position: absolute;
+  top: -9px;
+  width: 2px;
+  height: 28px;
+  background: var(--cap-text-primary);
+  transition: left 0.25s ease;
+}
+
+.capacity-widget .cap-scale-marker::after {
+  content: attr(data-label);
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  color: var(--cap-text-primary);
+  white-space: nowrap;
+}
+
+.capacity-widget .cap-scale-ticks {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--cap-text-faint);
+}
+
+.capacity-widget .cap-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 760px) {
+  .capacity-widget .cap-controls-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.capacity-widget .cap-control label {
+  display: block;
+  font-size: 12.5px;
+  color: var(--cap-text-muted);
+  margin-bottom: 8px;
+}
+
+.capacity-widget .cap-value {
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--cap-amber);
+  font-weight: 600;
+}
+
+.capacity-widget input[type="range"] {
+  width: 100%;
+  -webkit-appearance: none;
+  height: 4px;
+  background: var(--cap-panel-raised);
+  border-radius: 2px;
+  outline: none;
+  border: 1px solid var(--cap-panel-border);
+}
+
+.capacity-widget input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--cap-amber);
+  border: 2px solid var(--cap-dock-shadow);
+  box-shadow: 0 0 0 1px var(--cap-amber);
+  cursor: pointer;
+}
+
+.capacity-widget input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--cap-amber);
+  border: 2px solid var(--cap-dock-shadow);
+  cursor: pointer;
+}
+
+.capacity-widget .cap-chart-wrap {
+  position: relative;
+  height: 260px;
+}
+
+.capacity-widget .cap-spec-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+
+@media (max-width: 760px) {
+  .capacity-widget .cap-spec-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.capacity-widget .cap-spec-item .cap-k {
+  font-size: 11px;
+  color: var(--cap-text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+
+.capacity-widget .cap-spec-item .cap-v {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 17px;
+  color: var(--cap-text-primary);
+}
+
+.capacity-widget .cap-formula {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+  color: var(--cap-text-muted);
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--cap-panel-border);
+  line-height: 1.7;
+}
+
+.capacity-widget .cap-formula .cap-hl {
+  color: var(--cap-amber);
+}

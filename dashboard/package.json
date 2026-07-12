@@ -9,6 +9,7 @@
     "@azure/msal-browser": "latest",
     "@azure/msal-react": "latest",
     "@vitejs/plugin-react": "latest",
+    "chart.js": "latest",
     "vite": "latest",
     "react": "latest",
     "react-dom": "latest",

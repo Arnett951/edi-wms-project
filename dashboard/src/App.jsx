@@ -5,6 +5,7 @@ import { buildStatusChart, normalizeSummary, statusClass } from "./dashboardUtil
 import { authFetch } from "./apiClient.js";
 import { loginRequest } from "./authConfig.js";
 import ChatPanel from "./ChatPanel";
+import CapacityDashboard from "./CapacityDashboard.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
@@ -85,6 +86,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [simulateMessage, setSimulateMessage] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("operations");
 
   async function loadDashboard() {
     setLoading(true);
@@ -256,147 +258,171 @@ export default function App() {
   <button onClick={signOut}>Sign out</button>
 </div>
 
-<div className="header-actions">
-        <button onClick={triggerEdiFile} disabled={loading}>
-          <Icon type="play" />
-          Create Test Files
-        </button>
+{activeTab === "operations" && (
+        <div className="header-actions">
+          <button onClick={triggerEdiFile} disabled={loading}>
+            <Icon type="play" />
+            Create Test Files
+          </button>
 
-        <button onClick={runEdiBatch} disabled={loading}>
-          <Icon type="database" />
-          Run EDI Batch
-        </button>
+          <button onClick={runEdiBatch} disabled={loading}>
+            <Icon type="database" />
+            Run EDI Batch
+          </button>
 
-        <button onClick={loadDashboard} disabled={loading}>
-          <Icon type="refresh" className={loading ? "spin" : ""} />
-          Refresh
-        </button>
-      </div>
+          <button onClick={loadDashboard} disabled={loading}>
+            <Icon type="refresh" className={loading ? "spin" : ""} />
+            Refresh
+          </button>
+        </div>
+      )}
     </header>
-    {error && <section className="alert"><Icon type="alert" /><div><strong>API connection issue</strong><p>{error}</p></div></section>}
-    {usingMockData && <section className="mock">Mock mode is active. Start the FastAPI service at {API_BASE} to show live SQL data.</section>}
-    {simulateMessage && (
-      <section className="mock">
-        {simulateMessage}
-      </section>
-    )}
-<section className="cards">
-  {cards.map((card) => (
-    <article
-      className={`card ${
-        card.title === "Files Waiting" ? queueClass(card.age) : ""
-      }`}
-      key={card.title}
-    >
-      <div>
-        <span>{card.title}</span>
-        <b>{card.value}</b>
 
-        {card.title === "Files Waiting" && (
-          <small>Oldest Age: {formatAge(card.age)}</small>
+    <div className="tabs">
+      <button
+        className={activeTab === "operations" ? "tab-active" : ""}
+        onClick={() => setActiveTab("operations")}
+      >
+        Operations
+      </button>
+      <button
+        className={activeTab === "capacity" ? "tab-active" : ""}
+        onClick={() => setActiveTab("capacity")}
+      >
+        Capacity Planning
+      </button>
+    </div>
+
+    {activeTab === "operations" && (
+      <>
+        {error && <section className="alert"><Icon type="alert" /><div><strong>API connection issue</strong><p>{error}</p></div></section>}
+        {usingMockData && <section className="mock">Mock mode is active. Start the FastAPI service at {API_BASE} to show live SQL data.</section>}
+        {simulateMessage && (
+          <section className="mock">
+            {simulateMessage}
+          </section>
         )}
-      </div>
+        <section className="cards">
+          {cards.map((card) => (
+            <article
+              className={`card ${
+                card.title === "Files Waiting" ? queueClass(card.age) : ""
+              }`}
+              key={card.title}
+            >
+              <div>
+                <span>{card.title}</span>
+                <b>{card.value}</b>
 
-      <Icon type={card.icon} />
-    </article>
-  ))}
+                {card.title === "Files Waiting" && (
+                  <small>Oldest Age: {formatAge(card.age)}</small>
+                )}
+              </div>
 
-  <article className="card action-card" onClick={() => setChatOpen(true)}>
-    <div>
-      <span>Support</span>
-      <b>Ask PO / ISA</b>
-    </div>
-  </article>
+              <Icon type={card.icon} />
+            </article>
+          ))}
 
-  <article className="card action-card" onClick={simulateWmsPickup}>
-    <div>
-      <span>Simulation</span>
-      <b>WMS Pickup</b>
-    </div>
-    <Icon type="truck" />
-  </article>
-</section>
+          <article className="card action-card" onClick={() => setChatOpen(true)}>
+            <div>
+              <span>Support</span>
+              <b>Ask PO / ISA</b>
+            </div>
+          </article>
 
-    <section className="panel">
-      <h2><Icon type="database" />Pipeline Status Counts</h2>
-      <div className="chart">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={statusChart}>
-            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-            <YAxis allowDecimals={false} />
-            <Tooltip />
-            <Bar dataKey="count" radius={[8, 8, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </section>
+          <article className="card action-card" onClick={simulateWmsPickup}>
+            <div>
+              <span>Simulation</span>
+              <b>WMS Pickup</b>
+            </div>
+            <Icon type="truck" />
+          </article>
+        </section>
 
-    {chatOpen && <ChatPanel onClose={() => setChatOpen(false)} />}
+        <section className="panel">
+          <h2><Icon type="database" />Pipeline Status Counts</h2>
+          <div className="chart">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={statusChart}>
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="count" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
 
-    <section className="grid">
-      <div className="panel">
-        <h2>Recent EDI Files</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>ISA</th>
-              <th>Sender</th>
-              <th>File</th>
-              <th>Status</th>
-              <th>Loaded</th>
-              <th>Error</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recentFiles.length === 0 ? (
-              <tr><td colSpan="6">No recent files found.</td></tr>
-            ) : (
-              recentFiles.map(f => (
-                <tr key={f.rawId ?? f.fileName}>
-                  <td>{f.isaControlNumber || "—"}</td>
-                  <td>{f.isaSender || "—"}</td>
+        {chatOpen && <ChatPanel onClose={() => setChatOpen(false)} />}
 
-                  <td className="file-name-cell" title={f.fileName}>
-                    {f.fileName}
-                  </td>
-
-                  <td><StatusBadge status={f.processStatus} /></td>
-                  <td>{f.loadDateTime || "—"}</td>
-                  <td className="error-text">{f.errorMessage || "—"}</td>
+        <section className="grid">
+          <div className="panel">
+            <h2>Recent EDI Files</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>ISA</th>
+                  <th>Sender</th>
+                  <th>File</th>
+                  <th>Status</th>
+                  <th>Loaded</th>
+                  <th>Error</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {recentFiles.length === 0 ? (
+                  <tr><td colSpan="6">No recent files found.</td></tr>
+                ) : (
+                  recentFiles.map(f => (
+                    <tr key={f.rawId ?? f.fileName}>
+                      <td>{f.isaControlNumber || "—"}</td>
+                      <td>{f.isaSender || "—"}</td>
 
-      <div className="panel">
-        <h2>WMS Staging Queue</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Order</th>
-              <th>Status</th>
-              <th>Attempts</th>
-              <th>Error</th>
-            </tr>
-          </thead>
-          <tbody>
-            {wmsOrders.length === 0 ? (
-              <tr><td colSpan="4">No WMS staging orders found.</td></tr>
-            ) : (
-              wmsOrders.map(o => (
-                <tr key={o.wmsOrderHeaderStagingId ?? o.warehouseOrderNumber}>
-                  <td>{o.warehouseOrderNumber}</td>
-                  <td><StatusBadge status={o.integrationStatus} /></td>
-                  <td>{o.attemptCount ?? 0}</td>
-                  <td className="error-text">{o.errorMessage || "—"}</td>
+                      <td className="file-name-cell" title={f.fileName}>
+                        {f.fileName}
+                      </td>
+
+                      <td><StatusBadge status={f.processStatus} /></td>
+                      <td>{f.loadDateTime || "—"}</td>
+                      <td className="error-text">{f.errorMessage || "—"}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="panel">
+            <h2>WMS Staging Queue</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Order</th>
+                  <th>Status</th>
+                  <th>Attempts</th>
+                  <th>Error</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
+              </thead>
+              <tbody>
+                {wmsOrders.length === 0 ? (
+                  <tr><td colSpan="4">No WMS staging orders found.</td></tr>
+                ) : (
+                  wmsOrders.map(o => (
+                    <tr key={o.wmsOrderHeaderStagingId ?? o.warehouseOrderNumber}>
+                      <td>{o.warehouseOrderNumber}</td>
+                      <td><StatusBadge status={o.integrationStatus} /></td>
+                      <td>{o.attemptCount ?? 0}</td>
+                      <td className="error-text">{o.errorMessage || "—"}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </>
+    )}
+
+    {activeTab === "capacity" && <CapacityDashboard />}
   </main></div >;
 }
