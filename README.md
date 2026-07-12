@@ -144,6 +144,16 @@ Potential production options:
 
 The goal of this project was to demonstrate integration architecture, visibility, and operational support patterns while maintaining low Azure operating costs.
 
+## Security Architecture Note
+
+This project intentionally demonstrates several different Azure identity and access patterns rather than applying one pattern uniformly everywhere. That's a deliberate choice for a portfolio/lab project - the goal is breadth of technique, not internal consistency the way a production system would prioritize it.
+
+- **Entra ID roles (human/admin access)** - Owner at the subscription scope, plus separate, narrower Contributor-tier roles scoped to individual resources (storage accounts, Key Vault). Two layers of admin access control, not one flat grant.
+- **Managed identity + Azure RBAC (service-to-service)** - the App Service's system-assigned managed identity holds a "Data Factory Contributor" role scoped to the ADF resource, so triggering pipeline runs (`/api/adf/run`) never touches a credential - `DefaultAzureCredential()` resolves the identity, Azure RBAC decides what it's allowed to do.
+- **JWT / OAuth2 (end-user access)** - the web app's own users authenticate via MSAL.js against an Azure AD App Registration; the FastAPI backend validates each request's token (signature via JWKS, audience, issuer) rather than trusting a shared secret. See `api/README.md` and `dashboard/README.md` for details.
+
+**Not yet migrated to the RBAC pattern:** Blob Storage access (`AZURE_STORAGE_CONNECTION_STRING`, an account key) and SQL access (`SQL_USER`/`SQL_PASSWORD`, SQL authentication) still use shared credentials rather than the managed-identity + role-assignment approach used for ADF. This is a known, intentional gap, not an oversight - the identical technique already proven with ADF (managed identity → Azure RBAC role → `DefaultAzureCredential()`) generalizes directly to both: grant the managed identity `Storage Blob Data Reader` for Storage, or an Azure AD SQL login mapped to `db_datareader`/`db_datawriter` for SQL (the SQL server already has Azure AD auth enabled). Left as shared credentials here to spend project time on demonstrating more distinct patterns rather than repeating the same one three times.
+
 Current Features
 ✓ EDI 940 ingestion
 ✓ Azure Data Factory orchestration
