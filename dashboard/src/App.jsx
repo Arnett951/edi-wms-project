@@ -273,6 +273,15 @@ setError(
       <div>
         <h1>EDI 940 Dashboard</h1>
         <p>Warehouse Integration Demo</p>
+        <a
+          className="demo-link-btn"
+          href="https://claude.ai/code/artifact/35b4c722-d5dc-48bc-a6f9-fa6ebaf6615b"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Icon type="play" />
+          Watch the architecture demo
+        </a>
       </div>
 
 <div className="auth-badge">
