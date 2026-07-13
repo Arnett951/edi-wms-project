@@ -54,7 +54,13 @@ export default function ChatPanel({ onClose }) {
       const data = await response.json();
       setMessages((m) => [
         ...m,
-        { role: "bot", text: data.reply || "No answer returned.", source: data.source },
+        {
+          role: "bot",
+          text: data.reply || "No answer returned.",
+          source: data.source,
+          downloadUrl: data.downloadUrl,
+          fileName: data.fileName,
+        },
       ]);
     } catch (err) {
       setMessages((m) => [...m, { role: "bot", text: `Couldn't reach the chat API: ${err.message}` }]);
@@ -76,6 +82,13 @@ export default function ChatPanel({ onClose }) {
           <div key={i} className={`chat-bubble ${m.role}`}>
             {m.source === "ai" && <span className="ai-badge">AI</span>}
             {m.text}
+            {m.downloadUrl && (
+              <div>
+                <a href={m.downloadUrl} target="_blank" rel="noopener noreferrer">
+                  Download {m.fileName || "file"}
+                </a>
+              </div>
+            )}
           </div>
         ))}
       </div>

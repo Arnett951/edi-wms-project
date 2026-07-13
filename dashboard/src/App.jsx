@@ -87,6 +87,40 @@ export default function App() {
   const [simulateMessage, setSimulateMessage] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("operations");
+  const [permissions, setPermissions] = useState([]);
+  const canDownloadFiles = permissions.includes("files.download");
+
+  async function loadPermissions() {
+    try {
+      const data = await fetchJson(`${API_BASE}/api/me/permissions`);
+      setPermissions(Array.isArray(data.permissions) ? data.permissions : []);
+    } catch (err) {
+      // Non-fatal - admin-gated UI just stays hidden if this fails.
+    }
+  }
+
+  async function toggleDemoAdmin() {
+    const endpoint = canDownloadFiles ? "/api/demo/revoke-admin" : "/api/demo/grant-admin";
+    try {
+      const res = await authFetch(`${API_BASE}${endpoint}`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Failed to update admin status.");
+      setPermissions(Array.isArray(data.permissions) ? data.permissions : []);
+    } catch (err) {
+      setError(err.message || "Failed to update admin status.");
+    }
+  }
+
+  async function downloadFile(rawId) {
+    try {
+      const res = await authFetch(`${API_BASE}/api/files/${rawId}/download-url`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Failed to get download link.");
+      window.open(data.downloadUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setError(err.message || "Failed to download file.");
+    }
+  }
 
   async function loadDashboard() {
     setLoading(true);
@@ -183,6 +217,7 @@ setError(
   useEffect(() => {
     if (isAuthenticated) {
       loadDashboard();
+      loadPermissions();
     }
   }, [isAuthenticated]);
 
@@ -256,6 +291,9 @@ setError(
   <span className="auth-status">
     Authenticated
   </span>
+  <button onClick={toggleDemoAdmin} title="Demo-only role toggle - not a real Entra role">
+    {canDownloadFiles ? "Revoke Admin (Demo)" : "Make me an Admin (Demo)"}
+  </button>
   <button onClick={signOut}>Sign out</button>
 </div>
 
@@ -368,11 +406,12 @@ setError(
                   <th>Status</th>
                   <th>Loaded</th>
                   <th>Error</th>
+                  {canDownloadFiles && <th>File</th>}
                 </tr>
               </thead>
               <tbody>
                 {recentFiles.length === 0 ? (
-                  <tr><td colSpan="6">No recent files found.</td></tr>
+                  <tr><td colSpan={canDownloadFiles ? "7" : "6"}>No recent files found.</td></tr>
                 ) : (
                   recentFiles.map(f => (
                     <tr key={f.rawId ?? f.fileName}>
@@ -386,6 +425,15 @@ setError(
                       <td><StatusBadge status={f.processStatus} /></td>
                       <td>{f.loadDateTime || "—"}</td>
                       <td className="error-text">{f.errorMessage || "—"}</td>
+                      {canDownloadFiles && (
+                        <td>
+                          {f.rawId != null && (
+                            <button type="button" onClick={() => downloadFile(f.rawId)}>
+                              Download
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}

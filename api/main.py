@@ -11,8 +11,8 @@ import jwt
 from jwt import PyJWKClient
 import pyodbc
 from dotenv import load_dotenv
-from azure.storage.blob import BlobServiceClient
-from datetime import datetime, timezone
+from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
+from datetime import datetime, timezone, timedelta
 import requests
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.datafactory import DataFactoryManagementClient
@@ -82,6 +82,100 @@ def require_auth(credentials: Optional[HTTPAuthorizationCredentials] = Depends(_
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     return payload
+
+
+# ---------------------------------------------------------------------------
+# RBAC: Groups -> Roles -> Permissions, stored in dbo.Groups/Roles/Permissions/
+# RolePermissions/GroupRoles/UserGroups/UserRoles (see api/sql/001_rbac_schema.sql).
+# A user's effective permissions are the union of permissions granted by
+# roles assigned directly to them and roles inherited through group
+# membership. Every protected endpoint declares the one permission it needs
+# via require_permission("some.permission") rather than checking role names
+# inline, so adding a new protected action never touches this auth code.
+# ---------------------------------------------------------------------------
+
+def get_user_oid(payload: dict) -> str:
+    oid = payload.get("oid") or payload.get("sub")
+    if not oid:
+        raise HTTPException(status_code=401, detail="Token missing user identifier")
+    return oid
+
+
+def get_user_permissions(user_oid: str) -> list[str]:
+    result = rows_params(
+        """
+        SELECT DISTINCT p.PermissionName
+        FROM dbo.Permissions p
+        JOIN dbo.RolePermissions rp ON rp.PermissionId = p.PermissionId
+        WHERE rp.RoleId IN (
+            SELECT RoleId FROM dbo.UserRoles WHERE UserOid = ?
+            UNION
+            SELECT gr.RoleId FROM dbo.UserGroups ug
+            JOIN dbo.GroupRoles gr ON gr.GroupId = ug.GroupId
+            WHERE ug.UserOid = ?
+        )
+        """,
+        (user_oid, user_oid),
+    )
+    return [row["PermissionName"] for row in result]
+
+
+def require_permission(permission_name: str):
+    def _check(payload: dict = Depends(require_auth)) -> dict:
+        user_oid = get_user_oid(payload)
+        if permission_name not in get_user_permissions(user_oid):
+            raise HTTPException(status_code=403, detail=f"Missing permission: {permission_name}")
+        return payload
+    return _check
+
+
+@app.get("/api/me/permissions")
+def my_permissions(payload: dict = Depends(require_auth)):
+    return {"permissions": get_user_permissions(get_user_oid(payload))}
+
+
+# Demo-only self-service role grant so the portfolio site's "Make me an Admin"
+# button has something to call. This is NOT how role assignment should work
+# in a real deployment (a real admin would insert into dbo.UserRoles /
+# dbo.UserGroups instead) - require_permission() itself doesn't know or care
+# how a row got into UserRoles, so swapping this out later doesn't touch it.
+@app.post("/api/demo/grant-admin")
+def grant_demo_admin(payload: dict = Depends(require_auth)):
+    user_oid = get_user_oid(payload)
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            MERGE dbo.UserRoles AS target
+            USING (
+                SELECT ? AS UserOid, RoleId FROM dbo.Roles WHERE RoleName = 'Admin'
+            ) AS src
+            ON target.UserOid = src.UserOid AND target.RoleId = src.RoleId
+            WHEN NOT MATCHED THEN
+                INSERT (UserOid, RoleId) VALUES (src.UserOid, src.RoleId);
+            """,
+            (user_oid,),
+        )
+        conn.commit()
+    return {"permissions": get_user_permissions(user_oid)}
+
+
+@app.post("/api/demo/revoke-admin")
+def revoke_demo_admin(payload: dict = Depends(require_auth)):
+    user_oid = get_user_oid(payload)
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            DELETE ur
+            FROM dbo.UserRoles ur
+            JOIN dbo.Roles r ON r.RoleId = ur.RoleId
+            WHERE ur.UserOid = ? AND r.RoleName = 'Admin'
+            """,
+            (user_oid,),
+        )
+        conn.commit()
+    return {"permissions": get_user_permissions(user_oid)}
 
 
 # To check Health of the API
@@ -236,6 +330,75 @@ def get_blob_queue_metrics():
         "filesWaiting": len(blobs),
         "oldestFileAgeSeconds": age_seconds
     }
+
+# ---------------------------------------------------------------------------
+# File retrieval: resolve a filename to a short-lived SAS download URL. A
+# file lives in edi940-inbound while still queued, and gets moved to
+# edi940-archive once ADF has processed it - rather than guessing which from
+# ProcessStatus, just check archive first (the common case for anything
+# already in EDI940_Raw) and fall back to inbound.
+# ---------------------------------------------------------------------------
+
+def _parse_storage_account_key(conn_str: str) -> tuple[str, str]:
+    parts = dict(segment.split("=", 1) for segment in conn_str.split(";") if "=" in segment)
+    return parts["AccountName"], parts["AccountKey"]
+
+
+def find_blob_container(file_name: str) -> Optional[str]:
+    conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+    if not conn_str:
+        return None
+
+    blob_service = BlobServiceClient.from_connection_string(conn_str)
+    archive_container = os.getenv("BLOB_ARCHIVE_CONTAINER_NAME", "edi940-archive")
+    inbound_container = os.getenv("BLOB_CONTAINER_NAME", "edi940-inbound")
+
+    for container_name in (archive_container, inbound_container):
+        if blob_service.get_blob_client(container=container_name, blob=file_name).exists():
+            return container_name
+    return None
+
+
+def generate_file_download_url(file_name: str, container_name: str) -> tuple[str, datetime]:
+    conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+    if not conn_str:
+        raise HTTPException(status_code=500, detail="AZURE_STORAGE_CONNECTION_STRING is not set")
+
+    account_name, account_key = _parse_storage_account_key(conn_str)
+    expiry = datetime.now(timezone.utc) + timedelta(minutes=10)
+    sas_token = generate_blob_sas(
+        account_name=account_name,
+        container_name=container_name,
+        blob_name=file_name,
+        account_key=account_key,
+        permission=BlobSasPermissions(read=True),
+        expiry=expiry,
+    )
+    url = f"https://{account_name}.blob.core.windows.net/{container_name}/{file_name}?{sas_token}"
+    return url, expiry
+
+
+def resolve_file_download(file_name: str) -> dict:
+    container_name = find_blob_container(file_name)
+    if not container_name:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{file_name} was not found in blob storage (it may have been purged).",
+        )
+    url, expiry = generate_file_download_url(file_name, container_name)
+    return {"fileName": file_name, "downloadUrl": url, "expiresAt": expiry.isoformat()}
+
+
+@app.get("/api/files/{raw_id}/download-url")
+def get_file_download_url(raw_id: int, _: dict = Depends(require_permission("files.download"))):
+    result = rows_params(
+        "SELECT FileName AS fileName FROM dbo.EDI940_Raw WHERE RawId = ?",
+        (raw_id,),
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail=f"No file found for RawId {raw_id}.")
+    return resolve_file_download(result[0]["fileName"])
+
 #To display the summary of the dashboard including files received, parsed, failed and WMS status
 @app.get("/api/dashboard/summary")
 def dashboard_summary(_: dict = Depends(require_auth)):
@@ -502,6 +665,29 @@ def build_unknown_reply() -> str:
     return f'Try asking "Why did ISA {example_isa} fail?" or "Where is PO 12345?"'
 
 
+# Only ever wired into a chat request's tool list when the caller has the
+# files.download permission (see chat() below) - reuses handle_isa_lookup to
+# find the file, then resolve_file_download for the SAS URL.
+def handle_file_download_by_isa(isa_number: str) -> dict:
+    isa_result = handle_isa_lookup(isa_number)
+    if not isa_result.get("matches"):
+        return {"intent": "file_download", "reply": isa_result["reply"], "matches": []}
+
+    file_name = isa_result["matches"][0]["fileName"]
+    try:
+        download = resolve_file_download(file_name)
+    except HTTPException as exc:
+        return {"intent": "file_download", "reply": exc.detail, "matches": []}
+
+    return {
+        "intent": "file_download",
+        "reply": f"Here's the download link for {download['fileName']} (expires in about 10 minutes).",
+        "matches": [],
+        "downloadUrl": download["downloadUrl"],
+        "fileName": download["fileName"],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Phase 2 chat: AI fallback. When the regex patterns above don't match, hand
 # the question to Claude with a fixed set of tools (the same lookup functions
@@ -517,9 +703,9 @@ AI_SYSTEM_PROMPT = (
     "You are an assistant for a warehouse EDI operations dashboard. Use the available tools "
     "to answer questions about a specific PO/order's status, a specific ISA file's status, or "
     "the current list of EDI files that failed to parse. Only call a tool when the question is "
-    "clearly about one of those topics,  If you call a tool, use the exact input schema specified "
+    "clearly about one of those topics. If you call a tool, use the exact input schema specified "
     "for that tool and do not make up any other fields. Otherwise, reply directly and briefly "
-    "explaining you can only help with PO lookups, ISA lookups, and failed file lists, at this time."
+    "explaining you can only help with the topics covered by your available tools."
 )
 
 AI_TOOLS = [
@@ -554,6 +740,23 @@ AI_TOOL_DISPATCH = {
     "list_failed_orders": lambda tool_input: handle_failed_orders(),
 }
 
+# Added to a chat request's tools/dispatch only when the caller has the
+# files.download permission - see chat(). Kept out of AI_TOOLS/AI_TOOL_DISPATCH
+# so non-admin callers never even have this tool offered to Claude.
+FILE_DOWNLOAD_TOOL = {
+    "name": "get_file_download_link",
+    "description": (
+        "Get a temporary download link for the original EDI file associated with a specific "
+        "ISA control number. Only call this if the user explicitly asks to download, retrieve, "
+        "or get a copy of the file itself, not just its status."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {"isa_number": {"type": "string", "description": "The ISA control number"}},
+        "required": ["isa_number"],
+    },
+}
+
 # In-memory, per-process rate limit on the AI fallback path only - the regex
 # fast path is free and unlimited. This resets per Azure App Service worker
 # process (gunicorn runs 2), so the effective ceiling is roughly 2x the
@@ -581,7 +784,7 @@ def is_ai_rate_limited(client_ip: str) -> bool:
     return count > AI_RATE_LIMIT_MAX_REQUESTS
 
 
-def handle_ai_fallback(question: str) -> Optional[dict]:
+def handle_ai_fallback(question: str, tools: list, dispatch: dict) -> Optional[dict]:
     if not _anthropic_client:
         return None
 
@@ -591,7 +794,7 @@ def handle_ai_fallback(question: str) -> Optional[dict]:
             model="claude-sonnet-5",
             max_tokens=400,
             system=AI_SYSTEM_PROMPT,
-            tools=AI_TOOLS,
+            tools=tools,
             messages=messages,
         )
 
@@ -605,7 +808,7 @@ def handle_ai_fallback(question: str) -> Optional[dict]:
                 "source": "ai",
             }
 
-        tool_fn = AI_TOOL_DISPATCH.get(tool_use.name)
+        tool_fn = dispatch.get(tool_use.name)
         if not tool_fn:
             return {"intent": "ai_unhandled", "reply": build_unknown_reply(), "matches": [], "source": "ai"}
 
@@ -625,17 +828,21 @@ def handle_ai_fallback(question: str) -> Optional[dict]:
             model="claude-sonnet-5",
             max_tokens=300,
             system=AI_SYSTEM_PROMPT,
-            tools=AI_TOOLS,
+            tools=tools,
             messages=messages,
         )
         final_text = "".join(block.text for block in final.content if block.type == "text")
 
-        return {
+        result = {
             "intent": f"ai_{tool_use.name}",
             "reply": final_text or tool_result.get("reply", ""),
             "matches": tool_result.get("matches", []),
             "source": "ai",
         }
+        if "downloadUrl" in tool_result:
+            result["downloadUrl"] = tool_result["downloadUrl"]
+            result["fileName"] = tool_result["fileName"]
+        return result
     except Exception as exc:
         # Don't leak exception details (e.g. a billing/quota error) to the chat UI -
         # degrade to the same message the regex path gives when it can't help.
@@ -649,7 +856,7 @@ def sample_isa(_: dict = Depends(require_auth)):
 
 
 @app.post("/api/chat")
-def chat(request: ChatRequest, http_request: Request, _: dict = Depends(require_auth)):
+def chat(request: ChatRequest, http_request: Request, payload: dict = Depends(require_auth)):
     question = request.question or ""
 
     isa_match = ISA_PATTERN.search(question)
@@ -660,10 +867,19 @@ def chat(request: ChatRequest, http_request: Request, _: dict = Depends(require_
     if po_match:
         return {**handle_po_lookup(po_match.group(1).strip()), "source": "regex"}
 
-    if _anthropic_client and is_ai_rate_limited(get_client_ip(http_request)):
+    if not _anthropic_client:
+        return {"intent": "unknown", "reply": build_unknown_reply(), "matches": [], "source": "regex"}
+
+    if is_ai_rate_limited(get_client_ip(http_request)):
         return {"intent": "ai_rate_limited", "reply": build_unknown_reply(), "matches": [], "source": "regex"}
 
-    ai_result = handle_ai_fallback(question)
+    tools = list(AI_TOOLS)
+    dispatch = dict(AI_TOOL_DISPATCH)
+    if "files.download" in get_user_permissions(get_user_oid(payload)):
+        tools.append(FILE_DOWNLOAD_TOOL)
+        dispatch["get_file_download_link"] = lambda tool_input: handle_file_download_by_isa(tool_input["isa_number"])
+
+    ai_result = handle_ai_fallback(question, tools, dispatch)
     if ai_result:
         return ai_result
 
