@@ -188,9 +188,9 @@ export default function CapacityDashboard() {
       <div className="cap-eyebrow">Fulfillment Ops · Live Estimator</div>
       <h1 className="cap-title">Will today's crew ship today's orders?</h1>
       <p className="cap-subtitle">
-        Linear regression trained on 30 days of pick/pack activity (packer-hours available &amp;
-        order complexity → orders shipped, cross-validated R² 0.91). Adjust today's inputs below to
-        see the live projection.
+        Some common Machine Learning models were evaluated on 30 days of pick/pack activity. Linear regression showed 
+        the best fit — cross-validated R² of 0.91 — using packer-hours available and order complexity to 
+        predict orders shipped. Adjust today's inputs below to see the live projection.
       </p>
 
       <div className="cap-panel cap-hero">
