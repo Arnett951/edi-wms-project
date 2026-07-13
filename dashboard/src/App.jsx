@@ -218,6 +218,12 @@ setError(
     if (isAuthenticated) {
       loadDashboard();
       loadPermissions();
+    } else {
+      setSummary(mockSummary);
+      setRecentFiles(mockRecentFiles);
+      setWmsOrders(mockWmsOrders);
+      setUsingMockData(true);
+      setPermissions([]);
     }
   }, [isAuthenticated]);
 
@@ -229,25 +235,8 @@ setError(
     instance.logoutRedirect();
   }
 
-  // Every hook (including this useMemo) must run on every render regardless
-  // of auth state - the isAuthenticated gate below is a plain conditional
-  // return, not a hook, so it's safe to place after all hooks are called.
   const safeSummary = normalizeSummary(summary);
   const statusChart = useMemo(() => buildStatusChart(safeSummary), [summary]);
-
-  if (!isAuthenticated) {
-    return (
-      <div className="page">
-        <main className="shell">
-          <section className="panel" style={{ textAlign: "center", padding: "48px 24px" }}>
-            <h1>EDI 940 Dashboard</h1>
-            <p>Sign in with your Microsoft account to view live warehouse integration data.</p>
-            <button onClick={signIn}>Sign in with Microsoft</button>
-          </section>
-        </main>
-      </div>
-    );
-  }
 
   const cards = [
     {
@@ -287,17 +276,28 @@ setError(
       </div>
 
 <div className="auth-badge">
-  <span>👤 {accounts[0]?.username}</span>
-  <span className="auth-status">
-    Authenticated
-  </span>
-  <button onClick={toggleDemoAdmin} title="Demo-only role toggle - not a real Entra role">
-    {canDownloadFiles ? "Revoke Admin (Demo)" : "Make me an Admin (Demo)"}
-  </button>
-  <button onClick={signOut}>Sign out</button>
+  {isAuthenticated ? (
+    <>
+      <span>👤 {accounts[0]?.username}</span>
+      <span className="auth-status">
+        Authenticated
+      </span>
+      <button onClick={toggleDemoAdmin} title="Demo-only role toggle - not a real Entra role">
+        {canDownloadFiles ? "Revoke Admin (Demo)" : "Make me an Admin (Demo)"}
+      </button>
+      <button onClick={signOut}>Sign out</button>
+    </>
+  ) : (
+    <>
+      <button onClick={signIn}>Sign in with Microsoft for live data</button>
+      <a className="demo-cta" href="https://chrisarnett.me" target="_blank" rel="noopener noreferrer">
+        Or contact chrisarnett.me for a full guided demo
+      </a>
+    </>
+  )}
 </div>
 
-{activeTab === "operations" && (
+{activeTab === "operations" && isAuthenticated && (
         <div className="header-actions">
           <button onClick={triggerEdiFile} disabled={loading}>
             <Icon type="play" />
@@ -335,7 +335,13 @@ setError(
     {activeTab === "operations" && (
       <>
         {error && <section className="alert"><Icon type="alert" /><div><strong>API connection issue</strong><p>{error}</p></div></section>}
-        {usingMockData && <section className="mock">Mock mode is active. Start the FastAPI service at {API_BASE} to show live SQL data.</section>}
+        {usingMockData && (
+          <section className="mock">
+            {isAuthenticated
+              ? `Mock mode is active. Start the FastAPI service at ${API_BASE} to show live SQL data.`
+              : "You're viewing demo data. Sign in with Microsoft to see live pipeline data and run real actions."}
+          </section>
+        )}
         {simulateMessage && (
           <section className="mock">
             {simulateMessage}
@@ -362,14 +368,14 @@ setError(
             </article>
           ))}
 
-          <article className="card action-card" onClick={() => setChatOpen(true)}>
+          <article className="card action-card" onClick={() => (isAuthenticated ? setChatOpen(true) : signIn())}>
             <div>
               <span>Support</span>
               <b>Ask PO / ISA</b>
             </div>
           </article>
 
-          <article className="card action-card" onClick={simulateWmsPickup}>
+          <article className="card action-card" onClick={isAuthenticated ? simulateWmsPickup : signIn}>
             <div>
               <span>Simulation</span>
               <b>WMS Pickup</b>

@@ -50,6 +50,17 @@ function pct(value) {
   return Math.max(0, Math.min(100, (value / AXIS_MAX) * 100));
 }
 
+function stepValues(min, max, step) {
+  const decimals = (String(step).split(".")[1] || "").length;
+  const factor = 10 ** decimals;
+  const count = Math.round((max - min) / step);
+  const values = [];
+  for (let i = 0; i <= count; i++) {
+    values.push(Math.round((min + i * step) * factor) / factor);
+  }
+  return values;
+}
+
 export default function CapacityDashboard() {
   const [headcount, setHeadcount] = useState(5);
   const [shiftHours, setShiftHours] = useState(9);
@@ -228,7 +239,13 @@ export default function CapacityDashboard() {
                 step="1"
                 value={headcount}
                 onChange={(e) => setHeadcount(Number(e.target.value))}
+                list="cap-headcount-ticks"
               />
+              <datalist id="cap-headcount-ticks">
+                {stepValues(2, 8, 1).map((v) => (
+                  <option value={v} key={v}></option>
+                ))}
+              </datalist>
             </div>
             <div className="cap-control">
               <label htmlFor="cap-shift-hours">
@@ -242,7 +259,13 @@ export default function CapacityDashboard() {
                 step="0.5"
                 value={shiftHours}
                 onChange={(e) => setShiftHours(Number(e.target.value))}
+                list="cap-shift-hours-ticks"
               />
+              <datalist id="cap-shift-hours-ticks">
+                {stepValues(6, 11, 0.5).map((v) => (
+                  <option value={v} key={v}></option>
+                ))}
+              </datalist>
             </div>
             <div className="cap-control">
               <label htmlFor="cap-receiving">
@@ -256,7 +279,13 @@ export default function CapacityDashboard() {
                 step="0.5"
                 value={receiving}
                 onChange={(e) => setReceiving(Number(e.target.value))}
+                list="cap-receiving-ticks"
               />
+              <datalist id="cap-receiving-ticks">
+                {stepValues(0, 8, 0.5).map((v) => (
+                  <option value={v} key={v}></option>
+                ))}
+              </datalist>
             </div>
             <div className="cap-control">
               <label htmlFor="cap-complexity">
@@ -271,7 +300,13 @@ export default function CapacityDashboard() {
                 step="0.1"
                 value={complexity}
                 onChange={(e) => setComplexity(Number(e.target.value))}
+                list="cap-complexity-ticks"
               />
+              <datalist id="cap-complexity-ticks">
+                {stepValues(1.3, 4.0, 0.1).map((v) => (
+                  <option value={v} key={v}></option>
+                ))}
+              </datalist>
             </div>
             <div className="cap-control">
               <label htmlFor="cap-forecast">
@@ -285,7 +320,13 @@ export default function CapacityDashboard() {
                 step="5"
                 value={forecast}
                 onChange={(e) => setForecast(Number(e.target.value))}
+                list="cap-forecast-ticks"
               />
+              <datalist id="cap-forecast-ticks">
+                {stepValues(100, 450, 5).map((v) => (
+                  <option value={v} key={v}></option>
+                ))}
+              </datalist>
             </div>
           </div>
         </div>
