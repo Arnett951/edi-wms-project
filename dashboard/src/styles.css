@@ -637,6 +637,11 @@ td {
   font-weight: 600;
 }
 
+.capacity-widget .cap-slider-wrap {
+  position: relative;
+  padding-bottom: 10px;
+}
+
 .capacity-widget input[type="range"] {
   width: 100%;
   -webkit-appearance: none;
@@ -645,6 +650,31 @@ td {
   border-radius: 2px;
   outline: none;
   border: 1px solid var(--cap-panel-border);
+  position: relative;
+  z-index: 1;
+}
+
+.capacity-widget .cap-slider-ticks {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 100%;
+  height: 5px;
+  pointer-events: none;
+}
+
+.capacity-widget .cap-slider-ticks span {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 4px;
+  background: var(--cap-panel-border);
+  transform: translateX(-50%);
+}
+
+.capacity-widget .cap-slider-ticks span.cap-tick-major {
+  height: 5px;
+  background: var(--cap-text-faint);
 }
 
 .capacity-widget input[type="range"]::-webkit-slider-thumb {

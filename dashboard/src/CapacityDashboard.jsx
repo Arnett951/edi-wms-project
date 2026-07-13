@@ -61,6 +61,26 @@ function stepValues(min, max, step) {
   return values;
 }
 
+// Custom tick overlay: native <datalist> ticks don't render once a range
+// input has -webkit-appearance: none (needed for the styled thumb), so we
+// draw the step positions ourselves, positioned to line up with the thumb.
+function TickMarks({ min, max, step, majorStep }) {
+  return (
+    <div className="cap-slider-ticks" aria-hidden="true">
+      {stepValues(min, max, step).map((v) => {
+        const isMajor = majorStep && Math.abs(Math.round(v / majorStep) * majorStep - v) < step / 2;
+        return (
+          <span
+            key={v}
+            className={isMajor ? "cap-tick-major" : undefined}
+            style={{ left: `${((v - min) / (max - min)) * 100}%` }}
+          ></span>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function CapacityDashboard() {
   const [headcount, setHeadcount] = useState(5);
   const [shiftHours, setShiftHours] = useState(9);
@@ -231,102 +251,87 @@ export default function CapacityDashboard() {
               <label htmlFor="cap-headcount">
                 Packers on shift <span className="cap-value">{headcount}</span>
               </label>
-              <input
-                id="cap-headcount"
-                type="range"
-                min="2"
-                max="8"
-                step="1"
-                value={headcount}
-                onChange={(e) => setHeadcount(Number(e.target.value))}
-                list="cap-headcount-ticks"
-              />
-              <datalist id="cap-headcount-ticks">
-                {stepValues(2, 8, 1).map((v) => (
-                  <option value={v} key={v}></option>
-                ))}
-              </datalist>
+              <div className="cap-slider-wrap">
+                <input
+                  id="cap-headcount"
+                  type="range"
+                  min="2"
+                  max="8"
+                  step="1"
+                  value={headcount}
+                  onChange={(e) => setHeadcount(Number(e.target.value))}
+                />
+                <TickMarks min={2} max={8} step={1} majorStep={1} />
+              </div>
             </div>
             <div className="cap-control">
               <label htmlFor="cap-shift-hours">
                 Shift length (hrs) <span className="cap-value">{shiftHours}</span>
               </label>
-              <input
-                id="cap-shift-hours"
-                type="range"
-                min="6"
-                max="11"
-                step="0.5"
-                value={shiftHours}
-                onChange={(e) => setShiftHours(Number(e.target.value))}
-                list="cap-shift-hours-ticks"
-              />
-              <datalist id="cap-shift-hours-ticks">
-                {stepValues(6, 11, 0.5).map((v) => (
-                  <option value={v} key={v}></option>
-                ))}
-              </datalist>
+              <div className="cap-slider-wrap">
+                <input
+                  id="cap-shift-hours"
+                  type="range"
+                  min="6"
+                  max="11"
+                  step="0.5"
+                  value={shiftHours}
+                  onChange={(e) => setShiftHours(Number(e.target.value))}
+                />
+                <TickMarks min={6} max={11} step={0.5} majorStep={1} />
+              </div>
             </div>
             <div className="cap-control">
               <label htmlFor="cap-receiving">
                 Receiving hours pulled <span className="cap-value">{receiving}</span>
               </label>
-              <input
-                id="cap-receiving"
-                type="range"
-                min="0"
-                max="8"
-                step="0.5"
-                value={receiving}
-                onChange={(e) => setReceiving(Number(e.target.value))}
-                list="cap-receiving-ticks"
-              />
-              <datalist id="cap-receiving-ticks">
-                {stepValues(0, 8, 0.5).map((v) => (
-                  <option value={v} key={v}></option>
-                ))}
-              </datalist>
+              <div className="cap-slider-wrap">
+                <input
+                  id="cap-receiving"
+                  type="range"
+                  min="0"
+                  max="8"
+                  step="0.5"
+                  value={receiving}
+                  onChange={(e) => setReceiving(Number(e.target.value))}
+                />
+                <TickMarks min={0} max={8} step={0.5} majorStep={2} />
+              </div>
             </div>
             <div className="cap-control">
               <label htmlFor="cap-complexity">
                 Order complexity (avg lines/order){" "}
                 <span className="cap-value">{complexity.toFixed(1)}</span>
               </label>
-              <input
-                id="cap-complexity"
-                type="range"
-                min="1.3"
-                max="4.0"
-                step="0.1"
-                value={complexity}
-                onChange={(e) => setComplexity(Number(e.target.value))}
-                list="cap-complexity-ticks"
-              />
-              <datalist id="cap-complexity-ticks">
-                {stepValues(1.3, 4.0, 0.1).map((v) => (
-                  <option value={v} key={v}></option>
-                ))}
-              </datalist>
+              <div className="cap-slider-wrap">
+                <input
+                  id="cap-complexity"
+                  type="range"
+                  min="1.3"
+                  max="4.0"
+                  step="0.1"
+                  value={complexity}
+                  onChange={(e) => setComplexity(Number(e.target.value))}
+                />
+                <TickMarks min={1.3} max={4.0} step={0.1} majorStep={0.5} />
+              </div>
             </div>
             <div className="cap-control">
               <label htmlFor="cap-forecast">
                 Forecasted orders today <span className="cap-value">{Math.round(forecast)}</span>
               </label>
-              <input
-                id="cap-forecast"
-                type="range"
-                min="100"
-                max="450"
-                step="5"
-                value={forecast}
-                onChange={(e) => setForecast(Number(e.target.value))}
-                list="cap-forecast-ticks"
-              />
-              <datalist id="cap-forecast-ticks">
-                {stepValues(100, 450, 5).map((v) => (
-                  <option value={v} key={v}></option>
-                ))}
-              </datalist>
+              <div className="cap-slider-wrap">
+                <input
+                  id="cap-forecast"
+                  type="range"
+                  min="100"
+                  max="450"
+                  step="5"
+                  value={forecast}
+                  onChange={(e) => setForecast(Number(e.target.value))}
+                />
+                <TickMarks min={100} max={450} step={5} majorStep={50} />
+              </div>
             </div>
           </div>
         </div>
