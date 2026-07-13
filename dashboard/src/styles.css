@@ -123,11 +123,25 @@ button:disabled {
 .action-card {
   cursor: pointer;
   transition: all 0.15s ease;
+  background: #0f172a;
+  border-color: #0f172a;
+  color: white;
+}
+
+.action-card span {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.action-card b {
+  font-size: 18px;
+  margin-top: 2px;
 }
 
 .action-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  background: #1e293b;
+  border-color: #1e293b;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
 }
 
 .panel {
