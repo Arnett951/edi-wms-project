@@ -106,8 +106,9 @@ export default function App() {
       setRecentFiles(mockRecentFiles);
       setWmsOrders(mockWmsOrders);
       setUsingMockData(true);
-      setError(`${err.message || "Failed to load dashboard."} Showing mock data so the UI can still be tested.`);
-    } finally {
+setError(
+  `API service is asleep (Azure free-tier serverless cold start) — this can take 3–5 minutes on first load. ${err.message ? `(${err.message}) ` : ""}Showing mock data so the UI can still be tested.`
+);    } finally {
       setLoading(false);
     }
   }
