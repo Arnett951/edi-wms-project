@@ -392,7 +392,9 @@ setError(
           </div>
         </section>
 
-        {chatOpen && <ChatPanel onClose={() => setChatOpen(false)} />}
+        {chatOpen && (
+          <ChatPanel onClose={() => setChatOpen(false)} canDownloadFiles={canDownloadFiles} />
+        )}
 
         <section className="grid">
           <div className="panel">

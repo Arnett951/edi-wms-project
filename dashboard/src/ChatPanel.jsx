@@ -6,7 +6,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const DEFAULT_ISA_SUGGESTION = "What happened with ISA 000012345?";
 const FAILED_ORDERS_SUGGESTION = "Give me the failed orders";
 
-export default function ChatPanel({ onClose }) {
+export default function ChatPanel({ onClose, canDownloadFiles = false }) {
   const [messages, setMessages] = useState([
     {
       role: "bot",
@@ -38,6 +38,10 @@ export default function ChatPanel({ onClose }) {
     };
   }, []);
 
+  const allSuggestions = canDownloadFiles
+    ? [...suggestions, `Download the file for ${suggestions[1].match(/ISA (\d+)/)?.[0] || "ISA 000012345"}`]
+    : suggestions;
+
   async function send(question) {
     const text = (question ?? input).trim();
     if (!text || sending) return;
@@ -58,8 +62,7 @@ export default function ChatPanel({ onClose }) {
           role: "bot",
           text: data.reply || "No answer returned.",
           source: data.source,
-          downloadUrl: data.downloadUrl,
-          fileName: data.fileName,
+          downloads: data.downloads,
         },
       ]);
     } catch (err) {
@@ -82,18 +85,22 @@ export default function ChatPanel({ onClose }) {
           <div key={i} className={`chat-bubble ${m.role}`}>
             {m.source === "ai" && <span className="ai-badge">AI</span>}
             {m.text}
-            {m.downloadUrl && (
-              <div>
-                <a href={m.downloadUrl} target="_blank" rel="noopener noreferrer">
-                  Download {m.fileName || "file"}
-                </a>
+            {m.downloads?.length > 0 && (
+              <div className="chat-downloads">
+                {m.downloads.map((d) => (
+                  <div key={d.downloadUrl}>
+                    <a href={d.downloadUrl} target="_blank" rel="noopener noreferrer">
+                      Download {d.fileName}
+                    </a>
+                  </div>
+                ))}
               </div>
             )}
           </div>
         ))}
       </div>
       <div className="chat-suggestions">
-        {suggestions.map((s) => (
+        {allSuggestions.map((s) => (
           <button key={s} type="button" onClick={() => send(s)} disabled={sending}>{s}</button>
         ))}
       </div>

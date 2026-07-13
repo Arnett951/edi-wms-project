@@ -538,6 +538,26 @@ ISA_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# ---------------------------------------------------------------------------
+# File-request detection: a self-contained fast path, checked before (and
+# independent of) the ISA/PO status-lookup regexes below. It only fires on
+# explicit "give/send/download me the file" phrasing, so plain status
+# questions like "What happened with ISA 123?" are untouched and keep
+# flowing through ISA_PATTERN/PO_PATTERN exactly as before.
+# ---------------------------------------------------------------------------
+
+FILE_REQUEST_INTENT_PATTERN = re.compile(
+    r"\b(download|retrieve|copy of|send me|give me|can i get|get me)\b",
+    re.IGNORECASE
+)
+
+FILENAME_PATTERN = re.compile(r"\b([\w\-]+\.edi)\b", re.IGNORECASE)
+
+ERROR_FILES_PATTERN = re.compile(
+    r"\b(error|errors|failed|failure|failures)\b.{0,20}\bfiles?\b|\bfiles?\b.{0,20}\b(error|errors|failed|failure|failures)\b",
+    re.IGNORECASE
+)
+
 WMS_STATUS_TEXT = {
     "READY": "parsed and waiting to be sent to WMS",
     "SENT": "sent to WMS and awaiting confirmation",
@@ -665,27 +685,82 @@ def build_unknown_reply() -> str:
     return f'Try asking "Why did ISA {example_isa} fail?" or "Where is PO 12345?"'
 
 
-# Only ever wired into a chat request's tool list when the caller has the
-# files.download permission (see chat() below) - reuses handle_isa_lookup to
-# find the file, then resolve_file_download for the SAS URL.
-def handle_file_download_by_isa(isa_number: str) -> dict:
-    isa_result = handle_isa_lookup(isa_number)
-    if not isa_result.get("matches"):
-        return {"intent": "file_download", "reply": isa_result["reply"], "matches": []}
+# All file-download handlers return {"downloads": [{"fileName", "downloadUrl"}, ...]}
+# (possibly empty) so the chat response shape is the same whether one file or
+# several come back. Only ever reachable when the caller has the
+# files.download permission - see detect_file_download_handler()/chat() below.
 
-    file_name = isa_result["matches"][0]["fileName"]
+def handle_file_download_by_filename(file_name: str) -> dict:
     try:
         download = resolve_file_download(file_name)
     except HTTPException as exc:
-        return {"intent": "file_download", "reply": exc.detail, "matches": []}
+        return {"intent": "file_download", "reply": exc.detail, "matches": [], "downloads": []}
 
     return {
         "intent": "file_download",
         "reply": f"Here's the download link for {download['fileName']} (expires in about 10 minutes).",
         "matches": [],
-        "downloadUrl": download["downloadUrl"],
-        "fileName": download["fileName"],
+        "downloads": [{"fileName": download["fileName"], "downloadUrl": download["downloadUrl"]}],
     }
+
+
+def handle_file_download_by_isa(isa_number: str) -> dict:
+    isa_result = handle_isa_lookup(isa_number)
+    if not isa_result.get("matches"):
+        return {"intent": "file_download", "reply": isa_result["reply"], "matches": [], "downloads": []}
+    return handle_file_download_by_filename(isa_result["matches"][0]["fileName"])
+
+
+# Caps at 5 files so a busy failure queue doesn't generate dozens of SAS
+# tokens (and a huge chat response) from one request.
+MAX_BULK_FILE_DOWNLOADS = 5
+
+
+def handle_failed_file_downloads() -> dict:
+    failed = handle_failed_orders()
+    if not failed.get("matches"):
+        return {"intent": "file_download", "reply": failed["reply"], "matches": [], "downloads": []}
+
+    downloads = []
+    for row in failed["matches"][:MAX_BULK_FILE_DOWNLOADS]:
+        try:
+            download = resolve_file_download(row["fileName"])
+            downloads.append({"fileName": download["fileName"], "downloadUrl": download["downloadUrl"]})
+        except HTTPException:
+            continue
+
+    if not downloads:
+        return {
+            "intent": "file_download",
+            "reply": "Found failed files, but none of them are still available in blob storage.",
+            "matches": [],
+            "downloads": [],
+        }
+
+    return {
+        "intent": "file_download",
+        "reply": f"Here are download links for {len(downloads)} failed file(s):",
+        "matches": [],
+        "downloads": downloads,
+    }
+
+
+def detect_file_download_handler(question: str):
+    if not FILE_REQUEST_INTENT_PATTERN.search(question):
+        return None
+
+    filename_match = FILENAME_PATTERN.search(question)
+    if filename_match:
+        return lambda: handle_file_download_by_filename(filename_match.group(1))
+
+    if ERROR_FILES_PATTERN.search(question):
+        return lambda: handle_failed_file_downloads()
+
+    isa_match = ISA_PATTERN.search(question)
+    if isa_match:
+        return lambda: handle_file_download_by_isa(isa_match.group(1).strip())
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -839,9 +914,8 @@ def handle_ai_fallback(question: str, tools: list, dispatch: dict) -> Optional[d
             "matches": tool_result.get("matches", []),
             "source": "ai",
         }
-        if "downloadUrl" in tool_result:
-            result["downloadUrl"] = tool_result["downloadUrl"]
-            result["fileName"] = tool_result["fileName"]
+        if "downloads" in tool_result:
+            result["downloads"] = tool_result["downloads"]
         return result
     except Exception as exc:
         # Don't leak exception details (e.g. a billing/quota error) to the chat UI -
@@ -858,6 +932,20 @@ def sample_isa(_: dict = Depends(require_auth)):
 @app.post("/api/chat")
 def chat(request: ChatRequest, http_request: Request, payload: dict = Depends(require_auth)):
     question = request.question or ""
+
+    # Checked first, entirely separate from the ISA/PO status-lookup regexes
+    # below - it only fires on explicit file-request phrasing, so plain
+    # status questions are unaffected and keep flowing through unchanged.
+    file_download_handler = detect_file_download_handler(question)
+    if file_download_handler:
+        if "files.download" not in get_user_permissions(get_user_oid(payload)):
+            return {
+                "intent": "file_download_denied",
+                "reply": "You don't have permission to download files yet. Try the demo admin toggle first.",
+                "matches": [],
+                "source": "regex",
+            }
+        return {**file_download_handler(), "source": "regex"}
 
     isa_match = ISA_PATTERN.search(question)
     if isa_match:
