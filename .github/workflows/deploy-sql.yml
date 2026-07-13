@@ -1,0 +1,69 @@
+name: Deploy SQL objects to Azure SQL Database
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'sql/**'
+      - '.github/workflows/deploy-sql.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  SQL_SERVER: sql-lab-data-eng-baby.database.windows.net
+  SQL_DATABASE: free-sql-db-5402162
+  RESOURCE_GROUP: rg-azurelab
+  SQL_SERVER_NAME: sql-lab-data-eng-baby
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install ODBC Driver 18 and pyodbc
+        run: |
+          curl -sSL https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc > /dev/null
+          curl -sSL https://packages.microsoft.com/config/ubuntu/22.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+          pip install pyodbc
+
+      - name: Allow this runner through the SQL firewall
+        id: firewall
+        run: |
+          RULE_NAME="gha-${{ github.run_id }}-${{ github.run_attempt }}"
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          echo "rule_name=$RULE_NAME" >> "$GITHUB_OUTPUT"
+          az sql server firewall-rule create \
+            --resource-group "$RESOURCE_GROUP" \
+            --server "$SQL_SERVER_NAME" \
+            --name "$RULE_NAME" \
+            --start-ip-address "$RUNNER_IP" \
+            --end-ip-address "$RUNNER_IP"
+
+      - name: Deploy SQL objects
+        run: python sql/deploy.py
+
+      - name: Remove temporary firewall rule
+        if: always()
+        run: |
+          az sql server firewall-rule delete \
+            --resource-group "$RESOURCE_GROUP" \
+            --server "$SQL_SERVER_NAME" \
+            --name "${{ steps.firewall.outputs.rule_name }}" || true
