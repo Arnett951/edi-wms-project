@@ -71,6 +71,10 @@ IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK__UserRole__94C
 BEGIN
     ALTER TABLE dbo.UserRoles ADD CONSTRAINT [PK__UserRole__94C5310081950958] PRIMARY KEY CLUSTERED ([UserOid], [RoleId]);
 END;
+IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_UserActivityLog')
+BEGIN
+    ALTER TABLE dbo.UserActivityLog ADD CONSTRAINT [PK_UserActivityLog] PRIMARY KEY CLUSTERED ([EventId]);
+END;
 IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK__OrderDet__0F6FE0CC14B3A3F5')
 BEGIN
     ALTER TABLE wms.OrderDetail_Staging ADD CONSTRAINT [PK__OrderDet__0F6FE0CC14B3A3F5] PRIMARY KEY CLUSTERED ([WMSOrderDetailStagingId]);

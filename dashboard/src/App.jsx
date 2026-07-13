@@ -271,7 +271,7 @@ setError(
   return <div className="page"><main className="shell">
     <header className="header">
       <div>
-        <h1>EDI 940 Dashboard</h1>
+        <h1>EDI Dashboard</h1>
         <p>Warehouse Integration Demo</p>
         <a
           className="demo-link-btn"
@@ -299,8 +299,8 @@ setError(
   ) : (
     <>
       <button onClick={signIn}>Sign in with Microsoft for live data</button>
-      <a className="demo-cta" href="https://chrisarnett.me" target="_blank" rel="noopener noreferrer">
-        Or contact chrisarnett.me for a full guided demo
+      <a className="demo-cta" href="https://www.chrisarnett.me" target="_blank" rel="noopener noreferrer">
+        Or contact www.chrisarnett.me for a full guided demo
       </a>
     </>
   )}
@@ -331,13 +331,13 @@ setError(
         className={activeTab === "operations" ? "tab-active" : ""}
         onClick={() => setActiveTab("operations")}
       >
-        Operations
+        EDI Monitor Dashboard
       </button>
       <button
         className={activeTab === "capacity" ? "tab-active" : ""}
         onClick={() => setActiveTab("capacity")}
       >
-        Capacity Planning
+        Capacity Planning(Machine Learning)
       </button>
     </div>
 
@@ -348,7 +348,7 @@ setError(
           <section className="mock">
             {isAuthenticated
               ? `Mock mode is active. Start the FastAPI service at ${API_BASE} to show live SQL data.`
-              : "You're viewing demo data. Sign in with Microsoft to see live pipeline data and run real actions."}
+              : "You're viewing demo data, feel free to browse both EDI Dashboard and Capacity Planning, or Sign in with Microsoft to see live pipeline data and run real actions."}
           </section>
         )}
         {simulateMessage && (
