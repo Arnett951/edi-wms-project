@@ -1,7 +1,7 @@
 -- =====================================================
 -- STORED PROCEDURE: Log Pipeline Completion
 -- =====================================================
-CREATE PROCEDURE [dbo].[LogEDI940PipelineRun]
+CREATE OR ALTER PROCEDURE [dbo].[LogEDI940PipelineRun]
     @PipelineRunId NVARCHAR(255),
     @PipelineStatus NVARCHAR(50),
     @ProcessDateTime DATETIME2,

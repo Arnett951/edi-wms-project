@@ -1,5 +1,5 @@
 -- View: Current Processing Status
-CREATE VIEW vw_EDI940_CurrentStatus AS
+CREATE OR ALTER VIEW vw_EDI940_CurrentStatus AS
 SELECT 
     CAST(GETDATE() AS DATE) AS [Date],
     COUNT(DISTINCT FileName) AS [Total Files Processed],

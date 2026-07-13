@@ -1,7 +1,7 @@
 -- =====================================================
 -- STORED PROCEDURE: Generate Processing Report
 -- =====================================================
-CREATE PROCEDURE [dbo].[GetEDI940ProcessingReport]
+CREATE OR ALTER PROCEDURE [dbo].[GetEDI940ProcessingReport]
     @StartDate DATETIME2 = NULL,
     @EndDate DATETIME2 = NULL
 AS

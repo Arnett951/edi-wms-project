@@ -344,7 +344,7 @@ def _parse_storage_account_key(conn_str: str) -> tuple[str, str]:
     return parts["AccountName"], parts["AccountKey"]
 
 
-def find_blob_container(file_name: str) -> Optional[str]:
+def find_blob(file_name: str) -> Optional[tuple[str, str]]:
     conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
     if not conn_str:
         return None
@@ -354,8 +354,17 @@ def find_blob_container(file_name: str) -> Optional[str]:
     inbound_container = os.getenv("BLOB_CONTAINER_NAME", "edi940-inbound")
 
     for container_name in (archive_container, inbound_container):
-        if blob_service.get_blob_client(container=container_name, blob=file_name).exists():
-            return container_name
+        container = blob_service.get_container_client(container_name)
+
+        if container.get_blob_client(file_name).exists():
+            return container_name, file_name
+
+        # EDI940_Raw.FileName doesn't always match the blob's actual name on
+        # disk (e.g. the pipeline has been seen writing a ".txt" suffix onto
+        # the recorded name) - fall back to a prefix match within the container.
+        for blob in container.list_blobs(name_starts_with=file_name):
+            return container_name, blob.name
+
     return None
 
 
@@ -379,14 +388,15 @@ def generate_file_download_url(file_name: str, container_name: str) -> tuple[str
 
 
 def resolve_file_download(file_name: str) -> dict:
-    container_name = find_blob_container(file_name)
-    if not container_name:
+    found = find_blob(file_name)
+    if not found:
         raise HTTPException(
             status_code=404,
             detail=f"{file_name} was not found in blob storage (it may have been purged).",
         )
-    url, expiry = generate_file_download_url(file_name, container_name)
-    return {"fileName": file_name, "downloadUrl": url, "expiresAt": expiry.isoformat()}
+    container_name, blob_name = found
+    url, expiry = generate_file_download_url(blob_name, container_name)
+    return {"fileName": blob_name, "downloadUrl": url, "expiresAt": expiry.isoformat()}
 
 
 @app.get("/api/files/{raw_id}/download-url")

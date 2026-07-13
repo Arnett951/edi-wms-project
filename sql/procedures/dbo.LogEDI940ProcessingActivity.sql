@@ -1,7 +1,7 @@
 -- =====================================================
 -- STORED PROCEDURE: Log Individual File Processing
 -- =====================================================
-CREATE PROCEDURE [dbo].[LogEDI940ProcessingActivity]
+CREATE OR ALTER PROCEDURE [dbo].[LogEDI940ProcessingActivity]
     @FileName NVARCHAR(255),
     @ProcessStatus NVARCHAR(50),
     @ProcessDateTime DATETIME2,

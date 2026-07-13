@@ -1,4 +1,4 @@
-CREATE VIEW dbo.v_RecentLoadActivity AS
+CREATE OR ALTER VIEW dbo.v_RecentLoadActivity AS
 SELECT TOP 100
     LoadLogID,
     PipelineName,

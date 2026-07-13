@@ -1,4 +1,4 @@
-CREATE PROCEDURE dbo.sp_MergeStagingToProduction
+CREATE OR ALTER PROCEDURE dbo.sp_MergeStagingToProduction
     @LoadBatchID INT,
     @RowsAffected INT OUTPUT
 AS

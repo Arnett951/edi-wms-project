@@ -1,5 +1,5 @@
 -- View: Files Requiring Attention
-CREATE VIEW vw_EDI940_FilesNeedingAttention AS
+CREATE OR ALTER VIEW vw_EDI940_FilesNeedingAttention AS
 SELECT 
     FileName,
     ProcessStatus,

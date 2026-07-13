@@ -1,4 +1,4 @@
-CREATE PROCEDURE dbo.sp_LogPipelineActivity
+CREATE OR ALTER PROCEDURE dbo.sp_LogPipelineActivity
     @PipelineName NVARCHAR(255),
     @PipelineRunID NVARCHAR(255),
     @ActivityName NVARCHAR(255),

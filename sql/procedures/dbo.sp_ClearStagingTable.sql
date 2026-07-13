@@ -1,4 +1,4 @@
-CREATE PROCEDURE dbo.sp_ClearStagingTable
+CREATE OR ALTER PROCEDURE dbo.sp_ClearStagingTable
     @LoadBatchID INT = NULL
 AS
 BEGIN

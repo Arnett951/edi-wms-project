@@ -1,7 +1,10 @@
 -- =====================================================
 -- TABLE: dbo.GroupRoles
 -- =====================================================
-CREATE TABLE dbo.GroupRoles (
-    [GroupId] int NOT NULL,
-    [RoleId] int NOT NULL
-);
+IF OBJECT_ID('dbo.GroupRoles', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.GroupRoles (
+        [GroupId] int NOT NULL,
+        [RoleId] int NOT NULL
+    );
+END;
