@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EDI 940 → WMS Integration — Cartoon Walkthrough</title>
+<style>
+  :root{
+    --sky-top:#bdeafb;
+    --sky-bottom:#fef6df;
+    --ground:#e9dab4;
+    --belt:#4b555f;
+    --belt-stripe:#f0b429;
+    --ink:#20293a;
+    --text-body:#33404f;
+    --panel:#ffffff;
+    --accent:#1fb6a6;
+
+    --c-file:#f4e2a6;
+    --c-blob:#2f9bd6;
+    --c-trigger:#ff6a5e;
+    --c-adf:#ef8a3d;
+    --c-sqlraw:#3f6fe0;
+    --c-parser:#7c5cff;
+    --c-scale:#a9713f;
+    --c-parquet:#2bc4d8;
+    --c-api:#34c98f;
+
+    --font-fun: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    --font-mono: "Cascadia Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  }
+
+  *{ box-sizing:border-box; }
+
+  body{
+    margin:0;
+    background:linear-gradient(var(--sky-top), var(--sky-bottom) 70%);
+    color:var(--text-body);
+    font-family:var(--font-fun);
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .app{ max-width:1180px; margin:0 auto; padding:34px 20px 60px; }
+
+  .eyebrow{
+    font-family:var(--font-mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:#1a8a7e; margin:0 0 8px; font-weight:700;
+  }
+  h1{ font-size:clamp(22px,3.4vw,32px); line-height:1.15; margin:0 0 8px; text-wrap:balance; font-weight:800; color:var(--ink); }
+  .lede{ color:var(--text-body); margin:0; max-width:66ch; font-size:14.5px; line-height:1.55; }
+  .honesty{
+    margin-top:12px; font-family:var(--font-mono); font-size:12px; color:#5a6b7d;
+    border-left:3px solid var(--c-adf); padding-left:10px; max-width:70ch; line-height:1.55;
+  }
+
+  /* transport */
+  .transport{
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin:20px 0 14px;
+  }
+  button{ font-family:var(--font-fun); cursor:pointer; }
+  button:focus-visible, .chip:focus-visible{ outline:3px solid var(--ink); outline-offset:2px; }
+
+  .btn-primary{
+    background:var(--accent); color:#052b26; border:3px solid var(--ink); font-weight:800; font-size:14px;
+    padding:10px 20px; border-radius:999px; box-shadow:3px 3px 0 var(--ink); transition:transform .1s, box-shadow .1s, opacity .15s;
+  }
+  .btn-primary:active:not(:disabled){ transform:translate(2px,2px); box-shadow:1px 1px 0 var(--ink); }
+  .btn-primary:disabled{ opacity:.55; cursor:default; }
+
+  .btn-ghost{
+    background:#fff; color:var(--ink); border:3px solid var(--ink); font-weight:700; font-size:14px;
+    padding:10px 18px; border-radius:999px; box-shadow:3px 3px 0 var(--ink); transition:transform .1s, box-shadow .1s;
+  }
+  .btn-ghost:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 var(--ink); }
+
+  .speed{ display:flex; border:3px solid var(--ink); border-radius:999px; overflow:hidden; margin-left:auto; background:#fff; }
+  .speed button{ background:transparent; border:none; color:var(--ink); font-size:12px; font-weight:700; font-family:var(--font-mono); padding:9px 14px; }
+  .speed button[data-on="true"]{ background:var(--c-file); }
+
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; margin:0 0 18px; }
+  .chip{
+    font-family:var(--font-fun); font-weight:700; font-size:12px;
+    background:#fff; color:var(--ink); border:2.5px solid var(--ink); border-radius:999px; padding:6px 13px;
+    box-shadow:2px 2px 0 var(--ink); transition:background .2s, transform .1s, box-shadow .1s;
+  }
+  .chip:active{ transform:translate(1px,1px); box-shadow:1px 1px 0 var(--ink); }
+  .chip[data-state="active"]{ background:var(--nc,var(--accent)); }
+  .chip[data-state="done"]{ background:#f1ecd8; }
+
+  /* scene */
+  .scene-wrap{ overflow-x:auto; border:3px solid var(--ink); border-radius:20px; background:linear-gradient(var(--sky-top), var(--sky-bottom) 78%); box-shadow:5px 5px 0 rgba(32,41,58,.18); }
+  .scene{ position:relative; width:2220px; height:470px; overflow:hidden; border-radius:17px; }
+
+  .bg-cloud{ position:absolute; background:#fff; border-radius:50px; opacity:.8; filter:blur(.2px); }
+  .bg-cloud::before, .bg-cloud::after{ content:""; position:absolute; background:#fff; border-radius:50%; }
+  .cloud-a{ width:90px; height:34px; top:36px; left:120px; animation:drift 22s ease-in-out infinite alternate; }
+  .cloud-a::before{ width:46px; height:46px; top:-22px; left:10px; }
+  .cloud-a::after{ width:34px; height:34px; top:-14px; left:50px; }
+  .cloud-b{ width:70px; height:26px; top:70px; left:900px; animation:drift 26s ease-in-out infinite alternate-reverse; }
+  .cloud-b::before{ width:36px; height:36px; top:-18px; left:8px; }
+  .cloud-b::after{ width:26px; height:26px; top:-10px; left:38px; }
+  .cloud-c{ width:80px; height:30px; top:44px; left:1880px; animation:drift 19s ease-in-out infinite alternate; }
+  .cloud-c::before{ width:40px; height:40px; top:-20px; left:8px; }
+  .cloud-c::after{ width:30px; height:30px; top:-12px; left:44px; }
+  @keyframes drift{ from{ transform:translateX(0);} to{ transform:translateX(40px);} }
+
+  .sun{ position:absolute; top:24px; right:60px; width:56px; height:56px; border-radius:50%; background:#ffe27a; box-shadow:0 0 0 10px rgba(255,226,122,.35); }
+
+  .ground{ position:absolute; left:0; right:0; bottom:0; height:150px; background:var(--ground); }
+  .belt{
+    position:absolute; left:0; right:0; top:296px; height:26px; background:var(--belt);
+    background-image:repeating-linear-gradient(-45deg, var(--belt-stripe) 0 10px, transparent 10px 24px);
+    background-size:34px 26px; animation:beltMove 2.6s linear infinite; border-top:3px solid var(--ink); border-bottom:3px solid var(--ink);
+  }
+  @keyframes beltMove{ from{ background-position:0 0; } to{ background-position:34px 0; } }
+  .gate{ position:absolute; top:250px; width:6px; height:72px; background:repeating-linear-gradient(#ff6a5e 0 10px, #fff 10px 20px); border:2px solid var(--ink); border-radius:3px; }
+
+  .stage{ position:absolute; top:56px; width:200px; text-align:center; }
+  .char-wrap{ position:relative; height:190px; display:flex; align-items:flex-end; justify-content:center; animation:idleBobChar var(--bobdur,3.2s) ease-in-out infinite; }
+  .ground-shadow{ position:absolute; bottom:6px; left:50%; width:64%; height:13px; background:rgba(32,41,58,.2); border-radius:50%; transform:translateX(-50%); animation:idleShadow var(--bobdur,3.2s) ease-in-out infinite; }
+  @keyframes idleBobChar{ 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-7px);} }
+  @keyframes idleShadow{ 0%,100%{ transform:translateX(-50%) scaleX(1);} 50%{ transform:translateX(-50%) scaleX(.8);} }
+
+  .char{ width:160px; height:170px; overflow:visible; }
+  .char *{ stroke:var(--ink); stroke-width:4; stroke-linejoin:round; stroke-linecap:round; }
+  .char .no-stroke{ stroke:none; }
+  .stage[data-state="active"] .char{ animation:bounceIn .55s cubic-bezier(.34,1.56,.64,1) 1; }
+  @keyframes bounceIn{
+    0%{ transform:translateY(-34px) scale(.7); }
+    55%{ transform:translateY(6px) scale(1.08); }
+    75%{ transform:translateY(-4px) scale(.97); }
+    100%{ transform:translateY(0) scale(1); }
+  }
+
+  .plaque{
+    margin-top:6px; background:var(--panel); border:2.5px solid var(--ink); border-radius:12px;
+    padding:8px 10px 10px; box-shadow:3px 3px 0 rgba(32,41,58,.25); position:relative;
+  }
+  .plaque-title{ font-size:13px; font-weight:800; color:var(--ink); line-height:1.2; }
+  .plaque-sub{ font-family:var(--font-mono); font-size:10px; color:#5a6b7d; margin-top:2px; }
+  .pill{
+    display:inline-block; margin-top:6px; font-family:var(--font-mono); font-size:9.5px; letter-spacing:.05em;
+    padding:2px 8px; border-radius:999px; border:2px solid var(--ink); color:var(--ink); background:#fff;
+  }
+  .stage[data-state="active"] .pill{ background:var(--nc); }
+  .stage[data-state="done"] .pill{ background:#eef7ee; }
+  .stage.roadmap .plaque{ border-style:dashed; }
+
+  /* packet */
+  .packet{ position:absolute; top:284px; width:46px; height:46px; opacity:0; z-index:5; }
+  .packet-bounce{ width:100%; height:100%; }
+  .packet.bouncing .packet-bounce{ animation:packetHop .45s ease-in-out infinite; }
+  @keyframes packetHop{ 0%,100%{ transform:translateY(0) rotate(-4deg);} 50%{ transform:translateY(-16px) rotate(4deg);} }
+
+  /* ===== character-specific rigs ===== */
+  .lid{ transform-box:fill-box; transform-origin:0% 100%; }
+  .stage:not([data-state="idle"]) .lid{ animation:lidSwing var(--dur,900ms) ease-in-out 1 forwards; }
+  @keyframes lidSwing{ 0%{ transform:rotate(0);} 30%{ transform:rotate(-52deg);} 70%{ transform:rotate(-52deg);} 100%{ transform:rotate(0);} }
+
+  .stage[data-state="active"] .bolt{ animation:boltFlash .7s steps(1) 1 forwards; }
+  @keyframes boltFlash{ 0%,20%{ opacity:1;} 30%,50%{ opacity:.15;} 60%{ opacity:1;} 100%{ opacity:0;} }
+  .stage[data-state="active"] .zap-text{ animation:zapPop .8s ease-out 1 forwards; }
+  @keyframes zapPop{ 0%{ opacity:0; transform:scale(.4) rotate(-8deg);} 35%{ opacity:1; transform:scale(1.15) rotate(4deg);} 60%{ opacity:1; transform:scale(1) rotate(0);} 100%{ opacity:0; transform:scale(1);} }
+  .stage[data-state="active"] .button{ animation:pressIt .5s ease-in-out 2; }
+  @keyframes pressIt{ 0%,100%{ transform:translateY(0) scaleY(1);} 50%{ transform:translateY(6px) scaleY(.78);} }
+
+  .gear{ transform-box:fill-box; transform-origin:50% 50%; }
+  .stage[data-state="active"] .gear1{ animation:spinCW 1.3s linear infinite; }
+  .stage[data-state="active"] .gear2{ animation:spinCCW 1.7s linear infinite; }
+  .stage[data-state="active"] .gear3{ animation:spinCW 2.1s linear infinite; }
+  @keyframes spinCW{ to{ transform:rotate(360deg);} }
+  @keyframes spinCCW{ to{ transform:rotate(-360deg);} }
+  .stage[data-state="active"] .smoke{ animation:riseFade 1.8s ease-out infinite; }
+  .stage[data-state="active"] .smoke2{ animation-delay:.5s; }
+  .stage[data-state="active"] .smoke3{ animation-delay:1s; }
+  @keyframes riseFade{ 0%{ opacity:0; transform:translateY(0) scale(.5);} 30%{ opacity:.9;} 100%{ opacity:0; transform:translateY(-42px) scale(1.3);} }
+  .stage[data-state="active"] .blip{ animation:blipPulse 1s ease-in-out infinite; }
+  .stage[data-state="active"] .blip2{ animation-delay:.25s; }
+  .stage[data-state="active"] .blip3{ animation-delay:.5s; }
+  @keyframes blipPulse{ 0%,100%{ opacity:.25;} 50%{ opacity:1;} }
+
+  .liquid{ transform-box:fill-box; transform-origin:50% 100%; transform:scaleY(0); }
+  .stage:not([data-state="idle"]) .liquid{ animation:fillUp var(--dur,900ms) ease-in 1 forwards; }
+  @keyframes fillUp{ from{ transform:scaleY(0);} to{ transform:scaleY(1);} }
+  .stage[data-state="active"] .wave{ animation:wobble .5s ease-in-out infinite; transform-box:fill-box; transform-origin:50% 50%; }
+  @keyframes wobble{ 0%,100%{ transform:scaleX(1);} 50%{ transform:scaleX(1.1);} }
+
+  .pupil{ transform-box:fill-box; transform-origin:50% 50%; }
+  .stage[data-state="active"] .pupil{ animation:scanEyes 1s ease-in-out infinite alternate; }
+  @keyframes scanEyes{ from{ transform:translateX(-7px);} to{ transform:translateX(7px);} }
+
+  .stackL, .stackL2, .stackR, .stackR2{ opacity:0; transform:translateY(12px); transform-box:fill-box; }
+  .stage:not([data-state="idle"]) .stackL{ animation:popIn .35s ease-out .1s forwards; }
+  .stage:not([data-state="idle"]) .stackL2{ animation:popIn .35s ease-out .35s forwards; }
+  .stage:not([data-state="idle"]) .stackR{ animation:popIn .35s ease-out .55s forwards; }
+  .stage:not([data-state="idle"]) .stackR2{ animation:popIn .35s ease-out .8s forwards; }
+  @keyframes popIn{ from{ opacity:0; transform:translateY(12px);} to{ opacity:1; transform:translateY(0);} }
+
+  .box{ opacity:0; transform:translateY(16px); transform-box:fill-box; }
+  .stage:not([data-state="idle"]) .box1{ animation:popIn .4s ease-out .1s forwards; }
+  .stage:not([data-state="idle"]) .box2{ animation:popIn .4s ease-out .35s forwards; }
+  .stage:not([data-state="idle"]) .box3{ animation:popIn .4s ease-out .6s forwards; }
+  .forklift{ transform:translateX(30px); opacity:0; transform-box:fill-box; }
+  .stage:not([data-state="idle"]) .forklift{ animation:rollIn .5s ease-out .2s forwards; }
+  @keyframes rollIn{ to{ transform:translateX(0); opacity:1;} }
+  .wheel{ transform-box:fill-box; transform-origin:50% 50%; }
+  .stage[data-state="active"] .wheel{ animation:spinCW .5s linear infinite; }
+
+  .flag{ transform-box:fill-box; transform-origin:0% 50%; animation:wave 2.2s ease-in-out infinite; }
+  @keyframes wave{ 0%,100%{ transform:skewY(0deg);} 50%{ transform:skewY(6deg);} }
+  .sparkle{ opacity:0; transform:scale(.3) rotate(-20deg); transform-box:fill-box; transform-origin:50% 50%; }
+  .stage:not([data-state="idle"]) .sparkle{ animation:sparklePop .5s ease-out .2s forwards; }
+  @keyframes sparklePop{ to{ opacity:1; transform:scale(1) rotate(0deg);} }
+
+  /* caption */
+  .caption{ margin-top:18px; border:3px solid var(--ink); border-radius:16px; background:var(--panel); box-shadow:4px 4px 0 rgba(32,41,58,.2); overflow:hidden; }
+  .caption-head{
+    display:flex; align-items:center; justify-content:space-between; padding:9px 16px;
+    border-bottom:2.5px solid var(--ink); font-family:var(--font-mono); font-size:11.5px; color:#5a6b7d; background:#f6f1e0;
+  }
+  .caption-head .dot{ width:8px; height:8px; border-radius:50%; background:var(--c-scale); display:inline-block; margin-right:7px; }
+  .timer{ font-variant-numeric:tabular-nums; color:var(--ink); font-weight:700; }
+  .caption-body{ height:150px; overflow-y:auto; padding:12px 16px; font-family:var(--font-mono); font-size:12.5px; line-height:1.7; display:flex; flex-direction:column; gap:2px; }
+  .log-line{ display:flex; gap:10px; animation:fadeInUp .35s ease-out; }
+  .log-line .t{ color:#8a97a6; flex:none; font-variant-numeric:tabular-nums; }
+  .log-line .msg{ color:var(--ink); }
+  @keyframes fadeInUp{ from{ opacity:0; transform:translateY(4px);} to{ opacity:1; transform:translateY(0);} }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <p class="eyebrow">EDI 940 · WMS Integration</p>
+  <h1>Meet the pipeline: from EDI file to WMS tables</h1>
+  <p class="lede">Press play, or tap a character below to jump straight to that stage. Each one plays out what really happens: Blob Storage, Event Grid, Azure Data Factory, simulated Manhattan SCALE tables, and a partitioned Parquet data lake.</p>
+  <p class="honesty">⏱ Timings are compressed for pacing. In production the Azure Data Factory run (the orange machine) really does take 45–100s+ — everything else here runs sub-second, matching measured behavior.</p>
+
+  <div class="transport">
+    <button class="btn-primary" id="playBtn">▶ Run full demo</button>
+    <button class="btn-ghost" id="resetBtn">⟲ Reset</button>
+    <div class="speed" role="group" aria-label="Playback speed">
+      <button data-speed="1" data-on="true">NORMAL</button>
+      <button data-speed="2.5" data-on="false">FAST</button>
+    </div>
+  </div>
+
+  <div class="chips" id="chipsRow"></div>
+
+  <div class="scene-wrap">
+    <div class="scene" id="scene">
+      <div class="sun"></div>
+      <div class="bg-cloud cloud-a"></div>
+      <div class="bg-cloud cloud-b"></div>
+      <div class="bg-cloud cloud-c"></div>
+      <div class="ground"></div>
+      <div class="belt"></div>
+      <div class="packet" id="packet"><div class="packet-bounce">
+        <svg viewBox="0 0 40 40"><rect x="4" y="8" width="32" height="26" rx="4" fill="#fff6da" stroke="#20293a" stroke-width="3"/><path d="M4 16h32M20 8v26" stroke="#20293a" stroke-width="2.5"/></svg>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="caption">
+    <div class="caption-head">
+      <span><span class="dot"></span>Narrator</span>
+      <span class="timer" id="timer">00:00.0</span>
+    </div>
+    <div class="caption-body" id="logBody">
+      <div class="log-line"><span class="t">[00:00.0]</span><span class="msg">Ready. Tap a character, or press Run full demo.</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const STAGES = [
+    { key:'file', x:130, w:200, title:'EDI 940 File', sub:'940-DEMO-0417.edi', duration:900, color:'var(--c-file)',
+      labels:{idle:'WAITING',active:'ARRIVING',done:'RECEIVED'},
+      log:['New 940 Ship Notice received: 940-DEMO-0417.edi','ISA/GS/ST envelope validated — single transaction set'],
+      svg:`<g class="body-bob"><rect x="40" y="30" width="80" height="100" rx="10" fill="#fff6da"/><path d="M92 30 L120 58 L92 58 Z" fill="#e9d38f"/>
+        <text x="80" y="98" font-size="20" font-weight="800" fill="#20293a" text-anchor="middle" class="no-stroke">940</text>
+        <circle cx="62" cy="70" r="5" fill="#20293a" class="no-stroke"/><circle cx="98" cy="70" r="5" fill="#20293a" class="no-stroke"/>
+        <path d="M60 108 Q80 122 100 108" fill="none" stroke-width="4"/>
+        <path d="M58 130 v14 M102 130 v14" stroke-width="6"/></g>` },
+    { key:'blob', x:370, w:200, title:'Blob Storage', sub:'edi940-inbound/', duration:900, color:'var(--c-blob)',
+      labels:{idle:'EMPTY',active:'UPLOADING',done:'STORED'},
+      log:['Uploaded to edi940-inbound (hot tier, LRS replication)','Blob metadata tagged: source=EDI, docType=940'],
+      svg:`<path d="M35 70 Q80 60 125 70 L118 140 Q80 152 42 140 Z" fill="#2f9bd6"/>
+        <circle cx="63" cy="98" r="5" fill="#0e2233" class="no-stroke"/><circle cx="97" cy="98" r="5" fill="#0e2233" class="no-stroke"/>
+        <path d="M64 114 Q80 122 96 114" fill="none" stroke-width="4"/>
+        <g class="lid"><ellipse cx="80" cy="70" rx="46" ry="13" fill="#1f7fb8"/></g>` },
+    { key:'trigger', x:610, w:220, title:'Event Grid / Trigger', sub:'BlobCreated — or a click', duration:900, color:'var(--c-trigger)',
+      labels:{idle:'ARMED',active:'FIRING',done:'FIRED'},
+      log:['BlobCreated event fired → subscription edi940-pipeline-trigger','Equally valid: an analyst clicks "Run EDI Batch" — same pipeline runs'],
+      svg:`<g transform="translate(-6,-6)"><circle cx="55" cy="30" r="18" fill="#eaf6ff"/><circle cx="80" cy="20" r="22" fill="#eaf6ff"/><circle cx="105" cy="30" r="18" fill="#eaf6ff"/><rect x="45" y="26" width="70" height="20" rx="10" fill="#eaf6ff"/></g>
+        <path class="bolt" d="M85 42 L65 82 L82 82 L70 118 L108 74 L90 74 Z" fill="#ffcf3c"/>
+        <text class="zap-text no-stroke" x="112" y="55" font-weight="800" font-size="22" fill="#ff6a5e" opacity="0">ZAP!</text>
+        <rect x="70" y="128" width="20" height="18" fill="#8a97a6"/>
+        <ellipse class="button" cx="80" cy="120" rx="28" ry="15" fill="#e6483f"/><ellipse cx="80" cy="116" rx="21" ry="9" fill="#ff6a5e" class="no-stroke"/>` },
+    { key:'adf', x:850, w:210, title:'ADF Pipeline', sub:'EDI940_BlobToSQL_Pipeline', duration:4200, color:'var(--c-adf)',
+      labels:{idle:'STANDBY',active:'RUNNING',done:'SUCCEEDED'},
+      log:['ADF pipeline EDI940_BlobToSQL_Pipeline started','Get Metadata → enumerating edi940-inbound','ForEach file (batchCount 5) → Copy Activity','Prod runtime 45–100s (orchestration + startup) — compressed here for pacing'],
+      svg:`<rect x="25" y="70" width="110" height="70" rx="10" fill="#ef8a3d"/><rect x="60" y="40" width="20" height="34" fill="#d9762c"/>
+        <g class="smoke"><circle cx="70" cy="34" r="7" fill="#cfd6dd"/></g><g class="smoke smoke2"><circle cx="70" cy="34" r="7" fill="#cfd6dd"/></g><g class="smoke smoke3"><circle cx="70" cy="34" r="7" fill="#cfd6dd"/></g>
+        <circle class="gear gear1" cx="52" cy="105" r="15" fill="#8a97a6"/><circle class="gear gear2" cx="86" cy="114" r="11" fill="#6f7c8b"/><circle class="gear gear3" cx="112" cy="100" r="9" fill="#8a97a6"/>
+        <rect x="28" y="122" width="30" height="14" rx="3" fill="#20293a"/>
+        <rect class="blip no-stroke" x="32" y="126" width="5" height="6" fill="#4fe0c1"/><rect class="blip blip2 no-stroke" x="40" y="126" width="5" height="6" fill="#4fe0c1"/><rect class="blip blip3 no-stroke" x="48" y="126" width="5" height="6" fill="#4fe0c1"/>` },
+    { key:'sqlraw', x:1090, w:200, title:'SQL — Raw', sub:'dbo.EDI940_Raw', duration:900, color:'var(--c-sqlraw)',
+      labels:{idle:'EMPTY',active:'INSERTING',done:'LOADED'},
+      log:['Row inserted → dbo.EDI940_Raw (RawID, FileName, RawEDIText, LoadDateTime)','File archived + deleted from inbound container'],
+      svg:`<defs><clipPath id="siloClip"><path d="M43 46 L43 129 Q80 143 117 129 L117 46 Z"/></clipPath></defs>
+        <g clip-path="url(#siloClip)"><rect class="liquid" x="41" y="40" width="78" height="90" fill="#3f6fe0"/><ellipse class="wave" cx="80" cy="46" rx="40" ry="7" fill="#6f95ee" stroke="none"/></g>
+        <ellipse cx="80" cy="45" rx="38" ry="14" fill="none" stroke-width="4"/><path d="M42 45 L42 130 Q80 145 118 130 L118 45" fill="none" stroke-width="4"/>` },
+    { key:'parser', x:1330, w:200, title:'Parser', sub:'ST*940 segment reader', duration:1100, color:'var(--c-parser)',
+      labels:{idle:'IDLE',active:'PARSING',done:'PARSED'},
+      log:['Parsing ST*940 segments: N1, LX/W01, W66','Extracting PO#, SKU, quantity, ship-to location'],
+      svg:`<rect x="45" y="70" width="70" height="55" rx="14" fill="#7c5cff"/><circle cx="80" cy="50" r="26" fill="#8f72ff"/>
+        <circle cx="80" cy="50" r="10" fill="#fff" class="no-stroke"/><circle class="pupil" cx="80" cy="50" r="5" fill="#20293a" class="no-stroke"/>
+        <rect x="30" y="85" width="14" height="30" rx="6" fill="#6a4bde"/><rect x="116" y="85" width="14" height="30" rx="6" fill="#6a4bde"/>
+        <g class="stackL"><rect x="6" y="118" width="26" height="8" fill="#fff6da"/></g><g class="stackL2"><rect x="6" y="108" width="26" height="8" fill="#fff6da"/></g>
+        <g class="stackR"><rect x="128" y="118" width="26" height="8" fill="#dff0ff"/></g><g class="stackR2"><rect x="128" y="108" width="26" height="8" fill="#dff0ff"/></g>` },
+    { key:'scale', x:1570, w:210, title:'WMS Tables', sub:'sim. Manhattan SCALE schema', duration:900, color:'var(--c-scale)',
+      labels:{idle:'EMPTY',active:'LOADING',done:'READY'},
+      log:['Structured rows loaded → WM_ORDER, WM_ORDER_DETAIL','WMS-ready for putaway / pick planning queries'],
+      svg:`<rect x="30" y="70" width="100" height="65" fill="#a9713f"/><path d="M20 70 L80 35 L140 70 Z" fill="#8a5a30"/><rect x="68" y="100" width="24" height="35" fill="#5c3b1e"/>
+        <g class="box box1"><rect x="8" y="120" width="20" height="18" fill="#d7a05c"/></g><g class="box box2"><rect x="30" y="120" width="20" height="18" fill="#d7a05c"/></g><g class="box box3"><rect x="19" y="102" width="20" height="18" fill="#e3b876"/></g>
+        <g class="forklift"><rect x="118" y="112" width="26" height="16" rx="3" fill="#ffcf3c"/><rect x="138" y="94" width="5" height="34" fill="#8a97a6"/><circle class="wheel" cx="124" cy="132" r="6" fill="#20293a"/><circle class="wheel" cx="138" cy="132" r="6" fill="#20293a"/></g>` },
+    { key:'parquet', x:1810, w:210, title:'Data Lake', sub:'edi940-parquet/ (Hive-partitioned)', duration:900, color:'var(--c-parquet)',
+      labels:{idle:'EMPTY',active:'WRITING',done:'SAVED'},
+      log:['Reads wms.EDI940_Staging → adds year/month/day partition columns','Snappy-compressed Parquet written to edi940-parquet/ (ADLS Gen2)'],
+      svg:`<ellipse cx="80" cy="128" rx="62" ry="20" fill="#2a9db3"/><ellipse cx="80" cy="122" rx="52" ry="13" fill="#57c6dd" stroke="none"/>
+        <g class="smoke no-stroke"><circle cx="55" cy="118" r="5" fill="#eafcff"/></g><g class="smoke smoke2 no-stroke"><circle cx="95" cy="116" r="5" fill="#eafcff"/></g><g class="smoke smoke3 no-stroke"><circle cx="75" cy="120" r="4" fill="#eafcff"/></g>
+        <g class="box box1"><rect x="22" y="100" width="30" height="20" rx="3" fill="#fff6da"/><path d="M22 110h30M37 100v20" stroke-width="2"/></g>
+        <g class="box box2"><rect x="58" y="90" width="30" height="20" rx="3" fill="#fdeec2"/><path d="M58 100h30M73 90v20" stroke-width="2"/></g>
+        <g class="box box3"><rect x="94" y="102" width="30" height="20" rx="3" fill="#fff6da"/><path d="M94 112h30M109 102v20" stroke-width="2"/></g>
+        <rect x="70" y="55" width="4" height="28" fill="#8a5a30"/><path d="M74 58 L106 66 L74 74 Z" fill="#2bc4d8"/>
+        <text x="76" y="68" font-size="7" font-weight="800" fill="#fff" class="no-stroke">Y/M/D</text>` },
+    { key:'api', x:2050, w:200, title:'JSON API', sub:'next feature — on the roadmap', duration:1100, color:'var(--c-api)', roadmap:true,
+      labels:{idle:'NEXT',active:'PREVIEWING',done:'PREVIEWED'},
+      log:['Next feature (in progress): expose WM_ORDER via a JSON REST endpoint','Goal: downstream systems read order status without direct SQL access'],
+      svg:`<rect x="74" y="70" width="10" height="70" fill="#8a5a30"/><path d="M84 76 L142 90 L84 104 Z" fill="#34c98f"/>
+        <text x="90" y="94" font-size="10" font-weight="800" fill="#0e2233" class="no-stroke">JSON API</text>
+        <rect x="14" y="78" width="6" height="62" fill="#8a5a30"/><g class="flag"><path d="M20 60 L60 68 L20 80 Z" fill="#ffcf3c"/></g>
+        <g class="sparkle"><path d="M100 40 l4 9 9 4 -9 4 -4 9 -4-9-9-4 9-4z" fill="#fff3b0"/></g>` }
+  ];
+
+  const scene = document.getElementById('scene');
+  const chipsRow = document.getElementById('chipsRow');
+  const logBody = document.getElementById('logBody');
+  const timerEl = document.getElementById('timer');
+  const playBtn = document.getElementById('playBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const packet = document.getElementById('packet');
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  STAGES.forEach((s, i) => {
+    const stage = document.createElement('div');
+    stage.className = 'stage' + (s.roadmap ? ' roadmap' : '');
+    stage.id = `stage-${s.key}`;
+    stage.dataset.state = 'idle';
+    stage.style.left = (s.x - s.w/2) + 'px';
+    stage.style.width = s.w + 'px';
+    stage.style.setProperty('--nc', s.color);
+    stage.style.setProperty('--bobdur', (2.8 + (i % 3) * 0.4) + 's');
+    stage.innerHTML = `
+      <div class="char-wrap">
+        <div class="ground-shadow"></div>
+        <svg class="char" viewBox="0 0 160 170">${s.svg}</svg>
+      </div>
+      <div class="plaque">
+        <div class="plaque-title">${s.title}</div>
+        <div class="plaque-sub">${s.sub}</div>
+        <div><span class="pill">${s.labels.idle}</span></div>
+      </div>`;
+    scene.appendChild(stage);
+
+    if(i > 0 && s.roadmap){
+      const gate = document.createElement('div');
+      gate.className = 'gate';
+      gate.style.left = ((STAGES[i-1].x + s.x)/2) + 'px';
+      scene.appendChild(gate);
+    }
+  });
+
+  const chips = STAGES.map((s, i) => {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.id = `chip-${s.key}`;
+    b.dataset.state = 'idle';
+    b.style.setProperty('--nc', s.color);
+    b.textContent = s.title;
+    b.addEventListener('click', () => goToStage(i, { auto:false }));
+    chipsRow.appendChild(b);
+    return b;
+  });
+
+  let runToken = 0;
+  let playing = false;
+  let runStartTime = null;
+  let speedMult = 1;
+
+  document.querySelectorAll('.speed button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      speedMult = parseFloat(btn.dataset.speed);
+      document.querySelectorAll('.speed button').forEach(b => b.dataset.on = (b === btn) ? 'true' : 'false');
+    });
+  });
+
+  function fmtElapsed(){
+    if(runStartTime === null) return '00:00.0';
+    const s = (performance.now() - runStartTime) / 1000;
+    const m = Math.floor(s / 60);
+    const r = (s % 60).toFixed(1).padStart(4, '0');
+    return `${String(m).padStart(2,'0')}:${r}`;
+  }
+  setInterval(() => { timerEl.textContent = fmtElapsed(); }, 100);
+
+  function appendLog(text){
+    const el = document.createElement('div');
+    el.className = 'log-line';
+    el.innerHTML = `<span class="t">[${fmtElapsed()}]</span><span class="msg"></span>`;
+    el.querySelector('.msg').textContent = text;
+    logBody.appendChild(el);
+    logBody.scrollTop = logBody.scrollHeight;
+  }
+
+  function setStageState(stage, state){
+    const el = document.getElementById(`stage-${stage.key}`);
+    el.dataset.state = state;
+    el.querySelector('.pill').textContent = (state === 'done' ? '✓ ' : '') + stage.labels[state];
+    const chip = document.getElementById(`chip-${stage.key}`);
+    if(chip) chip.dataset.state = state;
+  }
+
+  function travelPacket(fromX, toX, duration){
+    if(reducedMotion){ return; }
+    packet.style.transition = 'none';
+    packet.style.left = (fromX - 23) + 'px';
+    packet.style.opacity = '1';
+    packet.classList.add('bouncing');
+    void packet.offsetWidth;
+    requestAnimationFrame(() => {
+      packet.style.transition = `left ${duration}ms cubic-bezier(.45,.05,.55,.95)`;
+      packet.style.left = (toX - 23) + 'px';
+    });
+    setTimeout(() => {
+      packet.style.opacity = '0';
+      packet.classList.remove('bouncing');
+    }, duration);
+  }
+
+  function updatePlayButton(){
+    playBtn.disabled = playing;
+    playBtn.textContent = playing ? '● Running…' : '▶ Run full demo';
+  }
+
+  function scrollToStage(stage){
+    const el = document.getElementById(`stage-${stage.key}`);
+    el.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest', inline: 'center' });
+  }
+
+  function runOneStage(i, token, auto){
+    if(token !== runToken) return;
+    const stage = STAGES[i];
+    const el = document.getElementById(`stage-${stage.key}`);
+    const dur = stage.duration / speedMult;
+    el.style.setProperty('--dur', dur + 'ms');
+    setStageState(stage, 'active');
+    scrollToStage(stage);
+    if(i > 0){
+      travelPacket(STAGES[i-1].x, stage.x, Math.min(650, dur * 0.5));
+    }
+    stage.log.forEach((line, idx) => {
+      setTimeout(() => { if(token === runToken) appendLog(line); }, idx * 450 / speedMult);
+    });
+    setTimeout(() => {
+      if(token !== runToken) return;
+      setStageState(stage, 'done');
+      if(auto && i + 1 < STAGES.length){
+        runOneStage(i + 1, token, true);
+      } else if(auto){
+        playing = false;
+        updatePlayButton();
+      }
+    }, dur);
+  }
+
+  function goToStage(i, { auto = false } = {}){
+    const token = ++runToken;
+    playing = auto;
+    updatePlayButton();
+    if(runStartTime === null) runStartTime = performance.now();
+    STAGES.forEach((s, idx) => {
+      if(idx < i) setStageState(s, 'done');
+      else if(idx > i) setStageState(s, 'idle');
+    });
+    runOneStage(i, token, auto);
+  }
+
+  playBtn.addEventListener('click', () => goToStage(0, { auto:true }));
+
+  resetBtn.addEventListener('click', () => {
+    runToken++;
+    playing = false;
+    updatePlayButton();
+    runStartTime = null;
+    packet.style.transition = 'none';
+    packet.style.opacity = '0';
+    logBody.innerHTML = '<div class="log-line"><span class="t">[00:00.0]</span><span class="msg">Ready. Tap a character, or press Run full demo.</span></div>';
+    STAGES.forEach(s => setStageState(s, 'idle'));
+  });
+
+  if(!reducedMotion){
+    setTimeout(() => goToStage(0, { auto:true }), 700);
+  }
+})();
+</script>
+</body>
+</html>

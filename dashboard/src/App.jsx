@@ -275,7 +275,7 @@ setError(
         <p>Warehouse Integration Demo</p>
         <a
           className="demo-link-btn"
-          href="https://claude.ai/code/artifact/35b4c722-d5dc-48bc-a6f9-fa6ebaf6615b"
+          href="/architecture-demo.html"
           target="_blank"
           rel="noopener noreferrer"
         >

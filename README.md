@@ -1,6 +1,6 @@
 EDI 940 to WMS Integration Platform
 
-**[▶ Watch the animated architecture walkthrough](https://claude.ai/code/artifact/35b4c722-d5dc-48bc-a6f9-fa6ebaf6615b)** — a self-running visual demo of the pipeline: EDI file → Blob → Event Grid → ADF → SQL → parsing → simulated Manhattan SCALE tables → Parquet data lake.
+**[▶ Watch the animated architecture walkthrough](https://www.edi.chrisarnett.me/architecture-demo.html)** — a self-running visual demo of the pipeline: EDI file → Blob → Event Grid → ADF → SQL → parsing → simulated Manhattan SCALE tables → Parquet data lake.
 
 End-to-end Azure integration project demonstrating EDI order ingestion, warehouse management system (WMS) integration, operational visibility, chatbot-based order lookup, and data lake reporting.
 
