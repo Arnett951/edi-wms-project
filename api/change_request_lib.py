@@ -99,6 +99,47 @@ def extract_json_block(text: str):
         return None
 
 
+STATUS_PATTERN = re.compile(r"-\s*\*\*Status:\*\*\s*(.+)")
+
+
+def get_status(text: str) -> str:
+    match = STATUS_PATTERN.search(text)
+    return match.group(1).strip() if match else ""
+
+
+def update_status(text: str, new_status: str) -> str:
+    updated, count = STATUS_PATTERN.subn(f"- **Status:** {new_status}", text, count=1)
+    if count == 0:
+        raise ValueError("Could not locate a Status line to update")
+    return updated
+
+
+def get_field(text: str, field_name: str):
+    pattern = re.compile(rf"-\s*\*\*{re.escape(field_name)}:\*\*\s*(.+)")
+    match = pattern.search(text)
+    return match.group(1).strip() if match else None
+
+
+def set_field(text: str, field_name: str, value: str) -> str:
+    """Update a top '- **Field:** value' metadata line if present, else insert
+    it right after the Status line (metadata block always starts there)."""
+    pattern = re.compile(rf"-\s*\*\*{re.escape(field_name)}:\*\*\s*.+")
+    if pattern.search(text):
+        return pattern.sub(f"- **{field_name}:** {value}", text, count=1)
+    status_pattern = re.compile(r"(-\s*\*\*Status:\*\*\s*.+\n)")
+    updated, count = status_pattern.subn(rf"\1- **{field_name}:** {value}\n", text, count=1)
+    if count == 0:
+        raise ValueError("Could not locate the Status line to insert the new field after")
+    return updated
+
+
+def append_or_replace_section(text: str, heading: str, content: str) -> str:
+    pattern = re.compile(rf"## {re.escape(heading)}\s*\n(.*?)(?=\n## |\Z)", re.DOTALL)
+    if pattern.search(text):
+        return pattern.sub(f"## {heading}\n\n{content}\n", text, count=1)
+    return text.rstrip() + f"\n\n## {heading}\n\n{content}\n"
+
+
 def compute_cost(estimated_tokens: int, config: dict):
     rate = config["cost"]["blended_rate_per_million_tokens_usd"]
     budget = config["cost"]["reference_monthly_budget_usd"]

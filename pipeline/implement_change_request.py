@@ -25,7 +25,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-import yaml
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "api"))
+import change_request_lib as cr_lib  # noqa: E402
 
 # Claude Code's own spend is capped at this multiple of the CR's own
 # estimated cost -- a real budget backstop, not just a display number.
@@ -41,25 +42,12 @@ ALLOWED_TOOLS = (
 )
 
 
-def load_config(repo_path: Path) -> dict:
-    config_path = repo_path / "api" / ".change-pipeline.yml"
-    if not config_path.exists():
-        return {"output_dir": "change-requests"}
-    with open(config_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
-
-
 def find_cr_file(repo_path: Path, config: dict, cr_number: int) -> Path:
     output_dir = repo_path / config.get("output_dir", "change-requests")
     request_file = output_dir / f"CR-{cr_number:03d}" / "request.md"
     if not request_file.exists():
         raise FileNotFoundError(f"{request_file} not found")
     return request_file
-
-
-def parse_status(text: str) -> str:
-    match = re.search(r"-\s*\*\*Status:\*\*\s*(.+)", text)
-    return match.group(1).strip() if match else ""
 
 
 def parse_title(text: str) -> str:
@@ -95,6 +83,20 @@ def create_worktree(repo_path: Path, branch_name: str) -> Path:
     if result.returncode != 0:
         raise RuntimeError(f"git worktree add failed:\n{result.stderr}")
     return worktree_path
+
+
+def check_mergeability(worktree_path: Path) -> str:
+    """Dry-run merge check against origin/main, done entirely inside the
+    disposable worktree (never touches the caller's own working directory --
+    it's fine to leave this worktree mid-merge-attempt since we abort right
+    after). Returns "Clean" or "Conflicts detected -- manual resolution needed"."""
+    subprocess.run(["git", "fetch", "origin", "main"], cwd=worktree_path, capture_output=True, text=True)
+    merge_check = subprocess.run(
+        ["git", "merge", "--no-commit", "--no-ff", "origin/main"],
+        cwd=worktree_path, capture_output=True, text=True,
+    )
+    subprocess.run(["git", "merge", "--abort"], cwd=worktree_path, capture_output=True, text=True)
+    return "Clean" if merge_check.returncode == 0 else "Conflicts detected -- manual resolution needed"
 
 
 def build_prompt(cr_number: int, branch_name: str, cr_text: str) -> str:
@@ -141,11 +143,11 @@ def main():
     args = parser.parse_args()
 
     repo_path = Path(args.repo).resolve()
-    config = load_config(repo_path)
+    config = cr_lib.load_config(repo_path / "api" / ".change-pipeline.yml")
     cr_file = find_cr_file(repo_path, config, args.cr_number)
     cr_text = cr_file.read_text(encoding="utf-8")
 
-    status = parse_status(cr_text)
+    status = cr_lib.get_status(cr_text)
     if not status.startswith("Approved"):
         print(
             f"CR-{args.cr_number:03d} is not approved (status: '{status}'). "
@@ -209,6 +211,22 @@ def main():
     print(final_message)
     if cost is not None:
         print(f"\nActual cost: ${cost:.4f} (budget was ${max_budget:.2f})")
+
+    merge_readiness = check_mergeability(worktree_path)
+    print(f"\nMerge readiness: {merge_readiness}")
+
+    # Record the branch + summary on the CR itself and advance it to Gate 2,
+    # so the Admin tab's Approve & Merge action knows what to merge and a
+    # reviewer has the agent's own account of what it did -- plus whether it's
+    # a clean one-click merge or will need manual conflict resolution -- before approving.
+    updated_text = cr_text
+    updated_text = cr_lib.set_field(updated_text, "Branch", branch_name)
+    updated_text = cr_lib.set_field(updated_text, "Merge readiness", merge_readiness)
+    updated_text = cr_lib.append_or_replace_section(
+        updated_text, "Implementation summary", final_message.strip() or "(no summary returned)"
+    )
+    updated_text = cr_lib.update_status(updated_text, "Implemented -- awaiting Gate 2 (merge approval)")
+    cr_file.write_text(updated_text, encoding="utf-8")
 
     # Best-effort compare URL so opening the PR is a single human click.
     remote = subprocess.run(["git", "remote", "get-url", "origin"], cwd=worktree_path, capture_output=True, text=True)

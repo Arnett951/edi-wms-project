@@ -7,6 +7,7 @@ from typing import Optional
 import json
 import os
 import re
+import subprocess
 import time
 import jwt
 from jwt import PyJWKClient
@@ -262,6 +263,12 @@ def parse_change_request(path: Path) -> Optional[dict]:
     result["requirements"] = extract_list_items(extract_section(text, "Requirements"))
     result["touchPoints"] = extract_list_items(extract_section(text, "Touch points"))
     result["outOfScope"] = extract_list_items(extract_section(text, "Out of scope"))
+
+    result["branch"] = cr_lib.get_field(text, "Branch")
+    result["mergeCommit"] = cr_lib.get_field(text, "Merge commit")
+    result["rollbackCommit"] = cr_lib.get_field(text, "Rollback commit")
+    result["mergeReadiness"] = cr_lib.get_field(text, "Merge readiness")
+    result["implementationSummary"] = extract_section(text, "Implementation summary") or None
     return result
 
 
@@ -389,9 +396,10 @@ def update_cr_status(cr_number: int, new_status: str) -> dict:
         raise HTTPException(status_code=404, detail=f"CR-{cr_number:03d} not found")
 
     text = request_file.read_text(encoding="utf-8")
-    updated_text, count = CR_STATUS_PATTERN.subn(f"- **Status:** {new_status}", text, count=1)
-    if count == 0:
-        raise HTTPException(status_code=500, detail="Could not locate Status line to update")
+    try:
+        updated_text = cr_lib.update_status(text, new_status)
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
     request_file.write_text(updated_text, encoding="utf-8")
     return parse_change_request(request_file)
 
@@ -408,6 +416,139 @@ def reject_change_request(cr_number: int, payload: dict = Depends(require_permis
     approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     return update_cr_status(cr_number, f"Rejected (Gate 1) by {approver} on {timestamp}")
+
+
+# ---------------------------------------------------------------------------
+# Gate 2: merge / rollback. Runs real git commands against whatever repo this
+# API process lives in. Only meaningful for a local dev API with a real git
+# checkout and push credentials -- a zip-deployed Azure App Service has
+# neither, so require_git_repo() fails those cleanly rather than pretend to
+# work. Refuses to touch `main` if the working tree is dirty, since this repo
+# is also where interactive edits happen (see the worktree fix in
+# pipeline/implement_change_request.py for the same class of problem).
+# ---------------------------------------------------------------------------
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def require_git_repo() -> Path:
+    if not (REPO_ROOT / ".git").exists():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "No git repository here (this looks like a zip-deployed API with no .git). "
+                "Merge/rollback only work against a local dev API with the real repo checked out."
+            ),
+        )
+    return REPO_ROOT
+
+
+def require_clean_working_tree(repo_root: Path):
+    result = subprocess.run(["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True)
+    if result.stdout.strip():
+        raise HTTPException(
+            status_code=409,
+            detail="Working tree has uncommitted changes -- commit or stash them before merging/rolling back.",
+        )
+
+
+def get_cr_text(cr_number: int) -> tuple[Path, str]:
+    request_file = CHANGE_REQUESTS_DIR / f"CR-{cr_number:03d}" / "request.md"
+    if not request_file.exists():
+        raise HTTPException(status_code=404, detail=f"CR-{cr_number:03d} not found")
+    return request_file, request_file.read_text(encoding="utf-8")
+
+
+def run_git(args: list, cwd: Path):
+    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail=f"`git {' '.join(args)}` failed:\n{result.stderr}")
+    return result.stdout.strip()
+
+
+@app.post("/api/change-requests/{cr_number}/merge")
+def merge_change_request(cr_number: int, payload: dict = Depends(require_permission("files.download"))):
+    repo_root = require_git_repo()
+    require_clean_working_tree(repo_root)
+    request_file, text = get_cr_text(cr_number)
+
+    status = cr_lib.get_status(text)
+    if not status.startswith("Implemented"):
+        raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} is not ready to merge (status: '{status}').")
+
+    branch = cr_lib.get_field(text, "Branch")
+    if not branch:
+        raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} has no recorded Branch to merge.")
+
+    parsed = parse_change_request(request_file)
+    title = parsed.get("title", f"CR-{cr_number:03d}") if parsed else f"CR-{cr_number:03d}"
+
+    run_git(["fetch", "origin"], repo_root)
+    run_git(["checkout", "main"], repo_root)
+    run_git(["pull", "origin", "main"], repo_root)
+
+    merge_result = subprocess.run(
+        ["git", "merge", f"origin/{branch}", "--no-ff", "-m", f"Merge CR-{cr_number:03d}: {title}"],
+        cwd=repo_root, capture_output=True, text=True,
+    )
+    if merge_result.returncode != 0:
+        subprocess.run(["git", "merge", "--abort"], cwd=repo_root, capture_output=True, text=True)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Merge conflict merging origin/{branch} into main -- resolve manually. Details:\n{merge_result.stderr}",
+        )
+
+    run_git(["push", "origin", "main"], repo_root)
+    merge_commit = run_git(["rev-parse", "HEAD"], repo_root)
+
+    approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    updated_text = cr_lib.set_field(text, "Merge commit", merge_commit)
+    updated_text = cr_lib.update_status(updated_text, f"Merged (Gate 2) by {approver} on {timestamp}")
+    request_file.write_text(updated_text, encoding="utf-8")
+
+    return parse_change_request(request_file)
+
+
+@app.post("/api/change-requests/{cr_number}/rollback")
+def rollback_change_request(cr_number: int, payload: dict = Depends(require_permission("files.download"))):
+    repo_root = require_git_repo()
+    require_clean_working_tree(repo_root)
+    request_file, text = get_cr_text(cr_number)
+
+    status = cr_lib.get_status(text)
+    if not status.startswith("Merged"):
+        raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} has not been merged -- nothing to roll back.")
+
+    merge_commit = cr_lib.get_field(text, "Merge commit")
+    if not merge_commit:
+        raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} has no recorded merge commit.")
+
+    run_git(["fetch", "origin"], repo_root)
+    run_git(["checkout", "main"], repo_root)
+    run_git(["pull", "origin", "main"], repo_root)
+
+    revert_result = subprocess.run(
+        ["git", "revert", merge_commit, "-m", "1", "--no-edit"],
+        cwd=repo_root, capture_output=True, text=True,
+    )
+    if revert_result.returncode != 0:
+        subprocess.run(["git", "revert", "--abort"], cwd=repo_root, capture_output=True, text=True)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Revert conflict on {merge_commit} -- resolve manually. Details:\n{revert_result.stderr}",
+        )
+
+    run_git(["push", "origin", "main"], repo_root)
+    revert_commit = run_git(["rev-parse", "HEAD"], repo_root)
+
+    approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    updated_text = cr_lib.set_field(text, "Rollback commit", revert_commit)
+    updated_text = cr_lib.update_status(updated_text, f"Rolled back (Gate 2) by {approver} on {timestamp}")
+    request_file.write_text(updated_text, encoding="utf-8")
+
+    return parse_change_request(request_file)
 
 
 # To check Health of the API
