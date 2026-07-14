@@ -9,3 +9,4 @@ azure-mgmt-datafactory
 azure-identity
 anthropic
 PyJWT[crypto]
+pyyaml
