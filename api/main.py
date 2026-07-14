@@ -206,6 +206,31 @@ CR_FIELD_PATTERNS = {
 CR_ORIGINAL_REQUEST_PATTERN = re.compile(r"## Original request\s*\n+>\s*(.+)")
 
 
+def extract_section(text: str, heading: str) -> str:
+    pattern = re.compile(rf"## {re.escape(heading)}\s*\n(.*?)(?=\n## |\Z)", re.DOTALL)
+    match = pattern.search(text)
+    return match.group(1).strip() if match else ""
+
+
+def extract_list_items(section_text: str) -> list:
+    return [line.strip()[2:].strip() for line in section_text.splitlines() if line.strip().startswith("- ")]
+
+
+def extract_clarification(section_text: str) -> list:
+    pairs = []
+    pending_question = None
+    for line in section_text.splitlines():
+        line = line.strip()
+        q_match = re.match(r"-\s*\*\*Q:\*\*\s*(.+)", line)
+        a_match = re.match(r"\*\*A:\*\*\s*(.+)", line)
+        if q_match:
+            pending_question = q_match.group(1).strip()
+        elif a_match and pending_question is not None:
+            pairs.append({"question": pending_question, "answer": a_match.group(1).strip()})
+            pending_question = None
+    return pairs
+
+
 def parse_change_request(path: Path) -> Optional[dict]:
     text = path.read_text(encoding="utf-8")
     title_match = CR_TITLE_PATTERN.search(text)
@@ -229,6 +254,12 @@ def parse_change_request(path: Path) -> Optional[dict]:
 
     original_match = CR_ORIGINAL_REQUEST_PATTERN.search(text)
     result["originalRequest"] = original_match.group(1).strip() if original_match else ""
+
+    result["clarification"] = extract_clarification(extract_section(text, "Clarification"))
+    result["riskNotes"] = extract_section(text, "Risk notes")
+    result["requirements"] = extract_list_items(extract_section(text, "Requirements"))
+    result["touchPoints"] = extract_list_items(extract_section(text, "Touch points"))
+    result["outOfScope"] = extract_list_items(extract_section(text, "Out of scope"))
     return result
 
 
@@ -245,6 +276,17 @@ def list_change_requests(_: dict = Depends(require_permission("files.download"))
                 results.append(parsed)
     results.sort(key=lambda cr: cr["crNumber"], reverse=True)
     return results
+
+
+@app.get("/api/change-requests/{cr_number}")
+def get_change_request(cr_number: int, _: dict = Depends(require_permission("files.download"))):
+    request_file = CHANGE_REQUESTS_DIR / f"CR-{cr_number:03d}" / "request.md"
+    if not request_file.exists():
+        raise HTTPException(status_code=404, detail=f"CR-{cr_number:03d} not found")
+    parsed = parse_change_request(request_file)
+    if not parsed:
+        raise HTTPException(status_code=500, detail=f"Could not parse CR-{cr_number:03d}")
+    return parsed
 
 
 def update_cr_status(cr_number: int, new_status: str) -> dict:
@@ -584,6 +626,33 @@ def blob_status(_: dict = Depends(require_auth)):
         "filesWaiting": files_waiting,
         "oldestAgeSeconds": oldest_age_seconds
     }
+
+# ---------------------------------------------------------------------------
+# Reports: read-only analytics endpoints. All require authentication but no
+# special RBAC permission beyond being a signed-in user.
+# ---------------------------------------------------------------------------
+
+@app.get("/api/reports/daily-volume")
+def daily_edi_volume(_: dict = Depends(require_auth)):
+    """Return count of EDI 940 files received per day for the last 30 calendar
+    days (UTC), including days with zero files."""
+    return rows("""
+        WITH DateSeries AS (
+            SELECT CAST(DATEADD(day, -n.n, CAST(GETUTCDATE() AS date)) AS date) AS [date]
+            FROM (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),
+                         (10),(11),(12),(13),(14),(15),(16),(17),(18),(19),
+                         (20),(21),(22),(23),(24),(25),(26),(27),(28),(29)) AS n(n)
+        )
+        SELECT
+            FORMAT(ds.[date], 'yyyy-MM-dd') AS [date],
+            COUNT(r.RawId) AS [count]
+        FROM DateSeries ds
+        LEFT JOIN dbo.EDI940_Raw r
+            ON CAST(r.LoadDateTime AS date) = ds.[date]
+        GROUP BY ds.[date]
+        ORDER BY ds.[date]
+    """)
+
 
 #To display the recent WMS orders in the dashboard including their status and error messages if any
 @app.get("/api/dashboard/wms-orders")
