@@ -888,6 +888,21 @@ def daily_edi_volume(_: dict = Depends(require_auth)):
     """)
 
 
+@app.get("/api/reports/inbound-files-by-customer")
+def inbound_files_by_customer(_: dict = Depends(require_auth)):
+    """Return count of inbound EDI 940 files per day (last 7 days) grouped by sender."""
+    return rows("""
+        SELECT
+            FORMAT(CAST(r.LoadDateTime AS date), 'yyyy-MM-dd') AS [date],
+            r.ISASender AS sender,
+            COUNT(*) AS [count]
+        FROM dbo.EDI940_Raw r
+        WHERE r.LoadDateTime >= DATEADD(day, -6, CAST(GETUTCDATE() AS date))
+        GROUP BY CAST(r.LoadDateTime AS date), r.ISASender
+        ORDER BY CAST(r.LoadDateTime AS date), r.ISASender
+    """)
+
+
 #To display the recent WMS orders in the dashboard including their status and error messages if any
 @app.get("/api/dashboard/wms-orders")
 def wms_orders(_: dict = Depends(require_auth)):
