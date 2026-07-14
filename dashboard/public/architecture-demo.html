@@ -147,6 +147,15 @@
   .stage[data-state="done"] .pill{ background:#eef7ee; }
   .stage.roadmap .plaque{ border-style:dashed; }
 
+  .plaque-link{
+    display:block; margin-top:7px; font-family:var(--font-mono); font-size:9.5px; font-weight:700;
+    letter-spacing:.03em; text-align:center; text-decoration:none; color:var(--ink); background:#fff;
+    border:2px solid var(--ink); border-radius:999px; padding:4px 8px; box-shadow:2px 2px 0 var(--ink);
+    transition:transform .1s, box-shadow .1s;
+  }
+  .plaque-link:hover{ background:var(--nc); }
+  .plaque-link:active{ transform:translate(1px,1px); box-shadow:1px 1px 0 var(--ink); }
+
   /* packet */
   .packet{ position:absolute; top:284px; width:46px; height:46px; opacity:0; z-index:5; }
   .packet-bounce{ width:100%; height:100%; }
@@ -348,6 +357,7 @@
         <g class="sparkle"><path d="M100 40 l4 9 9 4 -9 4 -4 9 -4-9-9-4 9-4z" fill="#fff3b0"/></g>` },
     { key:'orchestrator', x:2310, w:230, title:'AI Change Orchestrator', sub:'chat request → spec → PR → prod — the grand finale', duration:3800, color:'var(--c-orchestrator)', roadmap:true,
       labels:{idle:'ROADMAP',active:'ORCHESTRATING',done:'SHIPPED'},
+      link:{ href:'ai-pipeline-diagram.html', label:'See the full pipeline →' },
       log:['Feature/report/dashboard requested in chat — AI clarifies scope, captures requirements',
            'Impacted systems & data evaluated → structured change request drafted for approval',
            'On approval: tech spec, acceptance criteria, test cases & deployment plan generated',
@@ -399,6 +409,7 @@
         <div class="plaque-title">${s.title}</div>
         <div class="plaque-sub">${s.sub}</div>
         <div><span class="pill">${s.labels.idle}</span></div>
+        ${s.link ? `<a class="plaque-link" href="${s.link.href}" target="_blank" rel="noopener">${s.link.label}</a>` : ''}
       </div>`;
     scene.appendChild(stage);
 
