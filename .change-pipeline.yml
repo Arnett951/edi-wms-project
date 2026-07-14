@@ -7,7 +7,9 @@ stack_summary: >
   Azure Blob Storage, Azure Data Factory, deployed via GitHub Actions
   to Azure Static Web Apps + App Service.
 
-output_dir: change-requests
+# Lives inside api/ (not repo root) so it deploys with the FastAPI backend --
+# .github/workflows/deploy-api-appservice.yml only packages the api/ folder.
+output_dir: api/change-requests
 
 tiers:
   A:

@@ -27,7 +27,7 @@ required for `--dry-run`.
 
 ## Output
 
-Writes `../change-requests/CR-###/request.md`, auto-numbered from whatever
+Writes `../api/change-requests/CR-###/request.md`, auto-numbered from whatever
 CR folders already exist. Each file has the original request verbatim, any
 clarification Q&A, the tier classification, requirements, touch points,
 out-of-scope notes, and an estimated token count with a cost ratio against
@@ -47,5 +47,6 @@ python generate_change_request.py "..." --repo /path/to/other/project
 ```
 
 Reads `.change-pipeline.yml` from that repo's root if present (falls back to
-generic defaults if not) and writes its `change-requests/` folder there too --
+generic defaults if not) and writes its `<output_dir>/CR-###/` folder there
+too, per whatever `output_dir` that repo's config sets --
 this script doesn't assume it's only ever run against this project.

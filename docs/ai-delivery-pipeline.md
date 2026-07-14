@@ -122,7 +122,7 @@ limiting scope — no need to get this perfectly right.
    a scripted Anthropic API call (not yet the full Agent SDK harness — see note
    below) with a system prompt built from `.change-pipeline.yml`; asks
    clarifying questions one at a time, then writes a markdown Change Request to
-   `change-requests/CR-###/request.md` (title, tier, requirements, touch
+   `api/change-requests/CR-###/request.md` (title, tier, requirements, touch
    points, out-of-scope notes, estimated tokens, and a cost ratio against the
    configured reference budget). The CR folder *is* the change log — no
    separate database. Run with `--dry-run` to verify the file output with no

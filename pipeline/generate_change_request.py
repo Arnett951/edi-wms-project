@@ -85,14 +85,19 @@ want. Your job has two parts:
    - "touch_points": array of files/tables/systems this will likely touch
    - "out_of_scope": array of things explicitly NOT covered by this request
    - "estimated_tokens": integer, your best-effort estimate of total tokens
-     (planning + implementation + testing) needed to build this end to end
+     (planning + implementation + testing) needed to build this end to end --
+     ALWAYS a realistic non-zero estimate, even for Tier C. A Tier C request
+     still needs this number for future roadmap sizing if it's ever picked up
+     manually; "it won't be automated" is not a reason to write 0.
 
 Tier rules for this project:
 {tier_block}
 
 If the request clearly belongs to Tier C, still produce the JSON (with tier
 "C" and risk_notes explaining why) rather than refusing -- the pipeline itself
-decides what happens with a Tier C request, not you."""
+decides what happens with a Tier C request, not you. The impact analysis and
+token estimate you already did to reach that conclusion should still be
+reported, not discarded."""
 
 
 def call_claude(client, system_prompt: str, messages: list) -> str:

@@ -187,7 +187,12 @@ def revoke_demo_admin(payload: dict = Depends(require_auth)):
 # feature - see docs/ai-delivery-pipeline.md for the pipeline this serves.
 # ---------------------------------------------------------------------------
 
-CHANGE_REQUESTS_DIR = Path(__file__).resolve().parent.parent / "change-requests"
+# Overridable via env var so production can point at persistent storage
+# outside the deployed code tree (e.g. /home/change-requests on Linux App
+# Service, which survives redeploys - unlike wwwroot itself). Falls back to
+# a path alongside this file for local dev, where api/** IS the whole repo
+# checkout and there's no separate persistent volume to worry about.
+CHANGE_REQUESTS_DIR = Path(os.getenv("CHANGE_REQUESTS_DIR", str(Path(__file__).resolve().parent / "change-requests")))
 
 CR_TITLE_PATTERN = re.compile(r"^#\s*CR-(\d+):\s*(.+)$", re.MULTILINE)
 CR_STATUS_PATTERN = re.compile(r"-\s*\*\*Status:\*\*\s*(.+)")
