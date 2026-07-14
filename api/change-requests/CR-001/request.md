@@ -2,7 +2,7 @@
 
 - **Date:** 2026-07-14
 - **Tier:** A -- In scope — full pipeline
-- **Status:** Pending Gate 1 review
+- **Status:** Approved (Gate 1) by chris arnett on 2026-07-14 17:00 UTC (local test copy)
 - **Estimated tokens:** 6,000
 - **Estimated cost:** $0.04 (blended rate -- see .change-pipeline.yml)
 - **Cost ratio vs $20/mo reference budget:** 0.2%

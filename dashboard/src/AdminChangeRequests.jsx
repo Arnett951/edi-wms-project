@@ -18,11 +18,39 @@ function tierBadgeClass(tier) {
   return "bad";
 }
 
+function crCode(crNumber) {
+  return `CR-${String(crNumber).padStart(3, "0")}`;
+}
+
 export default function AdminChangeRequests() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [actioningCr, setActioningCr] = useState(null);
+  const [selectedCr, setSelectedCr] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(null);
+
+  async function openDetail(crNumber) {
+    setSelectedCr({ crNumber });
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const res = await authFetch(`${API_BASE}/api/change-requests/${crNumber}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `Failed to load ${crCode(crNumber)}.`);
+      setSelectedCr(data);
+    } catch (err) {
+      setDetailError(err.message || `Failed to load ${crCode(crNumber)}.`);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  function closeDetail() {
+    setSelectedCr(null);
+    setDetailError(null);
+  }
 
   async function loadRequests() {
     setLoading(true);
@@ -95,7 +123,11 @@ export default function AdminChangeRequests() {
             ) : (
               requests.map((cr) => (
                 <tr key={cr.crNumber}>
-                  <td>CR-{String(cr.crNumber).padStart(3, "0")}</td>
+                  <td>
+                    <button className="link-btn" onClick={() => openDetail(cr.crNumber)}>
+                      {crCode(cr.crNumber)}
+                    </button>
+                  </td>
                   <td className="file-name-cell" title={cr.originalRequest}>{cr.title}</td>
                   <td>
                     <span className={`status-badge ${tierBadgeClass(cr.tier)}`}>{cr.tier}</span>
@@ -130,6 +162,72 @@ export default function AdminChangeRequests() {
           </tbody>
         </table>
       </section>
+
+      {selectedCr && (
+        <div className="cr-modal-overlay" onClick={closeDetail}>
+          <div className="cr-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cr-modal-header">
+              <h2>{crCode(selectedCr.crNumber)}{selectedCr.title ? `: ${selectedCr.title}` : ""}</h2>
+              <button className="cr-modal-close" onClick={closeDetail} aria-label="Close">×</button>
+            </div>
+
+            {detailLoading && <p>Loading...</p>}
+            {detailError && (
+              <section className="alert"><div><strong>Error</strong><p>{detailError}</p></div></section>
+            )}
+
+            {!detailLoading && !detailError && selectedCr.status && (
+              <div className="cr-modal-body">
+                <div className="cr-modal-meta">
+                  <span className={`status-badge ${tierBadgeClass(selectedCr.tier)}`}>
+                    Tier {selectedCr.tier} -- {selectedCr.tierLabel}
+                  </span>
+                  <span className={`status-badge ${statusBadgeClass(selectedCr.status)}`}>
+                    {selectedCr.status}
+                  </span>
+                  <span className="cr-modal-meta-item">{selectedCr.date}</span>
+                  <span className="cr-modal-meta-item">{selectedCr.estimatedTokens} tokens</span>
+                  <span className="cr-modal-meta-item">${selectedCr.estimatedCost}</span>
+                  <span className="cr-modal-meta-item">{selectedCr.costRatioPct}% of budget</span>
+                </div>
+
+                <h3>Original request</h3>
+                <blockquote className="cr-modal-quote">{selectedCr.originalRequest}</blockquote>
+
+                {selectedCr.clarification?.length > 0 && (
+                  <>
+                    <h3>Clarification</h3>
+                    <dl className="cr-modal-qa">
+                      {selectedCr.clarification.map((qa, i) => (
+                        <React.Fragment key={i}>
+                          <dt>{qa.question}</dt>
+                          <dd>{qa.answer}</dd>
+                        </React.Fragment>
+                      ))}
+                    </dl>
+                  </>
+                )}
+
+                {selectedCr.riskNotes && (
+                  <>
+                    <h3>Risk notes</h3>
+                    <p className="cr-modal-risk">{selectedCr.riskNotes}</p>
+                  </>
+                )}
+
+                <h3>Requirements</h3>
+                <ul>{selectedCr.requirements?.map((item, i) => <li key={i}>{item}</li>)}</ul>
+
+                <h3>Touch points</h3>
+                <ul>{selectedCr.touchPoints?.map((item, i) => <li key={i}>{item}</li>)}</ul>
+
+                <h3>Out of scope</h3>
+                <ul>{selectedCr.outOfScope?.map((item, i) => <li key={i}>{item}</li>)}</ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
