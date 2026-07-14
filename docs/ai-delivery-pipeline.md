@@ -117,11 +117,19 @@ limiting scope — no need to get this perfectly right.
 
 ## What each stage actually is (v0, no new infra)
 
-1. **Intake & Clarification** — a Claude Agent SDK call, triggered by a script
-   or CI job, with a system prompt scoped to this repo; output is a markdown
-   Change Request committed to `change-requests/CR-###/request.md` (title,
-   tier, systems touched, requirements, explicitly out-of-scope notes). The CR
-   folder *is* the change log — no separate database.
+1. **Intake & Clarification** — **implemented** in
+   [`../pipeline/generate_change_request.py`](../pipeline/generate_change_request.py):
+   a scripted Anthropic API call (not yet the full Agent SDK harness — see note
+   below) with a system prompt built from `.change-pipeline.yml`; asks
+   clarifying questions one at a time, then writes a markdown Change Request to
+   `change-requests/CR-###/request.md` (title, tier, requirements, touch
+   points, out-of-scope notes, estimated tokens, and a cost ratio against the
+   configured reference budget). The CR folder *is* the change log — no
+   separate database. Run with `--dry-run` to verify the file output with no
+   API cost. Currently uses the plain Anthropic Python SDK directly rather
+   than the Claude Agent SDK proper (no file-edit/git tools yet — this stage
+   only reasons and writes one file) — that distinction matters more once
+   Implementation (stage 5) needs real tool access.
 2. **Gate 1 (Scope Approval)** — you read `request.md`, edit or approve inline,
    or it gets rejected if Tier C.
 3. **Spec Generation** — same session, on approval, writes `spec.md`,

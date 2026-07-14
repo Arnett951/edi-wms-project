@@ -161,6 +161,14 @@ button:disabled {
   height: 280px;
 }
 
+.admin-lede {
+  color: var(--text-secondary, #6b7482);
+  font-size: 13.5px;
+  line-height: 1.6;
+  max-width: 70ch;
+  margin: 0 0 14px;
+}
+
 .grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

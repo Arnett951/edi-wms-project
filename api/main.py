@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
+from pathlib import Path
 from typing import Optional
 import json
 import os
@@ -176,6 +177,97 @@ def revoke_demo_admin(payload: dict = Depends(require_auth)):
         )
         conn.commit()
     return {"permissions": get_user_permissions(user_oid)}
+
+
+# ---------------------------------------------------------------------------
+# Change request review (pipeline Gate 1) - lists and approves/rejects the
+# markdown Change Requests written by pipeline/generate_change_request.py.
+# Reuses the existing files.download permission as the "admin" gate rather
+# than adding a new RBAC permission + seed migration for this demo-scale
+# feature - see docs/ai-delivery-pipeline.md for the pipeline this serves.
+# ---------------------------------------------------------------------------
+
+CHANGE_REQUESTS_DIR = Path(__file__).resolve().parent.parent / "change-requests"
+
+CR_TITLE_PATTERN = re.compile(r"^#\s*CR-(\d+):\s*(.+)$", re.MULTILINE)
+CR_STATUS_PATTERN = re.compile(r"-\s*\*\*Status:\*\*\s*(.+)")
+CR_FIELD_PATTERNS = {
+    "date": re.compile(r"-\s*\*\*Date:\*\*\s*(.+)"),
+    "tier": re.compile(r"-\s*\*\*Tier:\*\*\s*(\w)\s*--\s*(.+)"),
+    "estimatedTokens": re.compile(r"-\s*\*\*Estimated tokens:\*\*\s*([\d,]+)"),
+    "estimatedCost": re.compile(r"-\s*\*\*Estimated cost:\*\*\s*\$([\d.]+)"),
+    "costRatioPct": re.compile(r"-\s*\*\*Cost ratio.*?:\*\*\s*([\d.]+)%"),
+}
+CR_ORIGINAL_REQUEST_PATTERN = re.compile(r"## Original request\s*\n+>\s*(.+)")
+
+
+def parse_change_request(path: Path) -> Optional[dict]:
+    text = path.read_text(encoding="utf-8")
+    title_match = CR_TITLE_PATTERN.search(text)
+    if not title_match:
+        return None
+
+    result = {"crNumber": int(title_match.group(1)), "title": title_match.group(2).strip()}
+
+    status_match = CR_STATUS_PATTERN.search(text)
+    result["status"] = status_match.group(1).strip() if status_match else "Unknown"
+
+    for key, pattern in CR_FIELD_PATTERNS.items():
+        match = pattern.search(text)
+        if not match:
+            continue
+        if key == "tier":
+            result["tier"] = match.group(1)
+            result["tierLabel"] = match.group(2).strip()
+        else:
+            result[key] = match.group(1).strip()
+
+    original_match = CR_ORIGINAL_REQUEST_PATTERN.search(text)
+    result["originalRequest"] = original_match.group(1).strip() if original_match else ""
+    return result
+
+
+@app.get("/api/change-requests")
+def list_change_requests(_: dict = Depends(require_permission("files.download"))):
+    if not CHANGE_REQUESTS_DIR.exists():
+        return []
+    results = []
+    for folder in CHANGE_REQUESTS_DIR.iterdir():
+        request_file = folder / "request.md"
+        if folder.is_dir() and request_file.exists():
+            parsed = parse_change_request(request_file)
+            if parsed:
+                results.append(parsed)
+    results.sort(key=lambda cr: cr["crNumber"], reverse=True)
+    return results
+
+
+def update_cr_status(cr_number: int, new_status: str) -> dict:
+    folder = CHANGE_REQUESTS_DIR / f"CR-{cr_number:03d}"
+    request_file = folder / "request.md"
+    if not request_file.exists():
+        raise HTTPException(status_code=404, detail=f"CR-{cr_number:03d} not found")
+
+    text = request_file.read_text(encoding="utf-8")
+    updated_text, count = CR_STATUS_PATTERN.subn(f"- **Status:** {new_status}", text, count=1)
+    if count == 0:
+        raise HTTPException(status_code=500, detail="Could not locate Status line to update")
+    request_file.write_text(updated_text, encoding="utf-8")
+    return parse_change_request(request_file)
+
+
+@app.post("/api/change-requests/{cr_number}/approve")
+def approve_change_request(cr_number: int, payload: dict = Depends(require_permission("files.download"))):
+    approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    return update_cr_status(cr_number, f"Approved (Gate 1) by {approver} on {timestamp}")
+
+
+@app.post("/api/change-requests/{cr_number}/reject")
+def reject_change_request(cr_number: int, payload: dict = Depends(require_permission("files.download"))):
+    approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    return update_cr_status(cr_number, f"Rejected (Gate 1) by {approver} on {timestamp}")
 
 
 # To check Health of the API

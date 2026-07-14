@@ -1,0 +1,39 @@
+# Config for pipeline/generate_change_request.py — describes THIS repo so the
+# intake tool stays generic and can eventually be pointed at other projects.
+
+project_name: EDI 940 / WMS Integration Dashboard
+stack_summary: >
+  FastAPI (Python) API + React/Vite dashboard, Azure SQL Database,
+  Azure Blob Storage, Azure Data Factory, deployed via GitHub Actions
+  to Azure Static Web Apps + App Service.
+
+output_dir: change-requests
+
+tiers:
+  A:
+    label: In scope — full pipeline
+    examples:
+      - New SQL view or query
+      - New dashboard chart on existing tables
+      - New read-only API GET endpoint
+  B:
+    label: Semi-automated — extra reviewer attention at Gate 1
+    examples:
+      - Additive schema change (new table/column, no drops/renames)
+      - New ADF pipeline step
+      - New scheduled job
+  C:
+    label: Excluded — auto-denied, handle manually
+    examples:
+      - Anything touching auth/security
+      - Schema drops or renames
+      - New Azure resources or secrets
+      - Production data-mutation logic
+
+cost:
+  reference_monthly_budget_usd: 20
+  # PLACEHOLDER blended rate — confirm against https://www.anthropic.com/pricing
+  # before trusting the dollar figures this tool prints. This is a sizing
+  # proxy, not literal billing (actual usage may run through a Pro/Max
+  # subscription rather than the metered API).
+  blended_rate_per_million_tokens_usd: 6.0
