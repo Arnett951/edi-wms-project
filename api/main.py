@@ -955,7 +955,7 @@ def chat(request: ChatRequest, http_request: Request, payload: dict = Depends(re
                 "matches": [],
                 "source": "regex",
             }
-        return {**file_download_handler(), "source": "regex"}
+        return {**file_download_handler(), "source": "ai"}
 
     isa_match = ISA_PATTERN.search(question)
     if isa_match:

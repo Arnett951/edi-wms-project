@@ -95,7 +95,7 @@
 <div class="wrap">
   <p class="eyebrow">EDI 940 · WMS Integration</p>
   <h1>Human-governed autonomous delivery pipeline</h1>
-  <p class="lede">The chat-driven "request a feature, review it, ship it" process already used in this project — written down as a named sequence with two human checkpoints. No new infrastructure: every AI stage is a Claude Code session; every gate is a point where a person reads before continuing.</p>
+  <p class="lede">The "request a feature, review it, ship it" process already used in this project, extended into an automated version. Each AI stage is a Claude Agent SDK call — invoked from a script or CI job, not an interactive chat — running inside its own scope until it finishes or hits a gate. Every gate is still a point where a person reads before continuing.</p>
 
   <div class="legend">
     <span><i class="swatch sw-human"></i>Human checkpoint</span>

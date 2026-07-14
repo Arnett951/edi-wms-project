@@ -3,10 +3,14 @@
 Three versions of the same idea, in increasing order of ambition:
 
 1. **Minimal 2-gate pipeline** (below) — the manual process already happening in
-   this chat, formalized on paper with zero new tooling. Cheapest to demonstrate.
+   this chat, formalized on paper with zero new tooling. This one really is an
+   interactive Claude Code session, typed by a person, every time. Cheapest to
+   demonstrate.
 2. **v0 rough draft** (further down) — adds a scope limiter, a written paper
-   trail per change, and 4–5 gates. Still leans entirely on Claude Code as the
-   executor, no custom infra.
+   trail per change, and 4–5 gates. Every AI stage is a **Claude Agent SDK
+   call, invoked programmatically from a script or CI job — not an interactive
+   chat session.** No custom orchestrator, sandbox, or agent harness beyond
+   that SDK call itself.
 3. **Long-form enterprise vision** — the full change-management platform (chat
    intake service, DB-backed change requests, automated security/regression
    pipelines, staged promotion with rollback) discussed as the ultimate goal.
@@ -15,8 +19,10 @@ Three versions of the same idea, in increasing order of ambition:
 ## Minimal 2-gate pipeline — what's already running, formalized
 
 No new tooling, no CI, no staging environment. Just two named checkpoints around
-a single Claude Code session — the same shape this conversation has already
-followed for every change so far.
+a single interactive Claude Code session — you typing in chat, same as this
+conversation — not an API integration. That distinction matters: this version
+is a person opening Claude Code by hand every time; the v0 draft below is the
+version where that gets replaced by code.
 
 ```
 [AI] Intake & Planning
@@ -51,16 +57,21 @@ formalized so it can be pointed to and explained, not new infrastructure.
 
 Scoped-down version of the "chat request → production" concept illustrated in the
 architecture demo's finale stage. This is **not** an enterprise change-management
-system — it's a personal-project pipeline that leans entirely on the Claude Agent
-SDK / Claude Code as the executor, with a human gate before every irreversible step.
+system — it's a personal-project pipeline that leans entirely on the **Claude
+Agent SDK, called from code**, with a human gate before every irreversible step.
 
 ## Design principle
 
-Don't build a custom orchestrator, sandbox, or agent harness. Claude Code / the
-Claude Agent SDK already *is* the execution engine — "assign to a coding agent" is
-just running a scoped session with the approved spec as its prompt. The only new
-things to build are: (1) a scope limiter so risky requests never get automated,
-and (2) a paper trail (Change Request docs in-repo) that ties each gate together.
+Don't build a custom orchestrator, sandbox, or agent harness. The Claude Agent
+SDK already *is* the execution engine — "assign to a coding agent" means a
+script or CI step calls the SDK programmatically (system prompt scoped to this
+repo, tools limited to file edit + git + `gh` CLI) and it runs unattended until
+it finishes or hits a gate. No person opens a terminal to type the prompt — that
+manual version is the separate "minimal 2-gate pipeline" above. The only new
+things to build here are: (1) the SDK invocation harness itself (auth, tool
+scoping, a CLI/script wrapper, capturing output back into the CR record),
+(2) a scope limiter so risky requests never get automated, and (3) a paper
+trail (Change Request docs in-repo) that ties each gate together.
 
 ## Scope limiter — which requests are even eligible
 
@@ -106,20 +117,20 @@ limiting scope — no need to get this perfectly right.
 
 ## What each stage actually is (v0, no new infra)
 
-1. **Intake & Clarification** — a Claude Code session with a system prompt scoped
-   to this repo; output is a markdown Change Request committed to
-   `change-requests/CR-###/request.md` (title, tier, systems touched,
-   requirements, explicitly out-of-scope notes). The CR folder *is* the change
-   log — no separate database.
+1. **Intake & Clarification** — a Claude Agent SDK call, triggered by a script
+   or CI job, with a system prompt scoped to this repo; output is a markdown
+   Change Request committed to `change-requests/CR-###/request.md` (title,
+   tier, systems touched, requirements, explicitly out-of-scope notes). The CR
+   folder *is* the change log — no separate database.
 2. **Gate 1 (Scope Approval)** — you read `request.md`, edit or approve inline,
    or it gets rejected if Tier C.
 3. **Spec Generation** — same session, on approval, writes `spec.md`,
    `acceptance-criteria.md`, `test-cases.md`, `rollback.md` into the CR folder.
 4. **Gate 2 (Spec Approval)** — read those four files before any code changes.
    Cheapest gate to reverse a misunderstanding.
-5. **Implementation** — a Claude Code session (or a subagent) implements exactly
-   what's in `spec.md`, on a branch named `cr-###-<slug>`, commits reference
-   `CR-###`.
+5. **Implementation** — another Claude Agent SDK call (same harness, different
+   prompt) implements exactly what's in `spec.md`, on a branch named
+   `cr-###-<slug>`, commits reference `CR-###`.
 6. **Automated Checks** — existing lint + test suite (pytest/vitest), plus a
    lightweight data-validation script (row-count/schema sanity check against a
    WMS test dataset). No custom security tooling for v0 — rely on GitHub's
@@ -140,13 +151,30 @@ limiting scope — no need to get this perfectly right.
 ## What this cuts from the original estimate
 
 The expensive piece from the full estimate — a custom coding-agent orchestrator
-with its own sandboxing and guardrails — disappears entirely, since Claude Code
-sessions (run by you, on demand, per stage) *are* the orchestrator. What's left
-to actually build is small: the Tier classifier prompt, the CR folder template,
-and wiring the existing GitHub Actions workflow to a staging slot plus a
-promotion step. That's realistically **8–14 sessions / roughly 700k–1.2M
-tokens** for a working v0 — not the 45–72 sessions estimated for the full
-enterprise version.
+with its own sandboxing and guardrails — disappears entirely, since Claude
+Agent SDK calls *are* the orchestrator. What's left to actually build:
+
+| Component | Sessions | Tokens |
+|---|---|---|
+| Claude Agent SDK invocation harness (auth, tool scoping, CLI/script wrapper, output capture into the CR record) — shared by every AI stage | 2–3 | 200k–350k |
+| Chat intake + requirements generation prompt | 1–2 | 100k–150k |
+| Impact analysis + blast-radius (Tier) classifier prompt | 1 | 80k–120k |
+| Gate 1 wiring (CR record, approval capture) | 1 | 80k–120k |
+| Implementation-stage prompt (reuses the harness) | 1 | 60k–100k |
+| Git branch + PR automation | 1–2 | 100k–150k |
+| Automated checks (lint, test suite, data-validation script) | 2–3 | 150k–250k |
+| Staging deploy (extend existing GitHub Actions workflow) | 1–2 | 100k–150k |
+| Gate 2 / UAT capture | 1 | 80k–120k |
+| Production promotion | 1 | 60k–100k |
+| Monitoring & rollback (reuse existing) | 1 | 60k–100k |
+| Integration + end-to-end dry run | 1–2 | 100k–150k |
+| **Total** | **~14–20 sessions** | **~1.17M–1.8M tokens** |
+
+That's up slightly from the earlier 8–14 / 700k–1.2M estimate — that number
+didn't call out the SDK invocation harness as its own line item, and building
+a real programmatic wrapper (not just writing prompts) is genuine engineering
+work. Still nowhere near the 45–72 sessions estimated for the full enterprise
+version.
 
 ## Open questions for v1+ (explicitly deferred)
 
