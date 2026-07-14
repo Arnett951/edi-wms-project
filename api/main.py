@@ -444,7 +444,7 @@ def require_git_repo() -> Path:
 
 
 def require_clean_working_tree(repo_root: Path):
-    result = subprocess.run(["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True)
+    result = subprocess.run(["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True, encoding="utf-8")
     if result.stdout.strip():
         raise HTTPException(
             status_code=409,
@@ -460,7 +460,7 @@ def get_cr_text(cr_number: int) -> tuple[Path, str]:
 
 
 def run_git(args: list, cwd: Path):
-    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8")
     if result.returncode != 0:
         raise HTTPException(status_code=500, detail=f"`git {' '.join(args)}` failed:\n{result.stderr}")
     return result.stdout.strip()
@@ -489,10 +489,10 @@ def merge_change_request(cr_number: int, payload: dict = Depends(require_permiss
 
     merge_result = subprocess.run(
         ["git", "merge", f"origin/{branch}", "--no-ff", "-m", f"Merge CR-{cr_number:03d}: {title}"],
-        cwd=repo_root, capture_output=True, text=True,
+        cwd=repo_root, capture_output=True, text=True, encoding="utf-8",
     )
     if merge_result.returncode != 0:
-        subprocess.run(["git", "merge", "--abort"], cwd=repo_root, capture_output=True, text=True)
+        subprocess.run(["git", "merge", "--abort"], cwd=repo_root, capture_output=True, text=True, encoding="utf-8")
         raise HTTPException(
             status_code=409,
             detail=f"Merge conflict merging origin/{branch} into main -- resolve manually. Details:\n{merge_result.stderr}",
@@ -530,10 +530,10 @@ def rollback_change_request(cr_number: int, payload: dict = Depends(require_perm
 
     revert_result = subprocess.run(
         ["git", "revert", merge_commit, "-m", "1", "--no-edit"],
-        cwd=repo_root, capture_output=True, text=True,
+        cwd=repo_root, capture_output=True, text=True, encoding="utf-8",
     )
     if revert_result.returncode != 0:
-        subprocess.run(["git", "revert", "--abort"], cwd=repo_root, capture_output=True, text=True)
+        subprocess.run(["git", "revert", "--abort"], cwd=repo_root, capture_output=True, text=True, encoding="utf-8")
         raise HTTPException(
             status_code=409,
             detail=f"Revert conflict on {merge_commit} -- resolve manually. Details:\n{revert_result.stderr}",

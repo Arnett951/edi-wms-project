@@ -78,7 +78,7 @@ def create_worktree(repo_path: Path, branch_name: str) -> Path:
     worktree_root.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(
         ["git", "worktree", "add", str(worktree_path), "-b", branch_name],
-        cwd=repo_path, capture_output=True, text=True,
+        cwd=repo_path, capture_output=True, text=True, encoding="utf-8",
     )
     if result.returncode != 0:
         raise RuntimeError(f"git worktree add failed:\n{result.stderr}")
@@ -90,12 +90,12 @@ def check_mergeability(worktree_path: Path) -> str:
     disposable worktree (never touches the caller's own working directory --
     it's fine to leave this worktree mid-merge-attempt since we abort right
     after). Returns "Clean" or "Conflicts detected -- manual resolution needed"."""
-    subprocess.run(["git", "fetch", "origin", "main"], cwd=worktree_path, capture_output=True, text=True)
+    subprocess.run(["git", "fetch", "origin", "main"], cwd=worktree_path, capture_output=True, text=True, encoding="utf-8")
     merge_check = subprocess.run(
         ["git", "merge", "--no-commit", "--no-ff", "origin/main"],
-        cwd=worktree_path, capture_output=True, text=True,
+        cwd=worktree_path, capture_output=True, text=True, encoding="utf-8",
     )
-    subprocess.run(["git", "merge", "--abort"], cwd=worktree_path, capture_output=True, text=True)
+    subprocess.run(["git", "merge", "--abort"], cwd=worktree_path, capture_output=True, text=True, encoding="utf-8")
     return "Clean" if merge_check.returncode == 0 else "Conflicts detected -- manual resolution needed"
 
 
@@ -180,7 +180,10 @@ def main():
         "--max-budget-usd", str(max_budget),
         "--add-dir", str(worktree_path),
     ]
-    result = subprocess.run(cmd, cwd=worktree_path, capture_output=True, text=True)
+    # Explicit UTF-8: Windows' default subprocess text-mode encoding (the
+    # system ANSI codepage) mangles Claude Code's em-dashes and other
+    # multi-byte UTF-8 output into mojibake otherwise.
+    result = subprocess.run(cmd, cwd=worktree_path, capture_output=True, text=True, encoding="utf-8")
 
     # Non-zero exit doesn't mean nothing happened -- e.g. hitting
     # --max-budget-usd right after the task finishes still exits non-zero.
@@ -229,7 +232,7 @@ def main():
     cr_file.write_text(updated_text, encoding="utf-8")
 
     # Best-effort compare URL so opening the PR is a single human click.
-    remote = subprocess.run(["git", "remote", "get-url", "origin"], cwd=worktree_path, capture_output=True, text=True)
+    remote = subprocess.run(["git", "remote", "get-url", "origin"], cwd=worktree_path, capture_output=True, text=True, encoding="utf-8")
     match = re.search(r"github\.com[:/]([^/]+)/([^/.]+)", remote.stdout.strip())
     if match:
         owner, repo_name = match.groups()
