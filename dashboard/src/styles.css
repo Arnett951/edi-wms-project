@@ -475,6 +475,29 @@ td {
   overflow-y: auto;
 }
 
+.chat-mode-toggle {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid #e5e8ec;
+  padding-bottom: 12px;
+}
+
+.chat-mode-toggle button {
+  background: none;
+  border: 1px solid #d5d9de;
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #5a6472;
+}
+
+.chat-mode-toggle button.chat-mode-active {
+  background: #1f2937;
+  border-color: #1f2937;
+  color: #fff;
+}
+
 .chat-side-panel .chat-close {
   width: 36px;
   height: 36px;

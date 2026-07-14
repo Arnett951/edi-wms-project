@@ -18,6 +18,8 @@ import requests
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.datafactory import DataFactoryManagementClient
 from anthropic import Anthropic
+from typing import List
+import change_request_lib as cr_lib
 
 # Explicit path (relative to this file, not the process's working directory) -
 # load_dotenv()'s default search depends on cwd, which is unreliable across
@@ -261,6 +263,97 @@ def parse_change_request(path: Path) -> Optional[dict]:
     result["touchPoints"] = extract_list_items(extract_section(text, "Touch points"))
     result["outOfScope"] = extract_list_items(extract_section(text, "Out of scope"))
     return result
+
+
+# Loaded once at import time -- .change-pipeline.yml rarely changes, and this
+# avoids a file read on every intake message.
+CR_PIPELINE_CONFIG = cr_lib.load_config(Path(__file__).resolve().parent / ".change-pipeline.yml")
+CR_INTAKE_SYSTEM_PROMPT = cr_lib.build_system_prompt(CR_PIPELINE_CONFIG)
+
+
+class IntakeHistoryTurn(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+
+
+class IntakeRequest(BaseModel):
+    message: str
+    history: List[IntakeHistoryTurn] = []
+
+
+@app.post("/api/change-requests/intake")
+def change_request_intake(
+    request: IntakeRequest,
+    http_request: Request,
+    payload: dict = Depends(require_auth),
+):
+    # Open to any signed-in user, not admin-gated -- submitting a request is
+    # the "Business user" role in the pipeline design; only approving it
+    # (Gate 1) is admin-gated. Shares the AI chat fallback's rate limit since
+    # both are the same kind of cost-incurring, publicly-reachable AI path.
+    if not _anthropic_client:
+        raise HTTPException(status_code=503, detail="AI intake is not configured on this deployment.")
+    if is_ai_rate_limited(get_client_ip(http_request)):
+        raise HTTPException(status_code=429, detail="Too many AI requests this hour. Try again later.")
+
+    messages = [{"role": turn.role, "content": turn.content} for turn in request.history]
+    messages.append({"role": "user", "content": request.message})
+
+    try:
+        response = _anthropic_client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=1500,
+            system=CR_INTAKE_SYSTEM_PROMPT,
+            messages=messages,
+        )
+    except Exception as exc:
+        print(f"[change-request-intake] error: {exc}")
+        raise HTTPException(status_code=502, detail="AI intake call failed. Try again.")
+
+    reply = "".join(block.text for block in response.content if block.type == "text")
+    cr_data = cr_lib.extract_json_block(reply)
+
+    if cr_data is None:
+        question = reply.strip()
+        if question.startswith("QUESTION:"):
+            question = question[len("QUESTION:"):].strip()
+        return {"type": "question", "text": question}
+
+    # Original request = the first user turn in the conversation, not this
+    # final message (which is just the answer to the last clarifying question).
+    original_request = request.history[0].content if request.history else request.message
+
+    # messages alternates user(0), assistant(1), user(2), assistant(3), ... --
+    # index 0 is the original request, so (question, answer) pairs start at
+    # the first assistant turn (index 1) and step by 2.
+    transcript = []
+    for i in range(1, len(messages) - 1, 2):
+        question = messages[i]["content"].strip()
+        if question.startswith("QUESTION:"):
+            question = question[len("QUESTION:"):].strip()
+        transcript.append((question, messages[i + 1]["content"]))
+
+    dollars, ratio_pct = cr_lib.compute_cost(cr_data.get("estimated_tokens", 0), CR_PIPELINE_CONFIG)
+    output_dir = CHANGE_REQUESTS_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cr_number = cr_lib.next_cr_number(output_dir)
+    cr_folder = output_dir / f"CR-{cr_number:03d}"
+    cr_folder.mkdir(parents=True, exist_ok=True)
+
+    markdown = cr_lib.render_markdown(
+        cr_number, original_request, transcript, cr_data, dollars, ratio_pct, CR_PIPELINE_CONFIG
+    )
+    (cr_folder / "request.md").write_text(markdown, encoding="utf-8")
+
+    return {
+        "type": "complete",
+        "crNumber": cr_number,
+        "title": cr_data.get("title"),
+        "tier": cr_data.get("tier"),
+        "estimatedTokens": cr_data.get("estimated_tokens", 0),
+        "estimatedCost": round(dollars, 2),
+        "costRatioPct": round(ratio_pct, 1),
+    }
 
 
 @app.get("/api/change-requests")

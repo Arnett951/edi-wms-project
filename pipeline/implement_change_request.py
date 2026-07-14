@@ -42,7 +42,7 @@ ALLOWED_TOOLS = (
 
 
 def load_config(repo_path: Path) -> dict:
-    config_path = repo_path / ".change-pipeline.yml"
+    config_path = repo_path / "api" / ".change-pipeline.yml"
     if not config_path.exists():
         return {"output_dir": "change-requests"}
     with open(config_path, "r", encoding="utf-8") as f:
