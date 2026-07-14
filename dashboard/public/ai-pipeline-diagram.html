@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Human-Governed Autonomous Delivery Pipeline</title>
+<style>
+  :root{
+    --bg:#f7f5ef; --panel:#ffffff; --ink:#20293a; --text:#3d4553; --muted:#6b7482;
+    --line:#c9cdd4; --border:#20293a;
+    --human-bg:#fdf1d8; --human-text:#8a5a06; --human-border:#e3a53c;
+    --ai-bg:#e1f5ee; --ai-text:#0f6e56; --ai-border:#5dcaa5;
+    --pipe-bg:#e6f1fb; --pipe-text:#0c447c; --pipe-border:#85b7eb;
+    --mon-bg:#eaf3de; --mon-text:#27500a; --mon-border:#97c459;
+    --risk-bg:#fcebeb; --risk-text:#791f1f; --risk-border:#e24b4a;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#181c22; --panel:#20252d; --ink:#e8eaee; --text:#c7ccd4; --muted:#8b93a1;
+      --line:#3a4048; --border:#454c56;
+      --human-bg:#3a2c0f; --human-text:#f5c765; --human-border:#8a5a06;
+      --ai-bg:#123329; --ai-text:#7fe3c0; --ai-border:#0f6e56;
+      --pipe-bg:#122540; --pipe-text:#8fc4f7; --pipe-border:#185fa5;
+      --mon-bg:#1e2a10; --mon-text:#b6e07a; --mon-border:#3b6d11;
+      --risk-bg:#3a1414; --risk-text:#f7b8b8; --risk-border:#a32d2d;
+    }
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:"Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ max-width:620px; margin:0 auto; padding:40px 20px 70px; }
+  .eyebrow{
+    font-family:ui-monospace, "Cascadia Mono", Consolas, monospace; font-size:12px;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--ai-text); font-weight:700; margin:0 0 8px;
+  }
+  h1{ font-size:clamp(20px,3vw,28px); line-height:1.2; margin:0 0 10px; color:var(--ink); font-weight:800; }
+  .lede{ margin:0 0 22px; font-size:14.5px; line-height:1.6; max-width:56ch; }
+  .legend{ display:flex; flex-wrap:wrap; gap:8px 14px; margin:0 0 30px; font-size:12px; }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; color:var(--muted); }
+  .swatch{ width:11px; height:11px; border-radius:3px; display:inline-block; }
+  .sw-human{ background:var(--human-border); }
+  .sw-ai{ background:var(--ai-border); }
+  .sw-pipe{ background:var(--pipe-border); }
+  .sw-mon{ background:var(--mon-border); }
+  .sw-risk{ background:var(--risk-border); }
+
+  .stages{ list-style:none; margin:0; padding:0; }
+  .stage{
+    background:var(--panel); border:2px solid var(--border); border-radius:14px;
+    padding:14px 18px; box-shadow:3px 3px 0 rgba(0,0,0,.06);
+  }
+  .stage .title{ font-weight:800; font-size:15px; color:var(--ink); }
+  .stage .sub{ font-size:12.5px; color:var(--muted); margin-top:3px; }
+  .stage .tag{
+    display:inline-block; font-family:ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; font-weight:700;
+    padding:2px 8px; border-radius:999px; margin-bottom:6px;
+  }
+  .cat-human{ border-color:var(--human-border); }
+  .cat-human .tag{ background:var(--human-bg); color:var(--human-text); }
+  .cat-ai{ border-color:var(--ai-border); }
+  .cat-ai .tag{ background:var(--ai-bg); color:var(--ai-text); }
+  .cat-pipe{ border-color:var(--pipe-border); }
+  .cat-pipe .tag{ background:var(--pipe-bg); color:var(--pipe-text); }
+  .cat-mon{ border-color:var(--mon-border); }
+  .cat-mon .tag{ background:var(--mon-bg); color:var(--mon-text); }
+  .cat-risk{ border-color:var(--risk-border); }
+  .cat-risk .tag{ background:var(--risk-bg); color:var(--risk-text); }
+
+  .gate{ border-style:dashed; }
+
+  .connector{ display:flex; justify-content:center; padding:6px 0; }
+  .connector svg{ display:block; }
+  .connector path{ stroke:var(--line); }
+  .connector polygon{ fill:var(--line); }
+
+  .branch-row{ display:flex; align-items:stretch; gap:14px; flex-wrap:wrap; }
+  .branch-row .stage{ flex:1 1 260px; margin:0; }
+  .deny-box{
+    flex:1 1 220px; align-self:center; border:2px dashed var(--risk-border); border-radius:14px;
+    padding:12px 14px; background:var(--risk-bg);
+  }
+  .deny-box .deny-lead{
+    font-family:ui-monospace, "Cascadia Mono", Consolas, monospace; font-size:10.5px;
+    color:var(--risk-text); font-weight:700; margin-bottom:4px;
+  }
+  .deny-box .title{ font-weight:800; font-size:14px; color:var(--risk-text); }
+  .deny-box .sub{ font-size:12px; color:var(--risk-text); opacity:.85; margin-top:3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">EDI 940 · WMS Integration</p>
+  <h1>Human-governed autonomous delivery pipeline</h1>
+  <p class="lede">The chat-driven "request a feature, review it, ship it" process already used in this project — written down as a named sequence with two human checkpoints. No new infrastructure: every AI stage is a Claude Code session; every gate is a point where a person reads before continuing.</p>
+
+  <div class="legend">
+    <span><i class="swatch sw-human"></i>Human checkpoint</span>
+    <span><i class="swatch sw-ai"></i>AI reasoning</span>
+    <span><i class="swatch sw-pipe"></i>Automated pipeline</span>
+    <span><i class="swatch sw-mon"></i>Monitoring</span>
+    <span><i class="swatch sw-risk"></i>Auto-deny check</span>
+  </div>
+
+  <ol class="stages" id="stages"></ol>
+</div>
+
+<script>
+  const ARROW = `<svg width="18" height="26" viewBox="0 0 18 26"><path d="M9 0v16" fill="none" stroke-width="2"/><polygon points="9,26 1,13 17,13"/></svg>`;
+
+  const STAGES = [
+    { cat:'human', tag:'Human', title:'Business user', sub:'Describes a need in plain language' },
+    { cat:'ai',    tag:'AI',    title:'AI chat intake', sub:'Clarifies scope and constraints' },
+    { cat:'ai',    tag:'AI',    title:'Requirements generation', sub:'Drafts a structured request' },
+    { cat:'ai',    tag:'AI',    title:'Impact analysis', sub:'Flags systems and data touched' },
+    { type:'branch', cat:'risk', tag:'Risk check', title:'Blast radius check', sub:'Tier A/B continues below',
+      deny:{ lead:'⤷ Tier C — auto-denied', title:'Handle manually', sub:'Touches auth/security, schema drops/renames, new infra or secrets, or prod data-mutation logic' } },
+    { cat:'human', tag:'Gate',  title:'Human approval gate #1', sub:'Review before any code is written', gate:true },
+    { cat:'ai',    tag:'AI',    title:'AI development agent', sub:'Codex / Claude implements the approved spec' },
+    { cat:'pipe',  tag:'Pipeline', title:'Git branch + PR', sub:'Packaged, never self-merged' },
+    { cat:'pipe',  tag:'Pipeline', title:'Automated testing', sub:'Lint, unit tests, data validation' },
+    { cat:'pipe',  tag:'Pipeline', title:'Staging deployment', sub:'Dry run in a live environment' },
+    { cat:'pipe',  tag:'Pipeline', title:'UAT testing', sub:'Stakeholder click-through' },
+    { cat:'human', tag:'Gate',  title:'Human approval gate #2', sub:'Sign-off before going live', gate:true },
+    { cat:'pipe',  tag:'Pipeline', title:'Production deployment', sub:'Same build that passed staging' },
+    { cat:'mon',   tag:'Monitoring', title:'Monitoring & rollback', sub:'Watch it, revert if needed' }
+  ];
+
+  const list = document.getElementById('stages');
+  STAGES.forEach((s, i) => {
+    if(i > 0){
+      const conn = document.createElement('li');
+      conn.className = 'connector';
+      conn.innerHTML = ARROW;
+      list.appendChild(conn);
+    }
+    const li = document.createElement('li');
+    if(s.type === 'branch'){
+      li.innerHTML = `
+        <div class="branch-row">
+          <div class="stage cat-${s.cat}">
+            <div class="tag">${s.tag}</div><div class="title">${s.title}</div><div class="sub">${s.sub}</div>
+          </div>
+          <div class="deny-box">
+            <div class="deny-lead">${s.deny.lead}</div>
+            <div class="title">${s.deny.title}</div><div class="sub">${s.deny.sub}</div>
+          </div>
+        </div>`;
+    } else {
+      li.className = `stage cat-${s.cat}` + (s.gate ? ' gate' : '');
+      li.innerHTML = `<div class="tag">${s.tag}</div><div class="title">${s.title}</div><div class="sub">${s.sub}</div>`;
+    }
+    list.appendChild(li);
+  });
+</script>
+</body>
+</html>
