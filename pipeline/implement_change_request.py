@@ -6,7 +6,11 @@ stopping just short of opening the PR, which is a single manual click via the
 compare URL this prints (Gate 3 / code review still happens on a real PR,
 not inside this script).
 
-See ../docs/ai-delivery-pipeline.md for the design this implements.
+Runs in an isolated `git worktree`, not the caller's own working directory --
+otherwise a background run and whatever you're interactively editing at the
+same time end up on the same checked-out branch, and unrelated commits get
+swept together. See ../docs/ai-delivery-pipeline.md for the design this
+implements.
 
 Usage:
     python implement_change_request.py 1
@@ -73,6 +77,26 @@ def slugify(title: str) -> str:
     return slug[:50] or "change"
 
 
+def create_worktree(repo_path: Path, branch_name: str) -> Path:
+    # Sibling directory, not nested inside repo_path -- keeps it fully outside
+    # the main checkout's tracked tree, no .gitignore juggling required.
+    worktree_root = repo_path.parent / f"{repo_path.name}-worktrees"
+    worktree_path = worktree_root / branch_name
+    if worktree_path.exists():
+        raise FileExistsError(
+            f"{worktree_path} already exists -- remove it first with "
+            f"`git worktree remove {worktree_path}` (run from {repo_path}) if it's stale."
+        )
+    worktree_root.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        ["git", "worktree", "add", str(worktree_path), "-b", branch_name],
+        cwd=repo_path, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"git worktree add failed:\n{result.stderr}")
+    return worktree_path
+
+
 def build_prompt(cr_number: int, branch_name: str, cr_text: str) -> str:
     return f"""You are the implementation stage of a change-management pipeline. A human
 already approved the Change Request below at Gate 1 -- your job is to build
@@ -80,21 +104,22 @@ exactly what it describes, nothing more.
 
 {cr_text}
 
+You are already on branch "{branch_name}", checked out in its own isolated
+git worktree -- no need to create or switch branches yourself.
+
 Instructions:
-1. Create and switch to a new git branch named "{branch_name}" (from the
-   current default branch).
-2. Implement exactly the requirements listed above. Do not touch anything
+1. Implement exactly the requirements listed above. Do not touch anything
    listed under "Out of scope". Follow the existing code style and patterns
    already used in this repo -- look at neighboring files before writing new
    ones.
-3. If tests already exist for the affected area, run them. Add tests for new
+2. If tests already exist for the affected area, run them. Add tests for new
    behavior where the existing codebase has a pattern for doing so.
-4. Commit your changes with a message that starts with "CR-{cr_number:03d}:".
-5. Push the branch to origin.
-6. Do NOT open a pull request yourself and do NOT merge anything -- stop
+3. Commit your changes with a message that starts with "CR-{cr_number:03d}:".
+4. Push the branch to origin.
+5. Do NOT open a pull request yourself and do NOT merge anything -- stop
    after pushing. A human reviews and opens the PR next (Gate 3 in the
    pipeline design).
-7. If the request turns out to be ambiguous or infeasible as written, stop,
+6. If the request turns out to be ambiguous or infeasible as written, stop,
    explain why in your final message, and do not push a half-finished branch.
 """
 
@@ -142,38 +167,61 @@ def main():
         print(prompt)
         return
 
+    worktree_path = create_worktree(repo_path, branch_name)
+    print(f"Created isolated worktree at {worktree_path} on branch {branch_name}")
+
     cmd = [
         "claude", "-p", prompt,
         "--output-format", "json",
         "--permission-mode", args.permission_mode,
         "--allowedTools", ALLOWED_TOOLS,
         "--max-budget-usd", str(max_budget),
-        "--add-dir", str(repo_path),
+        "--add-dir", str(worktree_path),
     ]
-    result = subprocess.run(cmd, cwd=repo_path, capture_output=True, text=True)
+    result = subprocess.run(cmd, cwd=worktree_path, capture_output=True, text=True)
 
-    if result.returncode != 0:
-        print(f"Claude Code exited with an error:\n{result.stderr}", file=sys.stderr)
-        sys.exit(1)
-
+    # Non-zero exit doesn't mean nothing happened -- e.g. hitting
+    # --max-budget-usd right after the task finishes still exits non-zero.
+    # Always surface stdout too, not just stderr, so that detail isn't lost.
     try:
         output = json.loads(result.stdout)
         final_message = output.get("result", result.stdout)
         cost = output.get("total_cost_usd")
+        subtype = output.get("subtype")
     except json.JSONDecodeError:
         final_message = result.stdout
         cost = None
+        subtype = None
+
+    if result.returncode != 0:
+        print(f"Claude Code exited with an error (subtype: {subtype}):", file=sys.stderr)
+        print(f"stdout: {final_message}", file=sys.stderr)
+        print(f"stderr: {result.stderr}", file=sys.stderr)
+        if cost is not None:
+            print(f"Cost so far: ${cost:.4f} (budget was ${max_budget:.2f})", file=sys.stderr)
+        print(
+            f"\nCheck `git log`/`git status` in {worktree_path} -- work may have already been "
+            "committed/pushed before the failure. A non-zero exit here does not mean nothing happened.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     print(final_message)
     if cost is not None:
         print(f"\nActual cost: ${cost:.4f} (budget was ${max_budget:.2f})")
 
     # Best-effort compare URL so opening the PR is a single human click.
-    remote = subprocess.run(["git", "remote", "get-url", "origin"], cwd=repo_path, capture_output=True, text=True)
+    remote = subprocess.run(["git", "remote", "get-url", "origin"], cwd=worktree_path, capture_output=True, text=True)
     match = re.search(r"github\.com[:/]([^/]+)/([^/.]+)", remote.stdout.strip())
     if match:
         owner, repo_name = match.groups()
         print(f"\nOpen a PR: https://github.com/{owner}/{repo_name}/compare/main...{branch_name}?expand=1")
+
+    print(
+        f"\nWork happened in an isolated worktree at {worktree_path}, separate from your "
+        f"own working directory -- nothing there was touched. Once the branch is merged (or "
+        f"abandoned), remove the worktree with: git worktree remove {worktree_path}"
+    )
 
 
 if __name__ == "__main__":
