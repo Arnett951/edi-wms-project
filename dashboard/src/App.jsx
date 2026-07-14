@@ -7,6 +7,7 @@ import { loginRequest } from "./authConfig.js";
 import ChatPanel from "./ChatPanel";
 import CapacityDashboard from "./CapacityDashboard.jsx";
 import AdminChangeRequests from "./AdminChangeRequests.jsx";
+import ReportsDashboard from "./ReportsDashboard.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
@@ -340,6 +341,14 @@ setError(
       >
         Capacity Planning(Machine Learning)
       </button>
+      {isAuthenticated && (
+        <button
+          className={activeTab === "reports" ? "tab-active" : ""}
+          onClick={() => setActiveTab("reports")}
+        >
+          Reports
+        </button>
+      )}
       {canDownloadFiles && (
         <button
           className={activeTab === "admin" ? "tab-active" : ""}
@@ -499,6 +508,8 @@ setError(
     )}
 
     {activeTab === "capacity" && <CapacityDashboard />}
+
+    {activeTab === "reports" && isAuthenticated && <ReportsDashboard />}
 
     {activeTab === "admin" && canDownloadFiles && <AdminChangeRequests />}
   </main></div >;
