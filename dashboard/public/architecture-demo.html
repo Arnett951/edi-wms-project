@@ -25,6 +25,7 @@
     --c-scale:#a9713f;
     --c-parquet:#2bc4d8;
     --c-api:#34c98f;
+    --c-orchestrator:#d6409f;
 
     --font-fun: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
     --font-mono: "Cascadia Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
@@ -89,7 +90,7 @@
 
   /* scene */
   .scene-wrap{ overflow-x:auto; border:3px solid var(--ink); border-radius:20px; background:linear-gradient(var(--sky-top), var(--sky-bottom) 78%); box-shadow:5px 5px 0 rgba(32,41,58,.18); }
-  .scene{ position:relative; width:2220px; height:470px; overflow:hidden; border-radius:17px; }
+  .scene{ position:relative; width:2470px; height:470px; overflow:hidden; border-radius:17px; }
 
   .bg-cloud{ position:absolute; background:#fff; border-radius:50px; opacity:.8; filter:blur(.2px); }
   .bg-cloud::before, .bg-cloud::after{ content:""; position:absolute; background:#fff; border-radius:50%; }
@@ -344,7 +345,31 @@
       svg:`<rect x="74" y="70" width="10" height="70" fill="#8a5a30"/><path d="M84 76 L142 90 L84 104 Z" fill="#34c98f"/>
         <text x="90" y="94" font-size="10" font-weight="800" fill="#0e2233" class="no-stroke">JSON API</text>
         <rect x="14" y="78" width="6" height="62" fill="#8a5a30"/><g class="flag"><path d="M20 60 L60 68 L20 80 Z" fill="#ffcf3c"/></g>
-        <g class="sparkle"><path d="M100 40 l4 9 9 4 -9 4 -4 9 -4-9-9-4 9-4z" fill="#fff3b0"/></g>` }
+        <g class="sparkle"><path d="M100 40 l4 9 9 4 -9 4 -4 9 -4-9-9-4 9-4z" fill="#fff3b0"/></g>` },
+    { key:'orchestrator', x:2310, w:230, title:'AI Change Orchestrator', sub:'chat request → spec → PR → prod — the grand finale', duration:3800, color:'var(--c-orchestrator)', roadmap:true,
+      labels:{idle:'ROADMAP',active:'ORCHESTRATING',done:'SHIPPED'},
+      log:['Feature/report/dashboard requested in chat — AI clarifies scope, captures requirements',
+           'Impacted systems & data evaluated → structured change request drafted for approval',
+           'On approval: tech spec, acceptance criteria, test cases & deployment plan generated',
+           'Work assigned to a coding agent (Claude/Codex) — SQL, API, dashboard & docs packaged into a PR',
+           'Automated security, quality, regression & data-validation checks run',
+           'Deployed to dev/staging → business owner + technical approver notified for UAT',
+           'UAT approved → same versioned package promoted to production, monitored with rollback ready'],
+      svg:`<rect x="58" y="76" width="44" height="52" rx="14" fill="#d6409f"/>
+        <rect x="34" y="88" width="14" height="32" rx="6" fill="#a82f7a"/><rect x="112" y="88" width="14" height="32" rx="6" fill="#a82f7a"/>
+        <circle cx="80" cy="54" r="24" fill="#ec7cb8"/>
+        <circle cx="71" cy="52" r="4.5" fill="#20293a" class="no-stroke"/><circle cx="89" cy="52" r="4.5" fill="#20293a" class="no-stroke"/>
+        <path d="M70 62 Q80 70 90 62" fill="none" stroke-width="4"/>
+        <rect x="77" y="24" width="6" height="16" fill="#8a97a6"/>
+        <g class="sparkle"><path d="M80 16 l3 7 7 3 -7 3 -3 7 -3-7-7-3 7-3z" fill="#ffe27a"/></g>
+        <path d="M100 14 h44 a8 8 0 0 1 8 8 v18 a8 8 0 0 1 -8 8 h-6 l-9 10 v-10 h-29 a8 8 0 0 1 -8 -8 v-18 a8 8 0 0 1 8 -8 Z" fill="#fff"/>
+        <circle class="blip no-stroke" cx="114" cy="32" r="4" fill="#20293a"/>
+        <circle class="blip blip2 no-stroke" cx="128" cy="32" r="4" fill="#20293a"/>
+        <circle class="blip blip3 no-stroke" cx="142" cy="32" r="4" fill="#20293a"/>
+        <g class="stackL"><rect x="2" y="100" width="26" height="32" rx="3" fill="#fff6da"/><path d="M7 110h16M7 118h16M7 126h10" stroke-width="2.5"/></g>
+        <g class="stackL2"><circle cx="16" cy="72" r="6" fill="#7c5cff"/><circle cx="16" cy="56" r="6" fill="#7c5cff"/><circle cx="30" cy="64" r="6" fill="#7c5cff"/><path d="M16 66v-4M16 62 22 64" fill="none" stroke-width="3"/></g>
+        <g class="stackR"><path d="M130 56 L150 50 L150 72 L130 66 Z" fill="#34c98f"/><path d="M136 61 l4 4 8-8" fill="none" stroke="#fff" stroke-width="3"/></g>
+        <g class="stackR2"><path d="M136 128 L148 100 L156 128 Z" fill="#ef8a3d"/><path d="M144 128 l-4 12 8 0 -4-12z" fill="#ff6a5e"/></g>` }
   ];
 
   const scene = document.getElementById('scene');
