@@ -9,8 +9,10 @@ not inside this script).
 Runs in an isolated `git worktree`, not the caller's own working directory --
 otherwise a background run and whatever you're interactively editing at the
 same time end up on the same checked-out branch, and unrelated commits get
-swept together. See ../docs/ai-delivery-pipeline.md for the design this
-implements.
+swept together. CR data and live progress (session id, running token count,
+last action) live in dbo.ChangeRequests, not files -- see
+api/change_request_lib.py. See ../docs/ai-delivery-pipeline.md for the
+design this implements.
 
 Usage:
     python implement_change_request.py 1
@@ -23,8 +25,9 @@ import json
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "api"))
 import change_request_lib as cr_lib  # noqa: E402
@@ -43,27 +46,37 @@ ALLOWED_TOOLS = (
 )
 
 
-def find_cr_file(repo_path: Path, config: dict, cr_number: int) -> Path:
-    output_dir = repo_path / config.get("output_dir", "change-requests")
-    request_file = output_dir / f"CR-{cr_number:03d}" / "request.md"
-    if not request_file.exists():
-        raise FileNotFoundError(f"{request_file} not found")
-    return request_file
-
-
-def parse_title(text: str) -> str:
-    match = re.search(r"^#\s*CR-\d+:\s*(.+)$", text, re.MULTILINE)
-    return match.group(1).strip() if match else "change-request"
-
-
-def parse_estimated_cost(text: str) -> float:
-    match = re.search(r"-\s*\*\*Estimated cost:\*\*\s*\$([\d.]+)", text)
-    return float(match.group(1)) if match else MIN_BUDGET_USD
-
-
 def slugify(title: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
     return slug[:50] or "change"
+
+
+def format_cr_for_prompt(cr: dict) -> str:
+    lines = [f"# CR-{cr['crNumber']:03d}: {cr['title']}", ""]
+    lines.append(f"Tier: {cr['tier']} -- {cr['tierLabel']}")
+    lines.append("")
+    lines.append("## Original request")
+    lines.append(f"> {cr['originalRequest']}")
+    lines.append("")
+    if cr["clarification"]:
+        lines.append("## Clarification")
+        for qa in cr["clarification"]:
+            lines.append(f"- Q: {qa['question']}")
+            lines.append(f"  A: {qa['answer']}")
+        lines.append("")
+    if cr["riskNotes"]:
+        lines.append("## Risk notes")
+        lines.append(cr["riskNotes"])
+        lines.append("")
+    lines.append("## Requirements")
+    lines.extend(f"- {item}" for item in cr["requirements"])
+    lines.append("")
+    lines.append("## Touch points")
+    lines.extend(f"- {item}" for item in cr["touchPoints"])
+    lines.append("")
+    lines.append("## Out of scope")
+    lines.extend(f"- {item}" for item in cr["outOfScope"])
+    return "\n".join(lines)
 
 
 def create_worktree(repo_path: Path, branch_name: str) -> Path:
@@ -100,23 +113,12 @@ def check_mergeability(worktree_path: Path) -> str:
     return "Clean" if merge_check.returncode == 0 else "Conflicts detected -- manual resolution needed"
 
 
-def write_progress(progress_path: Path, **updates):
-    data = {}
-    if progress_path.exists():
-        try:
-            data = json.loads(progress_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            data = {}
-    data.update(updates)
-    data["updatedAt"] = datetime.now(timezone.utc).isoformat()
-    progress_path.write_text(json.dumps(data), encoding="utf-8")
-
-
-def run_claude_streaming(cmd: list, cwd: Path, progress_path: Path):
-    """Runs Claude Code with --output-format stream-json, updating progress_path
-    after every event so the API/UI can poll live status (session id, running
-    token count, last action) instead of only seeing a result once the whole
-    run finishes. Returns (final_message, cost, subtype, returncode, stderr)."""
+def run_claude_streaming(cmd: list, cwd: Path, conn, cr_number: int):
+    """Runs Claude Code with --output-format stream-json, updating
+    dbo.ChangeRequests after every event so the API/UI can poll live status
+    (session id, running token count, last action) instead of only seeing a
+    result once the whole run finishes. Returns (final_message, cost, subtype,
+    returncode, stderr, session_id, tokens_so_far)."""
     process = subprocess.Popen(
         cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, encoding="utf-8", bufsize=1,
@@ -143,12 +145,10 @@ def run_claude_streaming(cmd: list, cwd: Path, progress_path: Path):
         if event_type == "assistant":
             usage = event.get("message", {}).get("usage", {})
             tokens_so_far += usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-            write_progress(
-                progress_path, sessionId=session_id, status="running", tokensSoFar=tokens_so_far,
-            )
+            cr_lib.update_progress(conn, cr_number, status="running", sessionId=session_id, tokensSoFar=tokens_so_far)
         elif event_type == "system" and event.get("subtype") == "post_turn_summary":
-            write_progress(
-                progress_path, sessionId=session_id, status="running", tokensSoFar=tokens_so_far,
+            cr_lib.update_progress(
+                conn, cr_number, status="running", sessionId=session_id, tokensSoFar=tokens_so_far,
                 lastAction=event.get("status_detail") or "",
             )
         elif event_type == "result":
@@ -205,23 +205,26 @@ def main():
     args = parser.parse_args()
 
     repo_path = Path(args.repo).resolve()
-    config = cr_lib.load_config(repo_path / "api" / ".change-pipeline.yml")
-    cr_file = find_cr_file(repo_path, config, args.cr_number)
-    cr_text = cr_file.read_text(encoding="utf-8")
+    load_dotenv(repo_path / "api" / ".env")
 
-    status = cr_lib.get_status(cr_text)
-    if not status.startswith("Approved"):
+    conn = cr_lib.get_conn()
+    cr = cr_lib.get_cr(conn, args.cr_number)
+    if not cr:
+        print(f"CR-{args.cr_number:03d} not found.", file=sys.stderr)
+        sys.exit(1)
+
+    if not cr["status"].startswith("Approved"):
         print(
-            f"CR-{args.cr_number:03d} is not approved (status: '{status}'). "
+            f"CR-{args.cr_number:03d} is not approved (status: '{cr['status']}'). "
             "Gate 1 must approve it in the Admin tab before implementation runs.",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    title = parse_title(cr_text)
-    branch_name = f"cr-{args.cr_number:03d}-{slugify(title)}"
+    branch_name = f"cr-{args.cr_number:03d}-{slugify(cr['title'])}"
+    cr_text = format_cr_for_prompt(cr)
     prompt = build_prompt(args.cr_number, branch_name, cr_text)
-    estimated_cost = parse_estimated_cost(cr_text)
+    estimated_cost = cr["estimatedCost"] or MIN_BUDGET_USD
     max_budget = max(MIN_BUDGET_USD, estimated_cost * MAX_BUDGET_MARGIN_MULTIPLIER)
 
     if args.dry_run:
@@ -234,10 +237,7 @@ def main():
     worktree_path = create_worktree(repo_path, branch_name)
     print(f"Created isolated worktree at {worktree_path} on branch {branch_name}")
 
-    # Lives next to request.md so the API can poll it by CR number without
-    # needing any shared in-memory state with whatever process launched this.
-    progress_path = cr_file.parent / "progress.json"
-    write_progress(progress_path, status="running", branch=branch_name, lastAction="Starting...", tokensSoFar=0)
+    cr_lib.update_progress(conn, args.cr_number, status="running", lastAction="Starting...", tokensSoFar=0)
 
     cmd = [
         "claude", "-p", prompt,
@@ -252,13 +252,13 @@ def main():
     # system ANSI codepage) mangles Claude Code's em-dashes and other
     # multi-byte UTF-8 output into mojibake otherwise.
     final_message, cost, subtype, returncode, stderr_output, session_id, tokens_so_far = run_claude_streaming(
-        cmd, worktree_path, progress_path
+        cmd, worktree_path, conn, args.cr_number
     )
 
     # Non-zero exit doesn't mean nothing happened -- e.g. hitting
     # --max-budget-usd right after the task finishes still exits non-zero.
     if returncode != 0:
-        write_progress(progress_path, status="failed", sessionId=session_id, tokensSoFar=tokens_so_far)
+        cr_lib.update_progress(conn, args.cr_number, status="failed", sessionId=session_id, tokensSoFar=tokens_so_far)
         print(f"Claude Code exited with an error (subtype: {subtype}):", file=sys.stderr)
         print(f"stdout result: {final_message}", file=sys.stderr)
         print(f"stderr: {stderr_output}", file=sys.stderr)
@@ -271,7 +271,9 @@ def main():
         )
         sys.exit(1)
 
-    write_progress(progress_path, status="succeeded", sessionId=session_id, tokensSoFar=tokens_so_far, costUsd=cost)
+    cr_lib.update_progress(
+        conn, args.cr_number, status="succeeded", sessionId=session_id, tokensSoFar=tokens_so_far, costUsd=cost
+    )
     print(final_message)
     if cost is not None:
         print(f"\nActual cost: ${cost:.4f} (budget was ${max_budget:.2f})")
@@ -283,14 +285,13 @@ def main():
     # so the Admin tab's Approve & Merge action knows what to merge and a
     # reviewer has the agent's own account of what it did -- plus whether it's
     # a clean one-click merge or will need manual conflict resolution -- before approving.
-    updated_text = cr_text
-    updated_text = cr_lib.set_field(updated_text, "Branch", branch_name)
-    updated_text = cr_lib.set_field(updated_text, "Merge readiness", merge_readiness)
-    updated_text = cr_lib.append_or_replace_section(
-        updated_text, "Implementation summary", (final_message or "").strip() or "(no summary returned)"
+    cr_lib.set_fields(
+        conn, args.cr_number,
+        branch=branch_name, mergeReadiness=merge_readiness,
+        implementationSummary=(final_message or "").strip() or "(no summary returned)",
     )
-    updated_text = cr_lib.update_status(updated_text, "Implemented -- awaiting Gate 2 (merge approval)")
-    cr_file.write_text(updated_text, encoding="utf-8")
+    cr_lib.update_status(conn, args.cr_number, "Implemented -- awaiting Gate 2 (merge approval)")
+    conn.close()
 
     # Best-effort compare URL so opening the PR is a single human click.
     remote = subprocess.run(["git", "remote", "get-url", "origin"], cwd=worktree_path, capture_output=True, text=True, encoding="utf-8")

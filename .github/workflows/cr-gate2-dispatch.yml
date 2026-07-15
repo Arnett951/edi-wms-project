@@ -37,7 +37,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      - run: pip install pyyaml
+      - name: Install ODBC Driver 18 for SQL Server
+        run: |
+          curl -sSL -O https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+          sudo dpkg -i packages-microsoft-prod.deb
+          sudo apt-get update
+          ACCEPT_EULA=Y sudo apt-get install -y msodbcsql18
+
+      - run: pip install pyyaml pyodbc python-dotenv
 
       - name: Configure git identity
         run: |
@@ -45,4 +52,9 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Run Gate 2 action
+        env:
+          SQL_SERVER: ${{ secrets.SQL_SERVER }}
+          SQL_DATABASE: ${{ secrets.SQL_DATABASE }}
+          SQL_USER: ${{ secrets.SQL_USER }}
+          SQL_PASSWORD: ${{ secrets.SQL_PASSWORD }}
         run: python pipeline/gate2_dispatch.py "${{ inputs.action }}" "${{ inputs.cr_number }}" --approver "${{ inputs.approver }}"

@@ -1,25 +1,26 @@
 """
 Shared logic for the change-request intake pipeline, used by both the local
-CLI (pipeline/generate_change_request.py) and the live API endpoint
-(api/main.py's /api/change-requests/intake) so the two never drift apart.
+CLI (pipeline/generate_change_request.py, implement_change_request.py,
+gate2_dispatch.py) and the live API endpoints (api/main.py) so none of them
+drift apart.
 
-Lives inside api/ (not repo root, not pipeline/) so it deploys with the
-backend -- .github/workflows/deploy-api-appservice.yml only packages api/**.
-The CLI script imports this module across directories since it's local-only
-and never deployed; the API imports it as a plain sibling module.
+CRs live in dbo.ChangeRequests (Azure SQL), not markdown files -- files on a
+zip-deployed Azure App Service get wiped on every redeploy, and a shared SQL
+table also means local dev and the deployed API read/write the exact same
+data instead of two separate disks. Every function that touches storage
+takes a `conn` (a pyodbc connection) rather than opening its own; callers own
+the connection lifecycle via get_conn() below.
 """
 
 import json
-import re
-from datetime import date
 from pathlib import Path
 
+import pyodbc
 import yaml
 
 DEFAULT_CONFIG = {
     "project_name": "Unnamed project",
     "stack_summary": "Unknown stack -- describe your project in .change-pipeline.yml",
-    "output_dir": "change-requests",
     "tiers": {
         "A": {"label": "In scope", "examples": []},
         "B": {"label": "Semi-automated", "examples": []},
@@ -90,6 +91,7 @@ reported, not discarded."""
 
 
 def extract_json_block(text: str):
+    import re
     match = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
     if not match:
         return None
@@ -97,47 +99,6 @@ def extract_json_block(text: str):
         return json.loads(match.group(1))
     except json.JSONDecodeError:
         return None
-
-
-STATUS_PATTERN = re.compile(r"-\s*\*\*Status:\*\*\s*(.+)")
-
-
-def get_status(text: str) -> str:
-    match = STATUS_PATTERN.search(text)
-    return match.group(1).strip() if match else ""
-
-
-def update_status(text: str, new_status: str) -> str:
-    updated, count = STATUS_PATTERN.subn(f"- **Status:** {new_status}", text, count=1)
-    if count == 0:
-        raise ValueError("Could not locate a Status line to update")
-    return updated
-
-
-def get_field(text: str, field_name: str):
-    pattern = re.compile(rf"-\s*\*\*{re.escape(field_name)}:\*\*\s*(.+)")
-    match = pattern.search(text)
-    return match.group(1).strip() if match else None
-
-
-def set_field(text: str, field_name: str, value: str) -> str:
-    """Update a top '- **Field:** value' metadata line if present, else insert
-    it right after the Status line (metadata block always starts there)."""
-    pattern = re.compile(rf"-\s*\*\*{re.escape(field_name)}:\*\*\s*.+")
-    if pattern.search(text):
-        return pattern.sub(f"- **{field_name}:** {value}", text, count=1)
-    status_pattern = re.compile(r"(-\s*\*\*Status:\*\*\s*.+\n)")
-    updated, count = status_pattern.subn(rf"\1- **{field_name}:** {value}\n", text, count=1)
-    if count == 0:
-        raise ValueError("Could not locate the Status line to insert the new field after")
-    return updated
-
-
-def append_or_replace_section(text: str, heading: str, content: str) -> str:
-    pattern = re.compile(rf"## {re.escape(heading)}\s*\n(.*?)(?=\n## |\Z)", re.DOTALL)
-    if pattern.search(text):
-        return pattern.sub(f"## {heading}\n\n{content}\n", text, count=1)
-    return text.rstrip() + f"\n\n## {heading}\n\n{content}\n"
 
 
 def compute_cost(estimated_tokens: int, config: dict):
@@ -148,69 +109,195 @@ def compute_cost(estimated_tokens: int, config: dict):
     return dollars, ratio_pct
 
 
-def next_cr_number(output_dir: Path) -> int:
-    if not output_dir.exists():
-        return 1
-    existing = [p.name for p in output_dir.iterdir() if p.is_dir() and p.name.startswith("CR-")]
-    numbers = []
-    for name in existing:
-        match = re.match(r"CR-(\d+)", name)
-        if match:
-            numbers.append(int(match.group(1)))
-    return max(numbers, default=0) + 1
+# ---------------------------------------------------------------------------
+# Database access
+# ---------------------------------------------------------------------------
+
+def escape_odbc(value):
+    value = (value or "").strip()
+    return "{" + value.replace("}", "}}") + "}"
 
 
-def render_markdown(cr_number, original_request, transcript, cr_data, dollars, ratio_pct, config):
+def get_conn():
+    import os
+    server = (os.getenv("SQL_SERVER") or "").strip()
+    database = (os.getenv("SQL_DATABASE") or "").strip()
+    user = (os.getenv("SQL_USER") or "").strip()
+    password_raw = os.getenv("SQL_PASSWORD")
+
+    missing = [
+        name for name, value in {
+            "SQL_SERVER": server, "SQL_DATABASE": database, "SQL_USER": user, "SQL_PASSWORD": password_raw,
+        }.items()
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+
+    password = escape_odbc(password_raw)
+    return pyodbc.connect(
+        f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+        f"SERVER=tcp:{server},1433;"
+        f"DATABASE={database};"
+        f"UID={user};"
+        f"PWD={password};"
+        "Encrypt=yes;"
+        "TrustServerCertificate=yes;"
+        "Connection Timeout=30;"
+    )
+
+
+CR_COLUMNS = [
+    "CRNumber", "Title", "Tier", "TierLabel", "Status", "OriginalRequest", "ClarificationJson",
+    "RiskNotes", "RequirementsJson", "TouchPointsJson", "OutOfScopeJson",
+    "EstimatedTokens", "EstimatedCostUsd", "CostRatioPct",
+    "Branch", "MergeReadiness", "MergeCommit", "RollbackCommit", "ImplementationSummary",
+    "SessionId", "ProgressStatus", "TokensSoFar", "LastAction", "ActualCostUsd",
+    "CreatedDateTime", "UpdatedDateTime",
+]
+
+
+def _to_cr_dict(row) -> dict:
+    raw = dict(zip(CR_COLUMNS, row))
+    return {
+        "crNumber": raw["CRNumber"],
+        "title": raw["Title"],
+        "tier": raw["Tier"],
+        "tierLabel": raw["TierLabel"],
+        "status": raw["Status"],
+        "originalRequest": raw["OriginalRequest"],
+        "clarification": json.loads(raw["ClarificationJson"]) if raw["ClarificationJson"] else [],
+        "riskNotes": raw["RiskNotes"] or "",
+        "requirements": json.loads(raw["RequirementsJson"]) if raw["RequirementsJson"] else [],
+        "touchPoints": json.loads(raw["TouchPointsJson"]) if raw["TouchPointsJson"] else [],
+        "outOfScope": json.loads(raw["OutOfScopeJson"]) if raw["OutOfScopeJson"] else [],
+        "estimatedTokens": raw["EstimatedTokens"],
+        "estimatedCost": round(float(raw["EstimatedCostUsd"]), 2) if raw["EstimatedCostUsd"] is not None else None,
+        "costRatioPct": round(float(raw["CostRatioPct"]), 1) if raw["CostRatioPct"] is not None else None,
+        "branch": raw["Branch"],
+        "mergeReadiness": raw["MergeReadiness"],
+        "mergeCommit": raw["MergeCommit"],
+        "rollbackCommit": raw["RollbackCommit"],
+        "implementationSummary": raw["ImplementationSummary"],
+        "sessionId": raw["SessionId"],
+        "tokensSoFar": raw["TokensSoFar"],
+        "lastAction": raw["LastAction"],
+        "actualCostUsd": round(float(raw["ActualCostUsd"]), 4) if raw["ActualCostUsd"] is not None else None,
+    }
+
+
+def next_cr_number(conn) -> int:
+    cur = conn.cursor()
+    cur.execute("SELECT ISNULL(MAX(CRNumber), 0) + 1 FROM dbo.ChangeRequests")
+    return cur.fetchone()[0]
+
+
+def create_cr(conn, cr_number: int, original_request: str, transcript: list, cr_data: dict,
+              dollars: float, ratio_pct: float, config: dict) -> dict:
     tier = cr_data.get("tier", "?")
     tier_label = config["tiers"].get(tier, {}).get("label", "")
     status = "Auto-denied -- Tier C, handle manually" if tier == "C" else "Pending Gate 1 review"
 
-    lines = [
-        f"# CR-{cr_number:03d}: {cr_data.get('title', '(untitled)')}",
-        "",
-        f"- **Date:** {date.today().isoformat()}",
-        f"- **Tier:** {tier} -- {tier_label}",
-        f"- **Status:** {status}",
-        f"- **Estimated tokens:** {cr_data.get('estimated_tokens', 0):,}",
-        f"- **Estimated cost:** ${dollars:.2f} (blended rate -- see .change-pipeline.yml)",
-        f"- **Cost ratio vs ${config['cost']['reference_monthly_budget_usd']}/mo reference budget:** {ratio_pct:.1f}%",
-        "",
-        "## Original request",
-        "",
-        f"> {original_request}",
-        "",
-    ]
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO dbo.ChangeRequests
+            (CRNumber, Title, Tier, TierLabel, Status, OriginalRequest, ClarificationJson,
+             RiskNotes, RequirementsJson, TouchPointsJson, OutOfScopeJson,
+             EstimatedTokens, EstimatedCostUsd, CostRatioPct)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        cr_number, cr_data.get("title", "(untitled)"), tier, tier_label, status, original_request,
+        json.dumps([{"question": q, "answer": a} for q, a in transcript]),
+        cr_data.get("risk_notes", ""),
+        json.dumps(cr_data.get("requirements", [])),
+        json.dumps(cr_data.get("touch_points", [])),
+        json.dumps(cr_data.get("out_of_scope", [])),
+        cr_data.get("estimated_tokens", 0), dollars, ratio_pct,
+    )
+    conn.commit()
+    return get_cr(conn, cr_number)
 
-    if transcript:
-        lines.append("## Clarification")
-        lines.append("")
-        for question, answer in transcript:
-            lines.append(f"- **Q:** {question}")
-            lines.append(f"  **A:** {answer}")
-        lines.append("")
 
-    if cr_data.get("risk_notes"):
-        lines.append("## Risk notes")
-        lines.append("")
-        lines.append(cr_data["risk_notes"])
-        lines.append("")
+def get_cr(conn, cr_number: int):
+    cur = conn.cursor()
+    cur.execute(f"SELECT {', '.join(CR_COLUMNS)} FROM dbo.ChangeRequests WHERE CRNumber = ?", cr_number)
+    row = cur.fetchone()
+    return _to_cr_dict(row) if row else None
 
-    lines.append("## Requirements")
-    lines.append("")
-    for item in cr_data.get("requirements", []):
-        lines.append(f"- {item}")
-    lines.append("")
 
-    lines.append("## Touch points")
-    lines.append("")
-    for item in cr_data.get("touch_points", []):
-        lines.append(f"- {item}")
-    lines.append("")
+def list_crs(conn) -> list:
+    cur = conn.cursor()
+    cur.execute(f"SELECT {', '.join(CR_COLUMNS)} FROM dbo.ChangeRequests ORDER BY CRNumber DESC")
+    return [_to_cr_dict(row) for row in cur.fetchall()]
 
-    lines.append("## Out of scope")
-    lines.append("")
-    for item in cr_data.get("out_of_scope", []):
-        lines.append(f"- {item}")
-    lines.append("")
 
-    return "\n".join(lines)
+def get_status(conn, cr_number: int) -> str:
+    cr = get_cr(conn, cr_number)
+    return cr["status"] if cr else ""
+
+
+def update_status(conn, cr_number: int, new_status: str):
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE dbo.ChangeRequests SET Status = ?, UpdatedDateTime = sysutcdatetime() WHERE CRNumber = ?",
+        new_status, cr_number,
+    )
+    conn.commit()
+
+
+# Maps the API-friendly field names used elsewhere in the pipeline to actual
+# column names, so callers don't need to know the SQL schema by heart.
+FIELD_TO_COLUMN = {
+    "branch": "Branch",
+    "mergeReadiness": "MergeReadiness",
+    "mergeCommit": "MergeCommit",
+    "rollbackCommit": "RollbackCommit",
+    "implementationSummary": "ImplementationSummary",
+}
+
+
+def set_fields(conn, cr_number: int, **fields):
+    if not fields:
+        return
+    columns = [FIELD_TO_COLUMN.get(k, k) for k in fields]
+    set_clause = ", ".join(f"{col} = ?" for col in columns)
+    params = list(fields.values()) + [cr_number]
+    cur = conn.cursor()
+    cur.execute(
+        f"UPDATE dbo.ChangeRequests SET {set_clause}, UpdatedDateTime = sysutcdatetime() WHERE CRNumber = ?",
+        *params,
+    )
+    conn.commit()
+
+
+def get_progress(conn, cr_number: int) -> dict:
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT SessionId, ProgressStatus, TokensSoFar, LastAction, ActualCostUsd, UpdatedDateTime "
+        "FROM dbo.ChangeRequests WHERE CRNumber = ?",
+        cr_number,
+    )
+    row = cur.fetchone()
+    if not row:
+        return {"status": "not_started"}
+    session_id, status, tokens_so_far, last_action, cost, updated_at = row
+    if status is None:
+        return {"status": "not_started"}
+    return {
+        "status": status,
+        "sessionId": session_id,
+        "tokensSoFar": tokens_so_far,
+        "lastAction": last_action,
+        "costUsd": float(cost) if cost is not None else None,
+        "updatedAt": updated_at.isoformat() if updated_at else None,
+    }
+
+
+def update_progress(conn, cr_number: int, **fields):
+    """fields keys: status, sessionId, tokensSoFar, lastAction, costUsd (API names)."""
+    column_map = {
+        "status": "ProgressStatus", "sessionId": "SessionId", "tokensSoFar": "TokensSoFar",
+        "lastAction": "LastAction", "costUsd": "ActualCostUsd",
+    }
+    set_fields(conn, cr_number, **{column_map[k]: v for k, v in fields.items() if k in column_map})

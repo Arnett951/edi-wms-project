@@ -1,13 +1,13 @@
 """
 Phase 1 of the human-governed autonomous delivery pipeline: intake, requirements
 generation, impact analysis (blast-radius Tier check), and cost estimation --
-ending in a Change Request markdown file for Gate 1 review.
+ending in a Change Request row in dbo.ChangeRequests for Gate 1 review.
 
-Shares its core logic (config, system prompt, cost math, CR rendering) with
-the live API endpoint via api/change_request_lib.py, so the CLI and the
-deployed dashboard's chat-based intake never drift apart. This script is
-local-only and never deployed, so importing across into api/ is fine here --
-the reverse (api/ importing from pipeline/) would NOT be, since only api/**
+Shares its core logic (config, system prompt, cost math, DB access) with the
+live API endpoint via api/change_request_lib.py, so the CLI and the deployed
+dashboard's chat-based intake never drift apart. This script is local-only
+and never deployed, so importing across into api/ is fine here -- the
+reverse (api/ importing from pipeline/) would NOT be, since only api/**
 ships to production.
 
 See ../docs/ai-delivery-pipeline.md for the design this implements.
@@ -15,7 +15,7 @@ See ../docs/ai-delivery-pipeline.md for the design this implements.
 Usage:
     python generate_change_request.py "Add a chart showing daily EDI file volume"
     python generate_change_request.py                       # prompts interactively
-    python generate_change_request.py "..." --dry-run        # no API calls, no cost
+    python generate_change_request.py "..." --dry-run        # no API/DB calls, no cost
     python generate_change_request.py "..." --repo /path/to/other/project
 """
 
@@ -27,14 +27,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "api"))
-from change_request_lib import (  # noqa: E402
-    build_system_prompt,
-    compute_cost,
-    extract_json_block,
-    load_config,
-    next_cr_number,
-    render_markdown,
-)
+import change_request_lib as cr_lib  # noqa: E402
 
 MAX_CLARIFICATION_ROUNDS = 6
 MODEL = "claude-sonnet-5"
@@ -58,7 +51,7 @@ def run_intake(client, system_prompt: str, initial_request: str):
         reply = call_claude(client, system_prompt, messages)
         messages.append({"role": "assistant", "content": reply})
 
-        cr_data = extract_json_block(reply)
+        cr_data = cr_lib.extract_json_block(reply)
         if cr_data is not None:
             return cr_data, transcript
 
@@ -93,50 +86,51 @@ def main():
     parser = argparse.ArgumentParser(description="Generate a Change Request from a plain-language request.")
     parser.add_argument("request", nargs="?", help="The request text. Prompted interactively if omitted.")
     parser.add_argument("--repo", default=".", help="Path to the target repo (default: current directory).")
-    parser.add_argument("--dry-run", action="store_true", help="Skip real API calls; verify file output only.")
+    parser.add_argument("--dry-run", action="store_true", help="Skip real API/DB calls; print only.")
     args = parser.parse_args()
 
     repo_path = Path(args.repo).resolve()
-    config = load_config(repo_path / "api" / ".change-pipeline.yml")
+    config = cr_lib.load_config(repo_path / "api" / ".change-pipeline.yml")
 
     initial_request = args.request or input("Describe the request: ").strip()
     if not initial_request:
         print("No request provided.", file=sys.stderr)
         sys.exit(1)
 
+    load_dotenv(repo_path / "api" / ".env")
+
     if args.dry_run:
         cr_data, transcript = dry_run_stub(initial_request)
-    else:
-        load_dotenv(repo_path / "api" / ".env")
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            print(
-                "ANTHROPIC_API_KEY not set (checked env and api/.env). "
-                "Set it, or use --dry-run to test without a real API call.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        from anthropic import Anthropic
-        client = Anthropic(api_key=api_key)
-        system_prompt = build_system_prompt(config)
-        cr_data, transcript = run_intake(client, system_prompt, initial_request)
+        dollars, ratio_pct = cr_lib.compute_cost(cr_data.get("estimated_tokens", 0), config)
+        print(f"--- Dry run -- nothing written to the database ---")
+        print(f"Title: {cr_data['title']}")
+        print(f"Tier {cr_data['tier']} -- estimated {cr_data['estimated_tokens']:,} tokens "
+              f"(~${dollars:.2f}, {ratio_pct:.1f}% of ${config['cost']['reference_monthly_budget_usd']}/mo)")
+        return
 
-    dollars, ratio_pct = compute_cost(cr_data.get("estimated_tokens", 0), config)
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        print(
+            "ANTHROPIC_API_KEY not set (checked env and api/.env). "
+            "Set it, or use --dry-run to test without a real API call.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    from anthropic import Anthropic
+    client = Anthropic(api_key=api_key)
+    system_prompt = cr_lib.build_system_prompt(config)
+    cr_data, transcript = run_intake(client, system_prompt, initial_request)
 
-    output_dir = repo_path / config["output_dir"]
-    output_dir.mkdir(parents=True, exist_ok=True)
-    cr_number = next_cr_number(output_dir)
-    cr_folder = output_dir / f"CR-{cr_number:03d}"
-    cr_folder.mkdir(parents=True, exist_ok=True)
+    dollars, ratio_pct = cr_lib.compute_cost(cr_data.get("estimated_tokens", 0), config)
 
-    markdown = render_markdown(cr_number, initial_request, transcript, cr_data, dollars, ratio_pct, config)
-    request_path = cr_folder / "request.md"
-    request_path.write_text(markdown, encoding="utf-8")
+    with cr_lib.get_conn() as conn:
+        cr_number = cr_lib.next_cr_number(conn)
+        created = cr_lib.create_cr(conn, cr_number, initial_request, transcript, cr_data, dollars, ratio_pct, config)
 
-    print(f"\nWrote {request_path}")
+    print(f"\nCreated CR-{cr_number:03d}: {created['title']}")
     print(
-        f"Tier {cr_data.get('tier', '?')} -- estimated {cr_data.get('estimated_tokens', 0):,} tokens "
-        f"(~${dollars:.2f}, {ratio_pct:.1f}% of ${config['cost']['reference_monthly_budget_usd']}/mo)"
+        f"Tier {created['tier']} -- estimated {created['estimatedTokens']:,} tokens "
+        f"(~${created['estimatedCost']:.2f}, {created['costRatioPct']:.1f}% of ${config['cost']['reference_monthly_budget_usd']}/mo)"
     )
 
 

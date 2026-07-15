@@ -191,87 +191,10 @@ def revoke_demo_admin(payload: dict = Depends(require_auth)):
 # feature - see docs/ai-delivery-pipeline.md for the pipeline this serves.
 # ---------------------------------------------------------------------------
 
-# Overridable via env var so production can point at persistent storage
-# outside the deployed code tree (e.g. /home/change-requests on Linux App
-# Service, which survives redeploys - unlike wwwroot itself). Falls back to
-# a path alongside this file for local dev, where api/** IS the whole repo
-# checkout and there's no separate persistent volume to worry about.
-CHANGE_REQUESTS_DIR = Path(os.getenv("CHANGE_REQUESTS_DIR", str(Path(__file__).resolve().parent / "change-requests")))
-
-CR_TITLE_PATTERN = re.compile(r"^#\s*CR-(\d+):\s*(.+)$", re.MULTILINE)
-CR_STATUS_PATTERN = re.compile(r"-\s*\*\*Status:\*\*\s*(.+)")
-CR_FIELD_PATTERNS = {
-    "date": re.compile(r"-\s*\*\*Date:\*\*\s*(.+)"),
-    "tier": re.compile(r"-\s*\*\*Tier:\*\*\s*(\w)\s*--\s*(.+)"),
-    "estimatedTokens": re.compile(r"-\s*\*\*Estimated tokens:\*\*\s*([\d,]+)"),
-    "estimatedCost": re.compile(r"-\s*\*\*Estimated cost:\*\*\s*\$([\d.]+)"),
-    "costRatioPct": re.compile(r"-\s*\*\*Cost ratio.*?:\*\*\s*([\d.]+)%"),
-}
-CR_ORIGINAL_REQUEST_PATTERN = re.compile(r"## Original request\s*\n+>\s*(.+)")
-
-
-def extract_section(text: str, heading: str) -> str:
-    pattern = re.compile(rf"## {re.escape(heading)}\s*\n(.*?)(?=\n## |\Z)", re.DOTALL)
-    match = pattern.search(text)
-    return match.group(1).strip() if match else ""
-
-
-def extract_list_items(section_text: str) -> list:
-    return [line.strip()[2:].strip() for line in section_text.splitlines() if line.strip().startswith("- ")]
-
-
-def extract_clarification(section_text: str) -> list:
-    pairs = []
-    pending_question = None
-    for line in section_text.splitlines():
-        line = line.strip()
-        q_match = re.match(r"-\s*\*\*Q:\*\*\s*(.+)", line)
-        a_match = re.match(r"\*\*A:\*\*\s*(.+)", line)
-        if q_match:
-            pending_question = q_match.group(1).strip()
-        elif a_match and pending_question is not None:
-            pairs.append({"question": pending_question, "answer": a_match.group(1).strip()})
-            pending_question = None
-    return pairs
-
-
-def parse_change_request(path: Path) -> Optional[dict]:
-    text = path.read_text(encoding="utf-8")
-    title_match = CR_TITLE_PATTERN.search(text)
-    if not title_match:
-        return None
-
-    result = {"crNumber": int(title_match.group(1)), "title": title_match.group(2).strip()}
-
-    status_match = CR_STATUS_PATTERN.search(text)
-    result["status"] = status_match.group(1).strip() if status_match else "Unknown"
-
-    for key, pattern in CR_FIELD_PATTERNS.items():
-        match = pattern.search(text)
-        if not match:
-            continue
-        if key == "tier":
-            result["tier"] = match.group(1)
-            result["tierLabel"] = match.group(2).strip()
-        else:
-            result[key] = match.group(1).strip()
-
-    original_match = CR_ORIGINAL_REQUEST_PATTERN.search(text)
-    result["originalRequest"] = original_match.group(1).strip() if original_match else ""
-
-    result["clarification"] = extract_clarification(extract_section(text, "Clarification"))
-    result["riskNotes"] = extract_section(text, "Risk notes")
-    result["requirements"] = extract_list_items(extract_section(text, "Requirements"))
-    result["touchPoints"] = extract_list_items(extract_section(text, "Touch points"))
-    result["outOfScope"] = extract_list_items(extract_section(text, "Out of scope"))
-
-    result["branch"] = cr_lib.get_field(text, "Branch")
-    result["mergeCommit"] = cr_lib.get_field(text, "Merge commit")
-    result["rollbackCommit"] = cr_lib.get_field(text, "Rollback commit")
-    result["mergeReadiness"] = cr_lib.get_field(text, "Merge readiness")
-    result["implementationSummary"] = extract_section(text, "Implementation summary") or None
-    return result
-
+# CRs live in dbo.ChangeRequests (Azure SQL) -- see api/change_request_lib.py
+# for the schema/columns. Both local dev and the deployed API read/write the
+# same table, closing the local-vs-deployed split that markdown files under
+# api/change-requests/ had (those got wiped on every zip-deploy redeploy too).
 
 # Loaded once at import time -- .change-pipeline.yml rarely changes, and this
 # avoids a file read on every intake message.
@@ -342,95 +265,67 @@ def change_request_intake(
         transcript.append((question, messages[i + 1]["content"]))
 
     dollars, ratio_pct = cr_lib.compute_cost(cr_data.get("estimated_tokens", 0), CR_PIPELINE_CONFIG)
-    output_dir = CHANGE_REQUESTS_DIR
-    output_dir.mkdir(parents=True, exist_ok=True)
-    cr_number = cr_lib.next_cr_number(output_dir)
-    cr_folder = output_dir / f"CR-{cr_number:03d}"
-    cr_folder.mkdir(parents=True, exist_ok=True)
-
-    markdown = cr_lib.render_markdown(
-        cr_number, original_request, transcript, cr_data, dollars, ratio_pct, CR_PIPELINE_CONFIG
-    )
-    (cr_folder / "request.md").write_text(markdown, encoding="utf-8")
+    with cr_lib.get_conn() as conn:
+        cr_number = cr_lib.next_cr_number(conn)
+        created = cr_lib.create_cr(conn, cr_number, original_request, transcript, cr_data, dollars, ratio_pct, CR_PIPELINE_CONFIG)
 
     return {
         "type": "complete",
         "crNumber": cr_number,
-        "title": cr_data.get("title"),
-        "tier": cr_data.get("tier"),
-        "estimatedTokens": cr_data.get("estimated_tokens", 0),
-        "estimatedCost": round(dollars, 2),
-        "costRatioPct": round(ratio_pct, 1),
+        "title": created["title"],
+        "tier": created["tier"],
+        "estimatedTokens": created["estimatedTokens"],
+        "estimatedCost": created["estimatedCost"],
+        "costRatioPct": created["costRatioPct"],
     }
 
 
 @app.get("/api/change-requests")
 def list_change_requests(_: dict = Depends(require_permission("files.download"))):
-    if not CHANGE_REQUESTS_DIR.exists():
-        return []
-    results = []
-    for folder in CHANGE_REQUESTS_DIR.iterdir():
-        request_file = folder / "request.md"
-        if folder.is_dir() and request_file.exists():
-            parsed = parse_change_request(request_file)
-            if parsed:
-                results.append(parsed)
-    results.sort(key=lambda cr: cr["crNumber"], reverse=True)
-    return results
+    with cr_lib.get_conn() as conn:
+        return cr_lib.list_crs(conn)
 
 
 @app.get("/api/change-requests/{cr_number}")
 def get_change_request(cr_number: int, _: dict = Depends(require_permission("files.download"))):
-    request_file = CHANGE_REQUESTS_DIR / f"CR-{cr_number:03d}" / "request.md"
-    if not request_file.exists():
+    with cr_lib.get_conn() as conn:
+        cr = cr_lib.get_cr(conn, cr_number)
+    if not cr:
         raise HTTPException(status_code=404, detail=f"CR-{cr_number:03d} not found")
-    parsed = parse_change_request(request_file)
-    if not parsed:
-        raise HTTPException(status_code=500, detail=f"Could not parse CR-{cr_number:03d}")
-    return parsed
+    return cr
 
 
 @app.get("/api/change-requests/{cr_number}/progress")
 def get_change_request_progress(cr_number: int, _: dict = Depends(require_permission("files.download"))):
-    # Written incrementally by pipeline/implement_change_request.py as it
+    # Updated incrementally by pipeline/implement_change_request.py as it
     # streams Claude Code's output -- session id, running token count, and a
     # human-readable last-action line, independent of whatever process (CLI
-    # or API) launched the run. Local-repo-only, same as merge/rollback: this
-    # file only exists where implementation actually ran.
-    progress_file = CHANGE_REQUESTS_DIR / f"CR-{cr_number:03d}" / "progress.json"
-    if not progress_file.exists():
-        return {"status": "not_started"}
-    try:
-        return json.loads(progress_file.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {"status": "unknown"}
+    # or API) launched the run, and readable from anywhere with DB access
+    # (unlike the old sidecar progress.json, which was local-repo-only).
+    with cr_lib.get_conn() as conn:
+        return cr_lib.get_progress(conn, cr_number)
 
 
 def update_cr_status(cr_number: int, new_status: str) -> dict:
-    folder = CHANGE_REQUESTS_DIR / f"CR-{cr_number:03d}"
-    request_file = folder / "request.md"
-    if not request_file.exists():
-        raise HTTPException(status_code=404, detail=f"CR-{cr_number:03d} not found")
-
-    text = request_file.read_text(encoding="utf-8")
-    try:
-        updated_text = cr_lib.update_status(text, new_status)
-    except ValueError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-    request_file.write_text(updated_text, encoding="utf-8")
-    return parse_change_request(request_file)
+    with cr_lib.get_conn() as conn:
+        if not cr_lib.get_cr(conn, cr_number):
+            raise HTTPException(status_code=404, detail=f"CR-{cr_number:03d} not found")
+        cr_lib.update_status(conn, cr_number, new_status)
+        return cr_lib.get_cr(conn, cr_number)
 
 
 PIPELINE_SCRIPT = Path(__file__).resolve().parent.parent / "pipeline" / "implement_change_request.py"
 
 
 def launch_implementation(cr_number: int, repo_root: Path):
-    # Fire-and-forget: implement_change_request.py writes its own progress.json
-    # (session id, token count, last action) next to the CR's request.md as it
+    # Fire-and-forget: implement_change_request.py writes its own progress
+    # (session id, token count, last action) to dbo.ChangeRequests as it
     # streams, so there's no need for an in-memory job registry here -- the
-    # file itself is the durable status, readable by /progress regardless of
-    # what launched the run or whether this API process restarts.
-    log_path = CHANGE_REQUESTS_DIR / f"CR-{cr_number:03d}" / "implement.log"
+    # row itself is the durable status, readable by /progress regardless of
+    # what launched the run or whether this API process restarts. Raw stdout
+    # goes to a temp file purely for post-mortem debugging, not read back.
+    import tempfile
+    log_path = Path(tempfile.gettempdir()) / f"cr-{cr_number:03d}-implement.log"
     log_file = open(log_path, "w", encoding="utf-8")
     subprocess.Popen(
         [sys.executable, str(PIPELINE_SCRIPT), str(cr_number), "--repo", str(repo_root)],
@@ -496,13 +391,6 @@ def require_clean_working_tree(repo_root: Path):
         )
 
 
-def get_cr_text(cr_number: int) -> tuple[Path, str]:
-    request_file = CHANGE_REQUESTS_DIR / f"CR-{cr_number:03d}" / "request.md"
-    if not request_file.exists():
-        raise HTTPException(status_code=404, detail=f"CR-{cr_number:03d} not found")
-    return request_file, request_file.read_text(encoding="utf-8")
-
-
 def run_git(args: list, cwd: Path):
     result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8")
     if result.returncode != 0:
@@ -554,43 +442,40 @@ def merge_change_request(cr_number: int, payload: dict = Depends(require_permiss
 
     repo_root = require_git_repo()
     require_clean_working_tree(repo_root)
-    request_file, text = get_cr_text(cr_number)
 
-    status = cr_lib.get_status(text)
-    if not status.startswith("Implemented"):
-        raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} is not ready to merge (status: '{status}').")
+    with cr_lib.get_conn() as conn:
+        cr = cr_lib.get_cr(conn, cr_number)
+        if not cr:
+            raise HTTPException(status_code=404, detail=f"CR-{cr_number:03d} not found")
+        if not cr["status"].startswith("Implemented"):
+            raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} is not ready to merge (status: '{cr['status']}').")
+        branch = cr["branch"]
+        if not branch:
+            raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} has no recorded Branch to merge.")
+        title = cr["title"]
 
-    branch = cr_lib.get_field(text, "Branch")
-    if not branch:
-        raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} has no recorded Branch to merge.")
+        run_git(["fetch", "origin"], repo_root)
+        run_git(["checkout", "main"], repo_root)
+        run_git(["pull", "origin", "main"], repo_root)
 
-    parsed = parse_change_request(request_file)
-    title = parsed.get("title", f"CR-{cr_number:03d}") if parsed else f"CR-{cr_number:03d}"
-
-    run_git(["fetch", "origin"], repo_root)
-    run_git(["checkout", "main"], repo_root)
-    run_git(["pull", "origin", "main"], repo_root)
-
-    merge_result = subprocess.run(
-        ["git", "merge", f"origin/{branch}", "--no-ff", "-m", f"Merge CR-{cr_number:03d}: {title}"],
-        cwd=repo_root, capture_output=True, text=True, encoding="utf-8",
-    )
-    if merge_result.returncode != 0:
-        subprocess.run(["git", "merge", "--abort"], cwd=repo_root, capture_output=True, text=True, encoding="utf-8")
-        raise HTTPException(
-            status_code=409,
-            detail=f"Merge conflict merging origin/{branch} into main -- resolve manually. Details:\n{merge_result.stderr}",
+        merge_result = subprocess.run(
+            ["git", "merge", f"origin/{branch}", "--no-ff", "-m", f"Merge CR-{cr_number:03d}: {title}"],
+            cwd=repo_root, capture_output=True, text=True, encoding="utf-8",
         )
+        if merge_result.returncode != 0:
+            subprocess.run(["git", "merge", "--abort"], cwd=repo_root, capture_output=True, text=True, encoding="utf-8")
+            raise HTTPException(
+                status_code=409,
+                detail=f"Merge conflict merging origin/{branch} into main -- resolve manually. Details:\n{merge_result.stderr}",
+            )
 
-    run_git(["push", "origin", "main"], repo_root)
-    merge_commit = run_git(["rev-parse", "HEAD"], repo_root)
+        run_git(["push", "origin", "main"], repo_root)
+        merge_commit = run_git(["rev-parse", "HEAD"], repo_root)
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    updated_text = cr_lib.set_field(text, "Merge commit", merge_commit)
-    updated_text = cr_lib.update_status(updated_text, f"Merged (Gate 2) by {approver} on {timestamp}")
-    request_file.write_text(updated_text, encoding="utf-8")
-
-    return parse_change_request(request_file)
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        cr_lib.set_fields(conn, cr_number, mergeCommit=merge_commit)
+        cr_lib.update_status(conn, cr_number, f"Merged (Gate 2) by {approver} on {timestamp}")
+        return cr_lib.get_cr(conn, cr_number)
 
 
 @app.post("/api/change-requests/{cr_number}/rollback")
@@ -605,40 +490,39 @@ def rollback_change_request(cr_number: int, payload: dict = Depends(require_perm
 
     repo_root = require_git_repo()
     require_clean_working_tree(repo_root)
-    request_file, text = get_cr_text(cr_number)
 
-    status = cr_lib.get_status(text)
-    if not status.startswith("Merged"):
-        raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} has not been merged -- nothing to roll back.")
+    with cr_lib.get_conn() as conn:
+        cr = cr_lib.get_cr(conn, cr_number)
+        if not cr:
+            raise HTTPException(status_code=404, detail=f"CR-{cr_number:03d} not found")
+        if not cr["status"].startswith("Merged"):
+            raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} has not been merged -- nothing to roll back.")
+        merge_commit = cr["mergeCommit"]
+        if not merge_commit:
+            raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} has no recorded merge commit.")
 
-    merge_commit = cr_lib.get_field(text, "Merge commit")
-    if not merge_commit:
-        raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} has no recorded merge commit.")
+        run_git(["fetch", "origin"], repo_root)
+        run_git(["checkout", "main"], repo_root)
+        run_git(["pull", "origin", "main"], repo_root)
 
-    run_git(["fetch", "origin"], repo_root)
-    run_git(["checkout", "main"], repo_root)
-    run_git(["pull", "origin", "main"], repo_root)
-
-    revert_result = subprocess.run(
-        ["git", "revert", merge_commit, "-m", "1", "--no-edit"],
-        cwd=repo_root, capture_output=True, text=True, encoding="utf-8",
-    )
-    if revert_result.returncode != 0:
-        subprocess.run(["git", "revert", "--abort"], cwd=repo_root, capture_output=True, text=True, encoding="utf-8")
-        raise HTTPException(
-            status_code=409,
-            detail=f"Revert conflict on {merge_commit} -- resolve manually. Details:\n{revert_result.stderr}",
+        revert_result = subprocess.run(
+            ["git", "revert", merge_commit, "-m", "1", "--no-edit"],
+            cwd=repo_root, capture_output=True, text=True, encoding="utf-8",
         )
+        if revert_result.returncode != 0:
+            subprocess.run(["git", "revert", "--abort"], cwd=repo_root, capture_output=True, text=True, encoding="utf-8")
+            raise HTTPException(
+                status_code=409,
+                detail=f"Revert conflict on {merge_commit} -- resolve manually. Details:\n{revert_result.stderr}",
+            )
 
-    run_git(["push", "origin", "main"], repo_root)
-    revert_commit = run_git(["rev-parse", "HEAD"], repo_root)
+        run_git(["push", "origin", "main"], repo_root)
+        revert_commit = run_git(["rev-parse", "HEAD"], repo_root)
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    updated_text = cr_lib.set_field(text, "Rollback commit", revert_commit)
-    updated_text = cr_lib.update_status(updated_text, f"Rolled back (Gate 2) by {approver} on {timestamp}")
-    request_file.write_text(updated_text, encoding="utf-8")
-
-    return parse_change_request(request_file)
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        cr_lib.set_fields(conn, cr_number, rollbackCommit=revert_commit)
+        cr_lib.update_status(conn, cr_number, f"Rolled back (Gate 2) by {approver} on {timestamp}")
+        return cr_lib.get_cr(conn, cr_number)
 
 
 # To check Health of the API
