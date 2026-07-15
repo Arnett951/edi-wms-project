@@ -92,6 +92,7 @@ export default function App() {
   const [permissions, setPermissions] = useState([]);
   const canDownloadFiles = permissions.includes("files.download");
   const canManageCr = permissions.includes("cr.admin");
+  const canViewCr = canManageCr || canDownloadFiles;
 
   async function loadPermissions() {
     try {
@@ -350,7 +351,7 @@ setError(
           Reports
         </button>
       )}
-      {canManageCr && (
+      {canViewCr && (
         <button
           className={activeTab === "admin" ? "tab-active" : ""}
           onClick={() => setActiveTab("admin")}
@@ -512,6 +513,6 @@ setError(
 
     {activeTab === "reports" && isAuthenticated && <ReportsDashboard />}
 
-    {activeTab === "admin" && canManageCr && <AdminChangeRequests />}
+    {activeTab === "admin" && canViewCr && <AdminChangeRequests canManageCr={canManageCr} />}
   </main></div >;
 }

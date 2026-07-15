@@ -134,6 +134,20 @@ def require_permission(permission_name: str):
     return _check
 
 
+def require_any_permission(*permission_names: str):
+    """Allow the caller through if they hold ANY of the given permissions --
+    e.g. SuperUser (files.download) and Admin (cr.admin) can both view/triage
+    the CR queue, while endpoints that only Admin should reach still use
+    require_permission("cr.admin") directly."""
+    def _check(payload: dict = Depends(require_auth)) -> dict:
+        user_oid = get_user_oid(payload)
+        user_perms = get_user_permissions(user_oid)
+        if not any(p in user_perms for p in permission_names):
+            raise HTTPException(status_code=403, detail=f"Missing permission: one of {list(permission_names)}")
+        return payload
+    return _check
+
+
 @app.get("/api/me/permissions")
 def my_permissions(payload: dict = Depends(require_auth)):
     return {"permissions": get_user_permissions(get_user_oid(payload))}
@@ -284,13 +298,13 @@ def change_request_intake(
 
 
 @app.get("/api/change-requests")
-def list_change_requests(_: dict = Depends(require_permission("cr.admin"))):
+def list_change_requests(_: dict = Depends(require_any_permission("cr.admin", "files.download"))):
     with cr_lib.get_conn() as conn:
         return cr_lib.list_crs(conn)
 
 
 @app.get("/api/change-requests/{cr_number}")
-def get_change_request(cr_number: int, _: dict = Depends(require_permission("cr.admin"))):
+def get_change_request(cr_number: int, _: dict = Depends(require_any_permission("cr.admin", "files.download"))):
     with cr_lib.get_conn() as conn:
         cr = cr_lib.get_cr(conn, cr_number)
     if not cr:
@@ -299,7 +313,7 @@ def get_change_request(cr_number: int, _: dict = Depends(require_permission("cr.
 
 
 @app.get("/api/change-requests/{cr_number}/progress")
-def get_change_request_progress(cr_number: int, _: dict = Depends(require_permission("cr.admin"))):
+def get_change_request_progress(cr_number: int, _: dict = Depends(require_any_permission("cr.admin", "files.download"))):
     # Updated incrementally by pipeline/implement_change_request.py as it
     # streams Claude Code's output -- session id, running token count, and a
     # human-readable last-action line, independent of whatever process (CLI
@@ -309,18 +323,10 @@ def get_change_request_progress(cr_number: int, _: dict = Depends(require_permis
         return cr_lib.get_progress(conn, cr_number)
 
 
-def update_cr_status(cr_number: int, new_status: str) -> dict:
-    with cr_lib.get_conn() as conn:
-        if not cr_lib.get_cr(conn, cr_number):
-            raise HTTPException(status_code=404, detail=f"CR-{cr_number:03d} not found")
-        cr_lib.update_status(conn, cr_number, new_status)
-        return cr_lib.get_cr(conn, cr_number)
-
-
 PIPELINE_SCRIPT = Path(__file__).resolve().parent.parent / "pipeline" / "implement_change_request.py"
 
 
-def launch_implementation(cr_number: int, repo_root: Path):
+def launch_implementation(cr_number: int, repo_root: Path, max_budget_usd: Optional[float] = None):
     # Fire-and-forget: implement_change_request.py writes its own progress
     # (session id, token count, last action) to dbo.ChangeRequests as it
     # streams, so there's no need for an in-memory job registry here -- the
@@ -330,34 +336,78 @@ def launch_implementation(cr_number: int, repo_root: Path):
     import tempfile
     log_path = Path(tempfile.gettempdir()) / f"cr-{cr_number:03d}-implement.log"
     log_file = open(log_path, "w", encoding="utf-8")
-    subprocess.Popen(
-        [sys.executable, str(PIPELINE_SCRIPT), str(cr_number), "--repo", str(repo_root)],
-        cwd=repo_root, stdout=log_file, stderr=subprocess.STDOUT,
-    )
+    cmd = [sys.executable, str(PIPELINE_SCRIPT), str(cr_number), "--repo", str(repo_root)]
+    if max_budget_usd is not None:
+        cmd += ["--max-budget-usd", str(max_budget_usd)]
+    subprocess.Popen(cmd, cwd=repo_root, stdout=log_file, stderr=subprocess.STDOUT)
+
+
+# Gate 1 (review) is now split from Build kickoff so SuperUser -- a
+# self-service, publicly-reachable role -- can triage requests without being
+# able to trigger a real Claude Code run. Approve only moves a CR to Pending
+# Build Approval; only Admin (cr.admin) can start the actual build from
+# there, via start_build_change_request below.
+PENDING_STATUS = "Pending Gate 1 review"
+PENDING_BUILD_STATUS = "Pending Build Approval"
 
 
 @app.post("/api/change-requests/{cr_number}/approve")
-def approve_change_request(cr_number: int, payload: dict = Depends(require_permission("cr.admin"))):
+def approve_change_request(cr_number: int, payload: dict = Depends(require_any_permission("cr.admin", "files.download"))):
     approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    result = update_cr_status(cr_number, f"Approved (Gate 1) by {approver} on {timestamp}")
-
-    # Original design: only two human inputs total -- Approve (which starts
-    # work itself) and Approve & Merge (Gate 2 / deploy). Best-effort: silently
-    # skipped when there's no local git repo (e.g. the deployed Azure API) --
-    # approval itself still succeeds either way.
-    repo_root = Path(__file__).resolve().parent.parent
-    if (repo_root / ".git").exists():
-        launch_implementation(cr_number, repo_root)
-
-    return result
+    with cr_lib.get_conn() as conn:
+        cr = cr_lib.get_cr(conn, cr_number)
+        if not cr:
+            raise HTTPException(status_code=404, detail=f"CR-{cr_number:03d} not found")
+        if cr["status"] != PENDING_STATUS:
+            raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} is not awaiting Gate 1 review (status: '{cr['status']}').")
+        cr_lib.update_status(conn, cr_number, f"{PENDING_BUILD_STATUS} -- Gate 1 approved by {approver} on {timestamp}")
+        return cr_lib.get_cr(conn, cr_number)
 
 
 @app.post("/api/change-requests/{cr_number}/reject")
-def reject_change_request(cr_number: int, payload: dict = Depends(require_permission("cr.admin"))):
+def reject_change_request(cr_number: int, payload: dict = Depends(require_any_permission("cr.admin", "files.download"))):
     approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    return update_cr_status(cr_number, f"Rejected (Gate 1) by {approver} on {timestamp}")
+    with cr_lib.get_conn() as conn:
+        cr = cr_lib.get_cr(conn, cr_number)
+        if not cr:
+            raise HTTPException(status_code=404, detail=f"CR-{cr_number:03d} not found")
+        at_build_stage = cr["status"].startswith(PENDING_BUILD_STATUS)
+        if not at_build_stage and cr["status"] != PENDING_STATUS:
+            raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} is not awaiting a decision (status: '{cr['status']}').")
+        if at_build_stage and "cr.admin" not in get_user_permissions(get_user_oid(payload)):
+            raise HTTPException(status_code=403, detail="Only Admin can reject at the Pending Build Approval stage.")
+        label = "Rejected (Pre-Build)" if at_build_stage else "Rejected (Gate 1)"
+        cr_lib.update_status(conn, cr_number, f"{label} by {approver} on {timestamp}")
+        return cr_lib.get_cr(conn, cr_number)
+
+
+class StartBuildRequest(BaseModel):
+    maxBudgetUsd: Optional[float] = None
+
+
+@app.post("/api/change-requests/{cr_number}/start-build")
+def start_build_change_request(cr_number: int, body: StartBuildRequest, payload: dict = Depends(require_permission("cr.admin"))):
+    approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    with cr_lib.get_conn() as conn:
+        cr = cr_lib.get_cr(conn, cr_number)
+        if not cr:
+            raise HTTPException(status_code=404, detail=f"CR-{cr_number:03d} not found")
+        if not cr["status"].startswith(PENDING_BUILD_STATUS):
+            raise HTTPException(status_code=400, detail=f"CR-{cr_number:03d} is not awaiting build approval (status: '{cr['status']}').")
+        # Same "Approved (Gate 1) by ..." format the pipeline script and the
+        # dashboard's progress polling already recognize -- reusing it here
+        # means neither has to learn a second "build started" status.
+        cr_lib.update_status(conn, cr_number, f"Approved (Gate 1) by {approver} on {timestamp}")
+        result = cr_lib.get_cr(conn, cr_number)
+
+    repo_root = Path(__file__).resolve().parent.parent
+    if (repo_root / ".git").exists():
+        launch_implementation(cr_number, repo_root, max_budget_usd=body.maxBudgetUsd)
+
+    return result
 
 
 # ---------------------------------------------------------------------------

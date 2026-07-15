@@ -194,6 +194,10 @@ def main():
     parser.add_argument("--repo", default=".", help="Path to the target repo (default: current directory).")
     parser.add_argument("--dry-run", action="store_true", help="Build and print the prompt without invoking Claude.")
     parser.add_argument(
+        "--max-budget-usd", type=float, default=None,
+        help="Override the auto-computed budget cap in USD (default: derived from the CR's estimated cost).",
+    )
+    parser.add_argument(
         "--permission-mode",
         default="bypassPermissions",
         help=(
@@ -226,7 +230,10 @@ def main():
     cr_text = format_cr_for_prompt(cr)
     prompt = build_prompt(args.cr_number, branch_name, cr_text)
     estimated_cost = cr["estimatedCost"] or MIN_BUDGET_USD
-    max_budget = max(MIN_BUDGET_USD, estimated_cost * MAX_BUDGET_MARGIN_MULTIPLIER)
+    max_budget = (
+        args.max_budget_usd if args.max_budget_usd is not None
+        else max(MIN_BUDGET_USD, estimated_cost * MAX_BUDGET_MARGIN_MULTIPLIER)
+    )
 
     if args.dry_run:
         print(f"--- Branch: {branch_name} ---")
