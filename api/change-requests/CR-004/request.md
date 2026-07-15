@@ -2,7 +2,8 @@
 
 - **Date:** 2026-07-14
 - **Tier:** A -- In scope — full pipeline
-- **Status:** Implemented -- awaiting Gate 2 (merge approval)
+- **Status:** Merged (Gate 2) by chris arnett on 2026-07-15 15:39 UTC
+- **Merge commit:** 2d136f86f448d07ceb9a8bae0c07c0cb90e462f0
 - **Merge readiness:** Clean
 - **Branch:** cr-004-reports-tab-stacked-bar-chart-of-inbound-files-rec
 - **Estimated tokens:** 6,000
