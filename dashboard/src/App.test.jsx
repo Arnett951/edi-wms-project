@@ -98,6 +98,15 @@ describe("App", () => {
     expect(screen.queryByText("Files Waiting")).not.toBeInTheDocument();
   });
 
+  it("renders the dashboard header without the 'Demo' label", async () => {
+    mockDashboardFetch();
+    render(<App />);
+    await screen.findByText("a.edi");
+
+    expect(screen.getByText("Warehouse Integration")).toBeInTheDocument();
+    expect(screen.queryByText("Warehouse Integration Demo")).not.toBeInTheDocument();
+  });
+
   it("renders live dashboard data on successful load", async () => {
     mockDashboardFetch();
     render(<App />);

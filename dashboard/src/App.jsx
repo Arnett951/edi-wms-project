@@ -276,7 +276,7 @@ setError(
     <header className="header">
       <div>
         <h1>EDI Dashboard</h1>
-        <p>Warehouse Integration Demo</p>
+        <p>Warehouse Integration</p>
         <a
           className="demo-link-btn"
           href="/architecture-demo.html"
