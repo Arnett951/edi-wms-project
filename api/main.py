@@ -346,9 +346,11 @@ def launch_implementation(cr_number: int, repo_root: Path, max_budget_usd: Optio
 # self-service, publicly-reachable role -- can triage requests without being
 # able to trigger a real Claude Code run. Approve only moves a CR to Pending
 # Build Approval; only Admin (cr.admin) can start the actual build from
-# there, via start_build_change_request below.
-PENDING_STATUS = "Pending Gate 1 review"
-PENDING_BUILD_STATUS = "Pending Build Approval"
+# there, via start_build_change_request below. Status literals live in
+# cr_lib -- implement_change_request.py resets a failed build back to
+# PENDING_BUILD_STATUS too, so both need the exact same string.
+PENDING_STATUS = cr_lib.PENDING_STATUS
+PENDING_BUILD_STATUS = cr_lib.PENDING_BUILD_STATUS
 
 
 @app.post("/api/change-requests/{cr_number}/approve")

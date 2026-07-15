@@ -277,6 +277,16 @@ def main():
             "committed/pushed before the failure. A non-zero exit here does not mean nothing happened.",
             file=sys.stderr,
         )
+        # Without this, the CR sits stuck at "Approved (Gate 1)..." forever --
+        # no button in the dashboard corresponds to that status once the
+        # build has already failed. Sending it back to Pending Build Approval
+        # (with the failure reason folded into the status text) re-surfaces
+        # the Max $/Start Build/Reject controls so Admin can retry.
+        failure_detail = f"spent ${cost:.2f} of ${max_budget:.2f} budget" if cost is not None else (subtype or "see logs")
+        cr_lib.update_status(
+            conn, args.cr_number,
+            f"{cr_lib.PENDING_BUILD_STATUS} -- previous attempt failed ({failure_detail}), retry below",
+        )
         sys.exit(1)
 
     cr_lib.update_progress(

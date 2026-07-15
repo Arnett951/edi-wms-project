@@ -12,7 +12,8 @@ const MERGED_PREFIX = "Merged";
 function statusBadgeClass(status) {
   if (status === PENDING_STATUS) return "neutral";
   if (status.startsWith(MERGED_PREFIX)) return "good";
-  if (status.startsWith(PENDING_BUILD_PREFIX) || status.startsWith("Approved") || status.startsWith(IMPLEMENTED_PREFIX)) return "ready";
+  if (status.startsWith(PENDING_BUILD_PREFIX)) return status.includes("previous attempt failed") ? "bad" : "ready";
+  if (status.startsWith("Approved") || status.startsWith(IMPLEMENTED_PREFIX)) return "ready";
   if (status.startsWith("Rejected") || status.startsWith("Auto-denied") || status.startsWith("Rolled back")) return "bad";
   return "neutral";
 }

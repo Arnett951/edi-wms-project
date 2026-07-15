@@ -20,6 +20,13 @@ from pathlib import Path
 import pyodbc
 import yaml
 
+# Shared status literals -- both api/main.py (Gate 1/Build endpoints) and
+# pipeline/implement_change_request.py (resets a failed build back to Pending
+# Build Approval) need these to match exactly, so they live here once rather
+# than as separately-typed string literals that could drift apart.
+PENDING_STATUS = "Pending Gate 1 review"
+PENDING_BUILD_STATUS = "Pending Build Approval"
+
 DEFAULT_CONFIG = {
     "project_name": "Unnamed project",
     "stack_summary": "Unknown stack -- describe your project in .change-pipeline.yml",
@@ -198,7 +205,7 @@ def create_cr(conn, cr_number: int, original_request: str, transcript: list, cr_
               dollars: float, ratio_pct: float, config: dict) -> dict:
     tier = cr_data.get("tier", "?")
     tier_label = config["tiers"].get(tier, {}).get("label", "")
-    status = "Auto-denied -- Tier C, handle manually" if tier == "C" else "Pending Gate 1 review"
+    status = "Auto-denied -- Tier C, handle manually" if tier == "C" else PENDING_STATUS
 
     cur = conn.cursor()
     cur.execute(
