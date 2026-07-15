@@ -354,7 +354,7 @@ setError(
           className={activeTab === "admin" ? "tab-active" : ""}
           onClick={() => setActiveTab("admin")}
         >
-          CR-WorkFlow
+          CR-FLOW-ADMIN-ONLY
         </button>
       )}
     </div>
