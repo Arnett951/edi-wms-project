@@ -46,6 +46,7 @@ export default function AdminChangeRequests({ canManageCr }) {
   // CR-Workflow tabs: "active" shows every CR that isn't Closed/Merged
   // (default), "closed" shows only Closed/Merged CRs.
   const [crTab, setCrTab] = useState("active");
+  const [pendingDispatch, setPendingDispatch] = useState({});
 
   async function openDetail(crNumber) {
     setSelectedCr({ crNumber });
@@ -75,7 +76,23 @@ export default function AdminChangeRequests({ canManageCr }) {
       const res = await authFetch(`${API_BASE}/api/change-requests?status_group=${tab}`);
       const data = await res.json().catch(() => []);
       if (!res.ok) throw new Error(data.detail || "Failed to load change requests.");
-      setRequests(Array.isArray(data) ? data : []);
+      const fresh = Array.isArray(data) ? data : [];
+      setRequests(fresh);
+      // Clear a "dispatched" marker once the remote merge/rollback has
+      // actually landed (status changed), not just because a poll ran --
+      // without this the row would flip back to its clickable state well
+      // before the GitHub Actions run behind it is actually done.
+      setPendingDispatch((prev) => {
+        if (Object.keys(prev).length === 0) return prev;
+        const next = { ...prev };
+        for (const cr of fresh) {
+          const action = next[cr.crNumber];
+          if (!action) continue;
+          if (action === "merge" && cr.status.startsWith(MERGED_PREFIX)) delete next[cr.crNumber];
+          if (action === "rollback" && !cr.status.startsWith(MERGED_PREFIX)) delete next[cr.crNumber];
+        }
+        return next;
+      });
     } catch (err) {
       setError(err.message || "Failed to load change requests.");
     } finally {
@@ -95,10 +112,14 @@ export default function AdminChangeRequests({ canManageCr }) {
       if (!res.ok) throw new Error(data.detail || `Failed to ${decision} CR-${crNumber}.`);
       if (data.type === "dispatched") {
         // No local repo on this deployment -- the actual merge/rollback runs
-        // async via GitHub Actions. Don't overwrite the CR row with this
-        // acknowledgment shape; just surface the message and let the user
-        // refresh once the workflow's own commit lands.
+        // async via GitHub Actions, so there's no fresh CR row to show yet.
+        // Mark it pending so the row shows "dispatched" instead of the
+        // action button springing back as if nothing happened, and so
+        // polling keeps running until loadRequests() sees the real change.
         setInfo(data.message);
+        if (decision === "merge" || decision === "rollback") {
+          setPendingDispatch((prev) => ({ ...prev, [crNumber]: decision }));
+        }
       } else {
         setRequests((prev) => prev.map((cr) => (cr.crNumber === crNumber ? data : cr)));
       }
@@ -146,9 +167,14 @@ export default function AdminChangeRequests({ canManageCr }) {
   // approval server-side), refresh its live progress -- session id, running
   // token count, last action -- and re-check the CR list so a finished run
   // (status flips to "Implemented...") drops out of this view on its own.
+  // Also keeps running while a merge/rollback is dispatched-but-unconfirmed
+  // (pendingDispatch), since that transition only ever happens on GitHub's
+  // runner, never locally -- without this, the row would never update on
+  // its own once nothing is actively "Approved"/building.
   const approvedCrNumbers = requests.filter((cr) => cr.status.startsWith(APPROVED_PREFIX)).map((cr) => cr.crNumber);
+  const pendingDispatchCount = Object.keys(pendingDispatch).length;
   useEffect(() => {
-    if (approvedCrNumbers.length === 0) return undefined;
+    if (approvedCrNumbers.length === 0 && pendingDispatchCount === 0) return undefined;
     const interval = setInterval(async () => {
       for (const crNumber of approvedCrNumbers) {
         try {
@@ -162,7 +188,7 @@ export default function AdminChangeRequests({ canManageCr }) {
       loadRequests();
     }, 4000);
     return () => clearInterval(interval);
-  }, [approvedCrNumbers.join(",")]);
+  }, [approvedCrNumbers.join(","), pendingDispatchCount]);
 
   const attentionCount = requests.filter(needsAttention).length;
 
@@ -315,28 +341,36 @@ export default function AdminChangeRequests({ canManageCr }) {
                       </div>
                     )}
                     {cr.status.startsWith(IMPLEMENTED_PREFIX) && (
-                      <button
-                        onClick={() => {
-                          if (window.confirm(`Merge ${crCode(cr.crNumber)}'s branch into main and push?`)) {
-                            decide(cr.crNumber, "merge");
-                          }
-                        }}
-                        disabled={actioningCr === cr.crNumber}
-                      >
-                        Approve &amp; Merge
-                      </button>
+                      pendingDispatch[cr.crNumber] === "merge" ? (
+                        <span className="status-badge neutral">Merge dispatched -- check Actions tab</span>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Merge ${crCode(cr.crNumber)}'s branch into main and push?`)) {
+                              decide(cr.crNumber, "merge");
+                            }
+                          }}
+                          disabled={actioningCr === cr.crNumber}
+                        >
+                          Approve &amp; Merge
+                        </button>
+                      )
                     )}
                     {cr.status.startsWith(MERGED_PREFIX) && (
-                      <button
-                        onClick={() => {
-                          if (window.confirm(`Revert ${crCode(cr.crNumber)}'s merge commit and push?`)) {
-                            decide(cr.crNumber, "rollback");
-                          }
-                        }}
-                        disabled={actioningCr === cr.crNumber}
-                      >
-                        Rollback
-                      </button>
+                      pendingDispatch[cr.crNumber] === "rollback" ? (
+                        <span className="status-badge neutral">Rollback dispatched -- check Actions tab</span>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Revert ${crCode(cr.crNumber)}'s merge commit and push?`)) {
+                              decide(cr.crNumber, "rollback");
+                            }
+                          }}
+                          disabled={actioningCr === cr.crNumber}
+                        >
+                          Rollback
+                        </button>
+                      )
                     )}
                   </td>
                 </tr>
