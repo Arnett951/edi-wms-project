@@ -200,7 +200,7 @@ export default function AdminChangeRequests({ canManageCr }) {
               <th>Cost ratio</th>
               <th>Actual tokens</th>
               <th>Actual cost</th>
-              <th>Status</th>
+              <th className="cr-status-cell">Status</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -224,7 +224,7 @@ export default function AdminChangeRequests({ canManageCr }) {
                   <td>{cr.costRatioPct ? `${cr.costRatioPct}%` : "—"}</td>
                   <td>{cr.tokensSoFar ?? "—"}</td>
                   <td>{cr.actualCostUsd != null ? `$${cr.actualCostUsd}` : "—"}</td>
-                  <td>
+                  <td className="cr-status-cell">
                     <span className={`status-badge ${statusBadgeClass(cr.status)}`}>{cr.status}</span>{" "}
                     {cr.status.startsWith(IMPLEMENTED_PREFIX) && cr.mergeReadiness && (
                       <span className={`status-badge ${cr.mergeReadiness.startsWith("Conflicts") ? "bad" : "good"}`}>
