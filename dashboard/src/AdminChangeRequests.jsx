@@ -166,13 +166,15 @@ export default function AdminChangeRequests() {
               <th>Est. tokens</th>
               <th>Est. cost</th>
               <th>Cost ratio</th>
+              <th>Actual tokens</th>
+              <th>Actual cost</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {requests.length === 0 ? (
-              <tr><td colSpan="8">No change requests found yet.</td></tr>
+              <tr><td colSpan="10">No change requests found yet.</td></tr>
             ) : (
               requests.map((cr) => (
                 <tr key={cr.crNumber}>
@@ -188,6 +190,8 @@ export default function AdminChangeRequests() {
                   <td>{cr.estimatedTokens ?? "—"}</td>
                   <td>{cr.estimatedCost ? `$${cr.estimatedCost}` : "—"}</td>
                   <td>{cr.costRatioPct ? `${cr.costRatioPct}%` : "—"}</td>
+                  <td>{cr.tokensSoFar ?? "—"}</td>
+                  <td>{cr.actualCostUsd != null ? `$${cr.actualCostUsd}` : "—"}</td>
                   <td>
                     <span className={`status-badge ${statusBadgeClass(cr.status)}`}>{cr.status}</span>{" "}
                     {cr.status.startsWith(IMPLEMENTED_PREFIX) && cr.mergeReadiness && (
