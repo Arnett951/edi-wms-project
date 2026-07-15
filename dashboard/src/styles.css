@@ -335,6 +335,22 @@ td {
   white-space: nowrap;
 }
 
+/* CR Work Flow tab: give the Status column more room and let its text wrap
+   instead of truncating with an ellipsis (overrides the global td rules). */
+.cr-status-cell {
+  min-width: 180px;
+  max-width: 260px;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
+.cr-status-cell .status-badge {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .status-badge {
   display: inline-flex;
   border-radius: 999px;
