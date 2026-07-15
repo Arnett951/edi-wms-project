@@ -43,6 +43,9 @@ export default function AdminChangeRequests({ canManageCr }) {
   const [info, setInfo] = useState(null);
   const [progressByCr, setProgressByCr] = useState({});
   const [maxBudgetByCr, setMaxBudgetByCr] = useState({});
+  // CR-Workflow tabs: "active" shows every CR that isn't Closed/Merged
+  // (default), "closed" shows only Closed/Merged CRs.
+  const [crTab, setCrTab] = useState("active");
 
   async function openDetail(crNumber) {
     setSelectedCr({ crNumber });
@@ -65,11 +68,11 @@ export default function AdminChangeRequests({ canManageCr }) {
     setDetailError(null);
   }
 
-  async function loadRequests() {
+  async function loadRequests(tab = crTab) {
     setLoading(true);
     setError(null);
     try {
-      const res = await authFetch(`${API_BASE}/api/change-requests`);
+      const res = await authFetch(`${API_BASE}/api/change-requests?status_group=${tab}`);
       const data = await res.json().catch(() => []);
       if (!res.ok) throw new Error(data.detail || "Failed to load change requests.");
       setRequests(Array.isArray(data) ? data : []);
@@ -133,9 +136,11 @@ export default function AdminChangeRequests({ canManageCr }) {
     }
   }
 
+  // Fetch on mount and whenever the tab switches -- the server returns only
+  // the CRs for the selected tab, so no full page reload is needed.
   useEffect(() => {
-    loadRequests();
-  }, []);
+    loadRequests(crTab);
+  }, [crTab]);
 
   // Simple polling: while any CR is Approved (implementation auto-starts on
   // approval server-side), refresh its live progress -- session id, running
@@ -188,6 +193,21 @@ export default function AdminChangeRequests({ canManageCr }) {
         </button>
       </section>
 
+      <div className="tabs">
+        <button
+          className={crTab === "active" ? "tab-active" : ""}
+          onClick={() => setCrTab("active")}
+        >
+          In Progress
+        </button>
+        <button
+          className={crTab === "closed" ? "tab-active" : ""}
+          onClick={() => setCrTab("closed")}
+        >
+          Closed / Merged
+        </button>
+      </div>
+
       <section className="panel">
         <table>
           <thead>
@@ -206,7 +226,7 @@ export default function AdminChangeRequests({ canManageCr }) {
           </thead>
           <tbody>
             {requests.length === 0 ? (
-              <tr><td colSpan="10">No change requests found yet.</td></tr>
+              <tr><td colSpan="10">{crTab === "closed" ? "No closed or merged change requests yet." : "No change requests in progress."}</td></tr>
             ) : (
               requests.map((cr) => (
                 <tr key={cr.crNumber}>

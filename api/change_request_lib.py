@@ -16,6 +16,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 import pyodbc
 import yaml
@@ -235,9 +236,28 @@ def get_cr(conn, cr_number: int):
     return _to_cr_dict(row) if row else None
 
 
-def list_crs(conn) -> list:
+# Status prefixes that mark a CR as closed out. A CR's status is a compound
+# string (e.g. "Merged (Gate 2) by X on Y"), so matching is by prefix.
+CLOSED_STATUS_PREFIXES = ("Merged", "Closed")
+
+
+def list_crs(conn, status_group: Optional[str] = None) -> list:
+    """List CRs newest-first. status_group filters the result set:
+      - "closed": only Closed/Merged CRs
+      - "active": every CR that isn't Closed/Merged
+      - None: all CRs
+    """
     cur = conn.cursor()
-    cur.execute(f"SELECT {', '.join(CR_COLUMNS)} FROM dbo.ChangeRequests ORDER BY CRNumber DESC")
+    query = f"SELECT {', '.join(CR_COLUMNS)} FROM dbo.ChangeRequests"
+    params: list = []
+    if status_group == "closed":
+        query += " WHERE " + " OR ".join("Status LIKE ?" for _ in CLOSED_STATUS_PREFIXES)
+        params = [f"{prefix}%" for prefix in CLOSED_STATUS_PREFIXES]
+    elif status_group == "active":
+        query += " WHERE " + " AND ".join("Status NOT LIKE ?" for _ in CLOSED_STATUS_PREFIXES)
+        params = [f"{prefix}%" for prefix in CLOSED_STATUS_PREFIXES]
+    query += " ORDER BY CRNumber DESC"
+    cur.execute(query, *params)
     return [_to_cr_dict(row) for row in cur.fetchall()]
 
 
