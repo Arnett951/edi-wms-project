@@ -119,7 +119,12 @@ export default function AdminChangeRequests({ canManageCr }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || `Failed to start build for CR-${crNumber}.`);
-      setRequests((prev) => prev.map((cr) => (cr.crNumber === crNumber ? data : cr)));
+      if (data.type === "dispatched") {
+        setInfo(data.message);
+        loadRequests();
+      } else {
+        setRequests((prev) => prev.map((cr) => (cr.crNumber === crNumber ? data : cr)));
+      }
     } catch (err) {
       setError(err.message || `Failed to start build for CR-${crNumber}.`);
     } finally {

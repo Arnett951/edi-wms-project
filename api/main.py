@@ -406,8 +406,13 @@ def start_build_change_request(cr_number: int, body: StartBuildRequest, payload:
     repo_root = Path(__file__).resolve().parent.parent
     if (repo_root / ".git").exists():
         launch_implementation(cr_number, repo_root, max_budget_usd=body.maxBudgetUsd)
+        return result
 
-    return result
+    dispatch_build_workflow(cr_number, approver, body.maxBudgetUsd)
+    return {
+        "type": "dispatched",
+        "message": f"Build for CR-{cr_number:03d} triggered via GitHub Actions -- check the repo's Actions tab for progress.",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -461,26 +466,40 @@ GITHUB_REPO = os.getenv("GITHUB_REPO", "Arnett951/edi-wms-project")
 GITHUB_DISPATCH_TOKEN = os.getenv("GITHUB_DISPATCH_TOKEN")
 
 
-def dispatch_github_workflow(action: str, cr_number: int, approver: str):
+def dispatch_github_workflow_file(workflow_file: str, inputs: dict):
     if not GITHUB_DISPATCH_TOKEN:
         raise HTTPException(
             status_code=503,
             detail=(
                 "No local git repo here, and GITHUB_DISPATCH_TOKEN isn't configured on this "
-                "deployment -- can't trigger Gate 2 remotely. Set that app setting to enable it."
+                "deployment -- can't trigger this action remotely. Set that app setting to enable it."
             ),
         )
     resp = requests.post(
-        f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/cr-gate2-dispatch.yml/dispatches",
+        f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{workflow_file}/dispatches",
         headers={
             "Authorization": f"Bearer {GITHUB_DISPATCH_TOKEN}",
             "Accept": "application/vnd.github+json",
         },
-        json={"ref": "main", "inputs": {"action": action, "cr_number": str(cr_number), "approver": approver}},
+        json={"ref": "main", "inputs": inputs},
         timeout=10,
     )
     if resp.status_code != 204:
         raise HTTPException(status_code=502, detail=f"GitHub workflow dispatch failed ({resp.status_code}): {resp.text}")
+
+
+def dispatch_github_workflow(action: str, cr_number: int, approver: str):
+    dispatch_github_workflow_file(
+        "cr-gate2-dispatch.yml",
+        {"action": action, "cr_number": str(cr_number), "approver": approver},
+    )
+
+
+def dispatch_build_workflow(cr_number: int, approver: str, max_budget_usd: Optional[float]):
+    inputs = {"cr_number": str(cr_number), "approver": approver}
+    if max_budget_usd is not None:
+        inputs["max_budget_usd"] = str(max_budget_usd)
+    dispatch_github_workflow_file("cr-build-dispatch.yml", inputs)
 
 
 @app.post("/api/change-requests/{cr_number}/merge")

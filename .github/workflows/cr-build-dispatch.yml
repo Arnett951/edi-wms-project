@@ -1,0 +1,77 @@
+name: CR Build Dispatch
+
+# Triggered remotely by the deployed API (api/main.py's start_build_change_request
+# endpoint) when it detects it has no local git repo of its own -- the App
+# Service calls the GitHub API to fire this workflow_dispatch instead of
+# running Claude Code itself. See pipeline/implement_change_request.py, which
+# this just invokes directly (it's already a standalone CLI, unlike Gate 2's
+# merge/rollback logic which needed a dedicated gate2_dispatch.py wrapper).
+#
+# Checkout uses a PAT (secrets.GH_PAT), same reasoning as cr-gate2-dispatch.yml:
+# pushes made with the default GITHUB_TOKEN don't trigger other push-based
+# workflows and can hit permission issues that a real PAT doesn't.
+
+on:
+  workflow_dispatch:
+    inputs:
+      cr_number:
+        description: 'CR number, e.g. 10'
+        required: true
+      approver:
+        description: 'Name of the approver'
+        required: false
+        default: 'GitHub Actions'
+      max_budget_usd:
+        description: 'Optional max budget override in USD (blank = auto)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Install ODBC Driver 18 for SQL Server
+        run: |
+          curl -sSL -O https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+          sudo dpkg -i packages-microsoft-prod.deb
+          sudo apt-get update
+          ACCEPT_EULA=Y sudo apt-get install -y msodbcsql18
+
+      - run: pip install pyyaml pyodbc python-dotenv
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Run implementation
+        env:
+          SQL_SERVER: ${{ secrets.SQL_SERVER }}
+          SQL_DATABASE: ${{ secrets.SQL_DATABASE }}
+          SQL_USER: ${{ secrets.SQL_USER }}
+          SQL_PASSWORD: ${{ secrets.SQL_PASSWORD }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "${{ inputs.max_budget_usd }}" ]; then
+            python pipeline/implement_change_request.py "${{ inputs.cr_number }}" --repo . --max-budget-usd "${{ inputs.max_budget_usd }}"
+          else
+            python pipeline/implement_change_request.py "${{ inputs.cr_number }}" --repo .
+          fi
