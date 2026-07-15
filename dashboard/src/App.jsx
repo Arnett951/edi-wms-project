@@ -289,10 +289,10 @@ setError(
 <div className="auth-badge">
   {isAuthenticated ? (
     <>
-      <span>👤 {accounts[0]?.username}</span>
-      <span className="auth-status">
-        Authenticated
-      </span>
+      <div className="user-info">
+        <span>👤 {accounts[0]?.username}</span>
+        <span className="auth-status">Authenticated</span>
+      </div>
       <button onClick={toggleDemoAdmin} title="Demo-only role toggle - not a real Entra role">
         {canDownloadFiles ? "Revoke Admin (Demo)" : "Make me an Admin (Demo)"}
       </button>
