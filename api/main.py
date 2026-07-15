@@ -475,6 +475,7 @@ def merge_change_request(cr_number: int, payload: dict = Depends(require_permiss
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         cr_lib.set_fields(conn, cr_number, mergeCommit=merge_commit)
         cr_lib.update_status(conn, cr_number, f"Merged (Gate 2) by {approver} on {timestamp}")
+        cr_lib.cleanup_worktree(repo_root, branch)
         return cr_lib.get_cr(conn, cr_number)
 
 
@@ -522,6 +523,8 @@ def rollback_change_request(cr_number: int, payload: dict = Depends(require_perm
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         cr_lib.set_fields(conn, cr_number, rollbackCommit=revert_commit)
         cr_lib.update_status(conn, cr_number, f"Rolled back (Gate 2) by {approver} on {timestamp}")
+        if cr["branch"]:
+            cr_lib.cleanup_worktree(repo_root, cr["branch"])
         return cr_lib.get_cr(conn, cr_number)
 
 

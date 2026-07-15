@@ -208,6 +208,7 @@ def main():
     load_dotenv(repo_path / "api" / ".env")
 
     conn = cr_lib.get_conn()
+    cr_lib.sweep_merged_worktrees(conn, repo_path)
     cr = cr_lib.get_cr(conn, args.cr_number)
     if not cr:
         print(f"CR-{args.cr_number:03d} not found.", file=sys.stderr)

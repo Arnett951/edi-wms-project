@@ -13,6 +13,8 @@ the connection lifecycle via get_conn() below.
 """
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import pyodbc
@@ -301,3 +303,36 @@ def update_progress(conn, cr_number: int, **fields):
         "lastAction": "LastAction", "costUsd": "ActualCostUsd",
     }
     set_fields(conn, cr_number, **{column_map[k]: v for k, v in fields.items() if k in column_map})
+
+
+def cleanup_worktree(repo_root: Path, branch: str):
+    """Remove the local worktree (and branch) for a CR that's done -- merged
+    or rolled back, so implementation runs don't leave `<repo>-worktrees/`
+    growing forever. Best-effort: a leftover worktree isn't worth failing a
+    merge/rollback over."""
+    worktrees_dir = repo_root.parent / f"{repo_root.name}-worktrees"
+    wt_path = worktrees_dir / branch
+    if not wt_path.exists():
+        return
+    subprocess.run(
+        ["git", "worktree", "remove", str(wt_path), "--force"],
+        cwd=repo_root, capture_output=True, text=True, encoding="utf-8",
+    )
+    if wt_path.exists():
+        shutil.rmtree(wt_path, ignore_errors=True)
+    subprocess.run(["git", "worktree", "prune"], cwd=repo_root, capture_output=True, text=True, encoding="utf-8")
+    subprocess.run(["git", "branch", "-D", branch], cwd=repo_root, capture_output=True, text=True, encoding="utf-8")
+
+
+def sweep_merged_worktrees(conn, repo_root: Path):
+    """Clean up worktrees for every CR that's already Merged or Rolled back --
+    covers merges dispatched remotely via GitHub Actions, where nothing local
+    ran at merge time to clean up after itself."""
+    worktrees_dir = repo_root.parent / f"{repo_root.name}-worktrees"
+    if not worktrees_dir.exists():
+        return
+    for cr in list_crs(conn):
+        branch = cr.get("branch")
+        if not branch or not (cr["status"].startswith("Merged") or cr["status"].startswith("Rolled back")):
+            continue
+        cleanup_worktree(repo_root, branch)
