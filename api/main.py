@@ -466,8 +466,48 @@ def run_git(args: list, cwd: Path):
     return result.stdout.strip()
 
 
+# Fallback for deployments with no local git repo (e.g. a zip-deployed Azure
+# App Service): trigger the actual merge/revert via a GitHub Actions
+# workflow_dispatch instead. The git operations then run on GitHub's own
+# runner using the Actions-provided token -- this App Service never holds
+# push credentials itself. Requires GITHUB_DISPATCH_TOKEN (a fine-grained PAT
+# scoped to this repo with Actions: write) set as an app setting.
+GITHUB_REPO = os.getenv("GITHUB_REPO", "Arnett951/edi-wms-project")
+GITHUB_DISPATCH_TOKEN = os.getenv("GITHUB_DISPATCH_TOKEN")
+
+
+def dispatch_github_workflow(action: str, cr_number: int, approver: str):
+    if not GITHUB_DISPATCH_TOKEN:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "No local git repo here, and GITHUB_DISPATCH_TOKEN isn't configured on this "
+                "deployment -- can't trigger Gate 2 remotely. Set that app setting to enable it."
+            ),
+        )
+    resp = requests.post(
+        f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/cr-gate2-dispatch.yml/dispatches",
+        headers={
+            "Authorization": f"Bearer {GITHUB_DISPATCH_TOKEN}",
+            "Accept": "application/vnd.github+json",
+        },
+        json={"ref": "main", "inputs": {"action": action, "cr_number": str(cr_number), "approver": approver}},
+        timeout=10,
+    )
+    if resp.status_code != 204:
+        raise HTTPException(status_code=502, detail=f"GitHub workflow dispatch failed ({resp.status_code}): {resp.text}")
+
+
 @app.post("/api/change-requests/{cr_number}/merge")
 def merge_change_request(cr_number: int, payload: dict = Depends(require_permission("files.download"))):
+    approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
+    if not (REPO_ROOT / ".git").exists():
+        dispatch_github_workflow("merge", cr_number, approver)
+        return {
+            "type": "dispatched",
+            "message": f"Merge for CR-{cr_number:03d} triggered via GitHub Actions -- check the repo's Actions tab for progress.",
+        }
+
     repo_root = require_git_repo()
     require_clean_working_tree(repo_root)
     request_file, text = get_cr_text(cr_number)
@@ -501,7 +541,6 @@ def merge_change_request(cr_number: int, payload: dict = Depends(require_permiss
     run_git(["push", "origin", "main"], repo_root)
     merge_commit = run_git(["rev-parse", "HEAD"], repo_root)
 
-    approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     updated_text = cr_lib.set_field(text, "Merge commit", merge_commit)
     updated_text = cr_lib.update_status(updated_text, f"Merged (Gate 2) by {approver} on {timestamp}")
@@ -512,6 +551,14 @@ def merge_change_request(cr_number: int, payload: dict = Depends(require_permiss
 
 @app.post("/api/change-requests/{cr_number}/rollback")
 def rollback_change_request(cr_number: int, payload: dict = Depends(require_permission("files.download"))):
+    approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
+    if not (REPO_ROOT / ".git").exists():
+        dispatch_github_workflow("rollback", cr_number, approver)
+        return {
+            "type": "dispatched",
+            "message": f"Rollback for CR-{cr_number:03d} triggered via GitHub Actions -- check the repo's Actions tab for progress.",
+        }
+
     repo_root = require_git_repo()
     require_clean_working_tree(repo_root)
     request_file, text = get_cr_text(cr_number)
@@ -542,7 +589,6 @@ def rollback_change_request(cr_number: int, payload: dict = Depends(require_perm
     run_git(["push", "origin", "main"], repo_root)
     revert_commit = run_git(["rev-parse", "HEAD"], repo_root)
 
-    approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     updated_text = cr_lib.set_field(text, "Rollback commit", revert_commit)
     updated_text = cr_lib.update_status(updated_text, f"Rolled back (Gate 2) by {approver} on {timestamp}")

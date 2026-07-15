@@ -1,0 +1,48 @@
+name: CR Gate 2 Dispatch
+
+# Triggered remotely by the deployed API (api/main.py's merge/rollback
+# endpoints) when it detects it has no local git repo of its own -- the
+# App Service calls the GitHub API to fire this workflow_dispatch instead
+# of holding push credentials itself. See pipeline/gate2_dispatch.py.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'merge or rollback'
+        required: true
+        type: choice
+        options:
+          - merge
+          - rollback
+      cr_number:
+        description: 'CR number, e.g. 4'
+        required: true
+      approver:
+        description: 'Name of the approver'
+        required: false
+        default: 'GitHub Actions'
+
+jobs:
+  gate2:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: pip install pyyaml
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Run Gate 2 action
+        run: python pipeline/gate2_dispatch.py "${{ inputs.action }}" "${{ inputs.cr_number }}" --approver "${{ inputs.approver }}"

@@ -37,6 +37,7 @@ export default function AdminChangeRequests() {
   const [selectedCr, setSelectedCr] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(null);
+  const [info, setInfo] = useState(null);
 
   async function openDetail(crNumber) {
     setSelectedCr({ crNumber });
@@ -77,13 +78,22 @@ export default function AdminChangeRequests() {
   async function decide(crNumber, decision) {
     setActioningCr(crNumber);
     setError(null);
+    setInfo(null);
     try {
       const res = await authFetch(`${API_BASE}/api/change-requests/${crNumber}/${decision}`, {
         method: "POST",
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || `Failed to ${decision} CR-${crNumber}.`);
-      setRequests((prev) => prev.map((cr) => (cr.crNumber === crNumber ? data : cr)));
+      if (data.type === "dispatched") {
+        // No local repo on this deployment -- the actual merge/rollback runs
+        // async via GitHub Actions. Don't overwrite the CR row with this
+        // acknowledgment shape; just surface the message and let the user
+        // refresh once the workflow's own commit lands.
+        setInfo(data.message);
+      } else {
+        setRequests((prev) => prev.map((cr) => (cr.crNumber === crNumber ? data : cr)));
+      }
     } catch (err) {
       setError(err.message || `Failed to ${decision} CR-${crNumber}.`);
     } finally {
@@ -116,6 +126,7 @@ export default function AdminChangeRequests() {
           conflicts and won't be a clean one-click merge.
         </p>
         {error && <section className="alert"><div><strong>Error</strong><p>{error}</p></div></section>}
+        {info && <section className="mock"><p>{info}</p></section>}
         <button onClick={loadRequests} disabled={loading}>
           {loading ? "Loading..." : "Refresh"}
         </button>
