@@ -23,6 +23,7 @@ import json
 import re
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "api"))
@@ -99,6 +100,67 @@ def check_mergeability(worktree_path: Path) -> str:
     return "Clean" if merge_check.returncode == 0 else "Conflicts detected -- manual resolution needed"
 
 
+def write_progress(progress_path: Path, **updates):
+    data = {}
+    if progress_path.exists():
+        try:
+            data = json.loads(progress_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            data = {}
+    data.update(updates)
+    data["updatedAt"] = datetime.now(timezone.utc).isoformat()
+    progress_path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def run_claude_streaming(cmd: list, cwd: Path, progress_path: Path):
+    """Runs Claude Code with --output-format stream-json, updating progress_path
+    after every event so the API/UI can poll live status (session id, running
+    token count, last action) instead of only seeing a result once the whole
+    run finishes. Returns (final_message, cost, subtype, returncode, stderr)."""
+    process = subprocess.Popen(
+        cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", bufsize=1,
+    )
+
+    session_id = None
+    tokens_so_far = 0
+    final_message = None
+    cost = None
+    subtype = None
+
+    for line in process.stdout:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        session_id = event.get("session_id", session_id)
+        event_type = event.get("type")
+
+        if event_type == "assistant":
+            usage = event.get("message", {}).get("usage", {})
+            tokens_so_far += usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+            write_progress(
+                progress_path, sessionId=session_id, status="running", tokensSoFar=tokens_so_far,
+            )
+        elif event_type == "system" and event.get("subtype") == "post_turn_summary":
+            write_progress(
+                progress_path, sessionId=session_id, status="running", tokensSoFar=tokens_so_far,
+                lastAction=event.get("status_detail") or "",
+            )
+        elif event_type == "result":
+            final_message = event.get("result")
+            cost = event.get("total_cost_usd")
+            subtype = event.get("subtype")
+
+    process.wait()
+    stderr_output = process.stderr.read()
+    return final_message, cost, subtype, process.returncode, stderr_output, session_id, tokens_so_far
+
+
 def build_prompt(cr_number: int, branch_name: str, cr_text: str) -> str:
     return f"""You are the implementation stage of a change-management pipeline. A human
 already approved the Change Request below at Gate 1 -- your job is to build
@@ -172,9 +234,15 @@ def main():
     worktree_path = create_worktree(repo_path, branch_name)
     print(f"Created isolated worktree at {worktree_path} on branch {branch_name}")
 
+    # Lives next to request.md so the API can poll it by CR number without
+    # needing any shared in-memory state with whatever process launched this.
+    progress_path = cr_file.parent / "progress.json"
+    write_progress(progress_path, status="running", branch=branch_name, lastAction="Starting...", tokensSoFar=0)
+
     cmd = [
         "claude", "-p", prompt,
-        "--output-format", "json",
+        "--output-format", "stream-json",
+        "--verbose",
         "--permission-mode", args.permission_mode,
         "--allowedTools", ALLOWED_TOOLS,
         "--max-budget-usd", str(max_budget),
@@ -183,25 +251,17 @@ def main():
     # Explicit UTF-8: Windows' default subprocess text-mode encoding (the
     # system ANSI codepage) mangles Claude Code's em-dashes and other
     # multi-byte UTF-8 output into mojibake otherwise.
-    result = subprocess.run(cmd, cwd=worktree_path, capture_output=True, text=True, encoding="utf-8")
+    final_message, cost, subtype, returncode, stderr_output, session_id, tokens_so_far = run_claude_streaming(
+        cmd, worktree_path, progress_path
+    )
 
     # Non-zero exit doesn't mean nothing happened -- e.g. hitting
     # --max-budget-usd right after the task finishes still exits non-zero.
-    # Always surface stdout too, not just stderr, so that detail isn't lost.
-    try:
-        output = json.loads(result.stdout)
-        final_message = output.get("result", result.stdout)
-        cost = output.get("total_cost_usd")
-        subtype = output.get("subtype")
-    except json.JSONDecodeError:
-        final_message = result.stdout
-        cost = None
-        subtype = None
-
-    if result.returncode != 0:
+    if returncode != 0:
+        write_progress(progress_path, status="failed", sessionId=session_id, tokensSoFar=tokens_so_far)
         print(f"Claude Code exited with an error (subtype: {subtype}):", file=sys.stderr)
-        print(f"stdout: {final_message}", file=sys.stderr)
-        print(f"stderr: {result.stderr}", file=sys.stderr)
+        print(f"stdout result: {final_message}", file=sys.stderr)
+        print(f"stderr: {stderr_output}", file=sys.stderr)
         if cost is not None:
             print(f"Cost so far: ${cost:.4f} (budget was ${max_budget:.2f})", file=sys.stderr)
         print(
@@ -211,6 +271,7 @@ def main():
         )
         sys.exit(1)
 
+    write_progress(progress_path, status="succeeded", sessionId=session_id, tokensSoFar=tokens_so_far, costUsd=cost)
     print(final_message)
     if cost is not None:
         print(f"\nActual cost: ${cost:.4f} (budget was ${max_budget:.2f})")
@@ -226,7 +287,7 @@ def main():
     updated_text = cr_lib.set_field(updated_text, "Branch", branch_name)
     updated_text = cr_lib.set_field(updated_text, "Merge readiness", merge_readiness)
     updated_text = cr_lib.append_or_replace_section(
-        updated_text, "Implementation summary", final_message.strip() or "(no summary returned)"
+        updated_text, "Implementation summary", (final_message or "").strip() or "(no summary returned)"
     )
     updated_text = cr_lib.update_status(updated_text, "Implemented -- awaiting Gate 2 (merge approval)")
     cr_file.write_text(updated_text, encoding="utf-8")

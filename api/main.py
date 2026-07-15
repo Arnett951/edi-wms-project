@@ -8,6 +8,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 import jwt
 from jwt import PyJWKClient
@@ -389,6 +390,22 @@ def get_change_request(cr_number: int, _: dict = Depends(require_permission("fil
     return parsed
 
 
+@app.get("/api/change-requests/{cr_number}/progress")
+def get_change_request_progress(cr_number: int, _: dict = Depends(require_permission("files.download"))):
+    # Written incrementally by pipeline/implement_change_request.py as it
+    # streams Claude Code's output -- session id, running token count, and a
+    # human-readable last-action line, independent of whatever process (CLI
+    # or API) launched the run. Local-repo-only, same as merge/rollback: this
+    # file only exists where implementation actually ran.
+    progress_file = CHANGE_REQUESTS_DIR / f"CR-{cr_number:03d}" / "progress.json"
+    if not progress_file.exists():
+        return {"status": "not_started"}
+    try:
+        return json.loads(progress_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"status": "unknown"}
+
+
 def update_cr_status(cr_number: int, new_status: str) -> dict:
     folder = CHANGE_REQUESTS_DIR / f"CR-{cr_number:03d}"
     request_file = folder / "request.md"
@@ -404,11 +421,38 @@ def update_cr_status(cr_number: int, new_status: str) -> dict:
     return parse_change_request(request_file)
 
 
+PIPELINE_SCRIPT = Path(__file__).resolve().parent.parent / "pipeline" / "implement_change_request.py"
+
+
+def launch_implementation(cr_number: int, repo_root: Path):
+    # Fire-and-forget: implement_change_request.py writes its own progress.json
+    # (session id, token count, last action) next to the CR's request.md as it
+    # streams, so there's no need for an in-memory job registry here -- the
+    # file itself is the durable status, readable by /progress regardless of
+    # what launched the run or whether this API process restarts.
+    log_path = CHANGE_REQUESTS_DIR / f"CR-{cr_number:03d}" / "implement.log"
+    log_file = open(log_path, "w", encoding="utf-8")
+    subprocess.Popen(
+        [sys.executable, str(PIPELINE_SCRIPT), str(cr_number), "--repo", str(repo_root)],
+        cwd=repo_root, stdout=log_file, stderr=subprocess.STDOUT,
+    )
+
+
 @app.post("/api/change-requests/{cr_number}/approve")
 def approve_change_request(cr_number: int, payload: dict = Depends(require_permission("files.download"))):
     approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    return update_cr_status(cr_number, f"Approved (Gate 1) by {approver} on {timestamp}")
+    result = update_cr_status(cr_number, f"Approved (Gate 1) by {approver} on {timestamp}")
+
+    # Original design: only two human inputs total -- Approve (which starts
+    # work itself) and Approve & Merge (Gate 2 / deploy). Best-effort: silently
+    # skipped when there's no local git repo (e.g. the deployed Azure API) --
+    # approval itself still succeeds either way.
+    repo_root = Path(__file__).resolve().parent.parent
+    if (repo_root / ".git").exists():
+        launch_implementation(cr_number, repo_root)
+
+    return result
 
 
 @app.post("/api/change-requests/{cr_number}/reject")

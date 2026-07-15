@@ -262,6 +262,18 @@ button:disabled {
   color: #6b7482;
 }
 
+.cr-progress {
+  max-width: 260px;
+}
+
+.cr-progress-detail {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  color: #6b7482;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
 .cr-modal-quote {
   margin: 0;
   padding: 10px 14px;

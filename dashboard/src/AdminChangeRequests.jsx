@@ -4,6 +4,7 @@ import { authFetch } from "./apiClient.js";
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
 const PENDING_STATUS = "Pending Gate 1 review";
+const APPROVED_PREFIX = "Approved";
 const IMPLEMENTED_PREFIX = "Implemented";
 const MERGED_PREFIX = "Merged";
 
@@ -38,6 +39,7 @@ export default function AdminChangeRequests() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(null);
   const [info, setInfo] = useState(null);
+  const [progressByCr, setProgressByCr] = useState({});
 
   async function openDetail(crNumber) {
     setSelectedCr({ crNumber });
@@ -104,6 +106,28 @@ export default function AdminChangeRequests() {
   useEffect(() => {
     loadRequests();
   }, []);
+
+  // Simple polling: while any CR is Approved (implementation auto-starts on
+  // approval server-side), refresh its live progress -- session id, running
+  // token count, last action -- and re-check the CR list so a finished run
+  // (status flips to "Implemented...") drops out of this view on its own.
+  const approvedCrNumbers = requests.filter((cr) => cr.status.startsWith(APPROVED_PREFIX)).map((cr) => cr.crNumber);
+  useEffect(() => {
+    if (approvedCrNumbers.length === 0) return undefined;
+    const interval = setInterval(async () => {
+      for (const crNumber of approvedCrNumbers) {
+        try {
+          const res = await authFetch(`${API_BASE}/api/change-requests/${crNumber}/progress`);
+          const data = await res.json().catch(() => null);
+          if (data) setProgressByCr((prev) => ({ ...prev, [crNumber]: data }));
+        } catch {
+          // Transient poll error -- next tick will retry.
+        }
+      }
+      loadRequests();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [approvedCrNumbers.join(",")]);
 
   const attentionCount = requests.filter(needsAttention).length;
 
@@ -188,6 +212,22 @@ export default function AdminChangeRequests() {
                           Reject
                         </button>
                       </>
+                    )}
+                    {cr.status.startsWith(APPROVED_PREFIX) && (
+                      <div className="cr-progress">
+                        <span className="status-badge neutral">
+                          {progressByCr[cr.crNumber]?.status === "failed" ? "Implementation failed" : "Implementing..."}
+                        </span>
+                        {progressByCr[cr.crNumber]?.sessionId && (
+                          <div className="cr-progress-detail">
+                            Session {progressByCr[cr.crNumber].sessionId.slice(0, 8)} &middot;{" "}
+                            {progressByCr[cr.crNumber].tokensSoFar ?? 0} tokens
+                          </div>
+                        )}
+                        {progressByCr[cr.crNumber]?.lastAction && (
+                          <div className="cr-progress-detail">{progressByCr[cr.crNumber].lastAction.slice(0, 140)}</div>
+                        )}
+                      </div>
                     )}
                     {cr.status.startsWith(IMPLEMENTED_PREFIX) && (
                       <button
