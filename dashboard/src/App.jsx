@@ -91,6 +91,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("operations");
   const [permissions, setPermissions] = useState([]);
   const canDownloadFiles = permissions.includes("files.download");
+  const canManageCr = permissions.includes("cr.admin");
 
   async function loadPermissions() {
     try {
@@ -294,7 +295,7 @@ setError(
         <span className="auth-status">Authenticated</span>
       </div>
       <button onClick={toggleDemoAdmin} title="Demo-only role toggle - not a real Entra role">
-        {canDownloadFiles ? "Revoke Admin (Demo)" : "Make me an Admin (Demo)"}
+        {canDownloadFiles ? "Revoke SuperUser (Demo)" : "Make me a SuperUser (Demo)"}
       </button>
       <button onClick={signOut}>Sign out</button>
     </>
@@ -349,7 +350,7 @@ setError(
           Reports
         </button>
       )}
-      {canDownloadFiles && (
+      {canManageCr && (
         <button
           className={activeTab === "admin" ? "tab-active" : ""}
           onClick={() => setActiveTab("admin")}
@@ -511,6 +512,6 @@ setError(
 
     {activeTab === "reports" && isAuthenticated && <ReportsDashboard />}
 
-    {activeTab === "admin" && canDownloadFiles && <AdminChangeRequests />}
+    {activeTab === "admin" && canManageCr && <AdminChangeRequests />}
   </main></div >;
 }

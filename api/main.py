@@ -139,11 +139,14 @@ def my_permissions(payload: dict = Depends(require_auth)):
     return {"permissions": get_user_permissions(get_user_oid(payload))}
 
 
-# Demo-only self-service role grant so the portfolio site's "Make me an Admin"
-# button has something to call. This is NOT how role assignment should work
-# in a real deployment (a real admin would insert into dbo.UserRoles /
-# dbo.UserGroups instead) - require_permission() itself doesn't know or care
-# how a row got into UserRoles, so swapping this out later doesn't touch it.
+# Demo-only self-service role grant so the portfolio site's "Make me a
+# SuperUser" button has something to call. SuperUser only grants
+# files.download (the file-browsing demo) -- it deliberately does NOT grant
+# cr.admin, since that role controls real code changes/merges/deploys and
+# must never be self-service on a public site. A real Admin is added by
+# inserting directly into dbo.UserRoles (see api/README or ask the site
+# owner) - require_permission() itself doesn't know or care how a row got
+# into UserRoles, so that grant path never touches this code.
 @app.post("/api/demo/grant-admin")
 def grant_demo_admin(payload: dict = Depends(require_auth)):
     user_oid = get_user_oid(payload)
@@ -153,7 +156,7 @@ def grant_demo_admin(payload: dict = Depends(require_auth)):
             """
             MERGE dbo.UserRoles AS target
             USING (
-                SELECT ? AS UserOid, RoleId FROM dbo.Roles WHERE RoleName = 'Admin'
+                SELECT ? AS UserOid, RoleId FROM dbo.Roles WHERE RoleName = 'SuperUser'
             ) AS src
             ON target.UserOid = src.UserOid AND target.RoleId = src.RoleId
             WHEN NOT MATCHED THEN
@@ -175,7 +178,7 @@ def revoke_demo_admin(payload: dict = Depends(require_auth)):
             DELETE ur
             FROM dbo.UserRoles ur
             JOIN dbo.Roles r ON r.RoleId = ur.RoleId
-            WHERE ur.UserOid = ? AND r.RoleName = 'Admin'
+            WHERE ur.UserOid = ? AND r.RoleName = 'SuperUser'
             """,
             (user_oid,),
         )
@@ -281,13 +284,13 @@ def change_request_intake(
 
 
 @app.get("/api/change-requests")
-def list_change_requests(_: dict = Depends(require_permission("files.download"))):
+def list_change_requests(_: dict = Depends(require_permission("cr.admin"))):
     with cr_lib.get_conn() as conn:
         return cr_lib.list_crs(conn)
 
 
 @app.get("/api/change-requests/{cr_number}")
-def get_change_request(cr_number: int, _: dict = Depends(require_permission("files.download"))):
+def get_change_request(cr_number: int, _: dict = Depends(require_permission("cr.admin"))):
     with cr_lib.get_conn() as conn:
         cr = cr_lib.get_cr(conn, cr_number)
     if not cr:
@@ -296,7 +299,7 @@ def get_change_request(cr_number: int, _: dict = Depends(require_permission("fil
 
 
 @app.get("/api/change-requests/{cr_number}/progress")
-def get_change_request_progress(cr_number: int, _: dict = Depends(require_permission("files.download"))):
+def get_change_request_progress(cr_number: int, _: dict = Depends(require_permission("cr.admin"))):
     # Updated incrementally by pipeline/implement_change_request.py as it
     # streams Claude Code's output -- session id, running token count, and a
     # human-readable last-action line, independent of whatever process (CLI
@@ -334,7 +337,7 @@ def launch_implementation(cr_number: int, repo_root: Path):
 
 
 @app.post("/api/change-requests/{cr_number}/approve")
-def approve_change_request(cr_number: int, payload: dict = Depends(require_permission("files.download"))):
+def approve_change_request(cr_number: int, payload: dict = Depends(require_permission("cr.admin"))):
     approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     result = update_cr_status(cr_number, f"Approved (Gate 1) by {approver} on {timestamp}")
@@ -351,7 +354,7 @@ def approve_change_request(cr_number: int, payload: dict = Depends(require_permi
 
 
 @app.post("/api/change-requests/{cr_number}/reject")
-def reject_change_request(cr_number: int, payload: dict = Depends(require_permission("files.download"))):
+def reject_change_request(cr_number: int, payload: dict = Depends(require_permission("cr.admin"))):
     approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     return update_cr_status(cr_number, f"Rejected (Gate 1) by {approver} on {timestamp}")
@@ -431,7 +434,7 @@ def dispatch_github_workflow(action: str, cr_number: int, approver: str):
 
 
 @app.post("/api/change-requests/{cr_number}/merge")
-def merge_change_request(cr_number: int, payload: dict = Depends(require_permission("files.download"))):
+def merge_change_request(cr_number: int, payload: dict = Depends(require_permission("cr.admin"))):
     approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
     if not (REPO_ROOT / ".git").exists():
         dispatch_github_workflow("merge", cr_number, approver)
@@ -480,7 +483,7 @@ def merge_change_request(cr_number: int, payload: dict = Depends(require_permiss
 
 
 @app.post("/api/change-requests/{cr_number}/rollback")
-def rollback_change_request(cr_number: int, payload: dict = Depends(require_permission("files.download"))):
+def rollback_change_request(cr_number: int, payload: dict = Depends(require_permission("cr.admin"))):
     approver = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
     if not (REPO_ROOT / ".git").exists():
         dispatch_github_workflow("rollback", cr_number, approver)
