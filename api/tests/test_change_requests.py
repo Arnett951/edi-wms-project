@@ -42,7 +42,7 @@ def test_list_crs_active_filters_out_closed_and_merged():
     cr_lib.list_crs(conn, "active")
     sql, params = conn.cursor_obj.executed[0]
     assert "Status NOT LIKE ?" in sql
-    assert list(params) == ["Merged%", "Closed%"]
+    assert list(params) == ["Merged%", "Closed%", "Auto-denied%", "Rolled back%"]
 
 
 def test_list_crs_closed_filters_to_closed_and_merged():
@@ -51,7 +51,18 @@ def test_list_crs_closed_filters_to_closed_and_merged():
     sql, params = conn.cursor_obj.executed[0]
     assert "Status LIKE ?" in sql
     assert "NOT LIKE" not in sql
-    assert list(params) == ["Merged%", "Closed%"]
+    assert list(params) == ["Merged%", "Closed%", "Auto-denied%", "Rolled back%"]
+
+
+def test_list_crs_closed_includes_auto_denied_and_rolled_back():
+    # CR-015: Auto-denied and Rolled back CRs are grouped under the Closed tab.
+    conn = FakeConn([])
+    cr_lib.list_crs(conn, "closed")
+    sql, params = conn.cursor_obj.executed[0]
+    assert "Auto-denied%" in params
+    assert "Rolled back%" in params
+    # Four prefixes -> four OR'd LIKE clauses.
+    assert sql.count("Status LIKE ?") == 4
 
 
 def test_list_crs_no_group_returns_all_without_where():

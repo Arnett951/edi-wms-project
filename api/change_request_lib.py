@@ -236,15 +236,17 @@ def get_cr(conn, cr_number: int):
     return _to_cr_dict(row) if row else None
 
 
-# Status prefixes that mark a CR as closed out. A CR's status is a compound
-# string (e.g. "Merged (Gate 2) by X on Y"), so matching is by prefix.
-CLOSED_STATUS_PREFIXES = ("Merged", "Closed")
+# Status prefixes that group a CR under the "Closed" tab. A CR's status is a
+# compound string (e.g. "Merged (Gate 2) by X on Y"), so matching is by prefix.
+# Auto-denied and Rolled back CRs are terminal, so they're grouped here for
+# display alongside Merged/Closed (CR-015) -- their stored status is unchanged.
+CLOSED_STATUS_PREFIXES = ("Merged", "Closed", "Auto-denied", "Rolled back")
 
 
 def list_crs(conn, status_group: Optional[str] = None) -> list:
     """List CRs newest-first. status_group filters the result set:
-      - "closed": only Closed/Merged CRs
-      - "active": every CR that isn't Closed/Merged
+      - "closed": only Closed/Merged/Auto-denied/Rolled back CRs
+      - "active": every CR that isn't in the above closed grouping
       - None: all CRs
     """
     cur = conn.cursor()
