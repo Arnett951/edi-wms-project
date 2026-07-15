@@ -238,7 +238,7 @@ def get_cr(conn, cr_number: int):
 
 # Status prefixes that mark a CR as closed out. A CR's status is a compound
 # string (e.g. "Merged (Gate 2) by X on Y"), so matching is by prefix.
-CLOSED_STATUS_PREFIXES = ("Merged", "Closed")
+CLOSED_STATUS_PREFIXES = ("Merged", "Closed", "Rejected")
 
 
 def list_crs(conn, status_group: Optional[str] = None) -> list:
