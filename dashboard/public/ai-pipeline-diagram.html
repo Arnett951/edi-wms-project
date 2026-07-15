@@ -118,13 +118,14 @@
     { cat:'ai',    tag:'AI',    title:'Impact analysis', sub:'Flags systems and data touched' },
     { type:'branch', cat:'risk', tag:'Risk check', title:'Blast radius check', sub:'Tier A/B continues below',
       deny:{ lead:'⤷ Tier C — auto-denied', title:'Handle manually', sub:'Touches auth/security, schema drops/renames, new infra or secrets, or prod data-mutation logic' } },
-    { cat:'human', tag:'Gate',  title:'Human approval gate #1', sub:'Review before any code is written', gate:true },
+    { cat:'human', tag:'Gate 1', title:'Gate 1 review', sub:'SuperUser or Admin approve/reject — marks the CR ready, does not start a build', gate:true },
+    { cat:'human', tag:'Gate',  title:'Build approval', sub:'Admin only — Start Build, with an optional cost cap override', gate:true },
     { cat:'ai',    tag:'AI',    title:'AI development agent', sub:'Codex / Claude implements the approved spec' },
     { cat:'pipe',  tag:'Pipeline', title:'Git branch + PR', sub:'Packaged, never self-merged' },
     { cat:'pipe',  tag:'Pipeline', title:'Automated testing', sub:'Lint, unit tests, data validation' },
     { cat:'pipe',  tag:'Pipeline', title:'Staging deployment', sub:'Dry run in a live environment' },
     { cat:'pipe',  tag:'Pipeline', title:'UAT testing', sub:'Stakeholder click-through' },
-    { cat:'human', tag:'Gate',  title:'Human approval gate #2', sub:'Sign-off before going live', gate:true },
+    { cat:'human', tag:'Gate',  title:'Human approval gate #2', sub:'Admin approves merge to main, then production deploy', gate:true },
     { cat:'pipe',  tag:'Pipeline', title:'Production deployment', sub:'Same build that passed staging' },
     { cat:'mon',   tag:'Monitoring', title:'Monitoring & rollback', sub:'Watch it, revert if needed' }
   ];
