@@ -4,6 +4,11 @@ name: CR Gate 2 Dispatch
 # endpoints) when it detects it has no local git repo of its own -- the
 # App Service calls the GitHub API to fire this workflow_dispatch instead
 # of holding push credentials itself. See pipeline/gate2_dispatch.py.
+#
+# Checkout uses a PAT (secrets.GH_PAT) instead of the default GITHUB_TOKEN:
+# pushes made with the default token don't trigger other push-based workflows
+# (GitHub's loop-prevention guard), which silently skipped the deploy
+# workflows after a merge. A PAT with Contents: Read and write avoids that.
 
 on:
   workflow_dispatch:
@@ -32,6 +37,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
 
       - uses: actions/setup-python@v5
         with:
