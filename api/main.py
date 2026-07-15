@@ -939,6 +939,25 @@ def daily_edi_volume(_: dict = Depends(require_auth)):
     """)
 
 
+@app.get("/api/reports/file-status-summary")
+def file_status_summary(_: dict = Depends(require_auth)):
+    """Return counts of received vs errored EDI 940 files per client (sender)
+    over a rolling 48-hour window ending now (UTC). A file is 'errored' when
+    its ProcessStatus matches '%fail%' (case-insensitive, the default SQL
+    Server collation); every other row counts as 'received'. Grouped by
+    ISASender, used directly as the client label with no name lookup."""
+    return rows("""
+        SELECT
+            ISASender AS sender,
+            SUM(CASE WHEN ProcessStatus LIKE '%fail%' THEN 0 ELSE 1 END) AS received,
+            SUM(CASE WHEN ProcessStatus LIKE '%fail%' THEN 1 ELSE 0 END) AS errored
+        FROM dbo.EDI940_Raw
+        WHERE LoadDateTime >= DATEADD(hour, -48, GETUTCDATE())
+        GROUP BY ISASender
+        ORDER BY ISASender
+    """)
+
+
 #To display the recent WMS orders in the dashboard including their status and error messages if any
 @app.get("/api/dashboard/wms-orders")
 def wms_orders(_: dict = Depends(require_auth)):
