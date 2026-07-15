@@ -35,6 +35,7 @@ BEGIN
         [ProgressStatus] varchar(32) NULL,
         [TokensSoFar] int NULL,
         [LastAction] nvarchar(MAX) NULL,
+        [ActualCostUsd] decimal(10,4) NULL,
         [CreatedDateTime] datetime2(7) NOT NULL DEFAULT (sysutcdatetime()),
         [UpdatedDateTime] datetime2(7) NOT NULL DEFAULT (sysutcdatetime())
     );
