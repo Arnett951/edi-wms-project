@@ -87,3 +87,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK__OrderInt__F05
 BEGIN
     ALTER TABLE wms.OrderIntegrationLog ADD CONSTRAINT [PK__OrderInt__F0531ECF439CE969] PRIMARY KEY CLUSTERED ([WMSOrderIntegrationLogId]);
 END;
+IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_ChangeRequests')
+BEGIN
+    ALTER TABLE dbo.ChangeRequests ADD CONSTRAINT [PK_ChangeRequests] PRIMARY KEY CLUSTERED ([CRNumber]);
+END;
