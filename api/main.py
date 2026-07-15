@@ -298,9 +298,15 @@ def change_request_intake(
 
 
 @app.get("/api/change-requests")
-def list_change_requests(_: dict = Depends(require_any_permission("cr.admin", "files.download"))):
+def list_change_requests(
+    status_group: Optional[str] = None,
+    _: dict = Depends(require_any_permission("cr.admin", "files.download")),
+):
+    # status_group filters the list for the CR-Workflow tabs: "active" (every
+    # CR that isn't Closed/Merged), "closed" (only Closed/Merged), or all when
+    # omitted. Unknown values fall through to the unfiltered list.
     with cr_lib.get_conn() as conn:
-        return cr_lib.list_crs(conn)
+        return cr_lib.list_crs(conn, status_group)
 
 
 @app.get("/api/change-requests/{cr_number}")
