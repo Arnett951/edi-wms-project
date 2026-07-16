@@ -215,7 +215,10 @@ export default function AdminChangeRequests({ canManageCr }) {
         {info && <section className="mock"><p>{info}</p></section>}
         <button onClick={loadRequests} disabled={loading}>
           {loading ? "Loading..." : "Refresh"}
-        </button>
+        </button>{" "}
+        <a href="https://www.edi.chrisarnett.me/shipped-feature-gap-analysis.html" target="_blank" rel="noopener noreferrer">
+          Shipped Feature GAP Analysis
+        </a>
       </section>
 
       <div className="tabs">

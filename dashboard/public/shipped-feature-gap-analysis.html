@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scope vs. Shipped — CR Pipeline V0</title>
+<style>
+  :root{
+    --paper:#f7f5ef; --panel:#ffffff; --ink:#20293a; --text:#3d4553; --muted:#6b7482;
+    --line:#c9cdd4; --border:#20293a;
+    --shipped-bg:#e1f5ee; --shipped-text:#0f6e56; --shipped-border:#5dcaa5;
+    --partial-bg:#fdf1d8; --partial-text:#8a5a06; --partial-border:#e3a53c;
+    --cut-bg:#fcebeb; --cut-text:#791f1f; --cut-border:#e24b4a;
+    --accent-bg:#e6f1fb; --accent-text:#0c447c; --accent-border:#85b7eb;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#181c22; --panel:#20252d; --ink:#e8eaee; --text:#c7ccd4; --muted:#8b93a1;
+      --line:#3a4048; --border:#454c56;
+      --shipped-bg:#123329; --shipped-text:#7fe3c0; --shipped-border:#0f6e56;
+      --partial-bg:#3a2c0f; --partial-text:#f5c765; --partial-border:#8a5a06;
+      --cut-bg:#3a1414; --cut-text:#f7b8b8; --cut-border:#a32d2d;
+      --accent-bg:#122540; --accent-text:#8fc4f7; --accent-border:#185fa5;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#181c22; --panel:#20252d; --ink:#e8eaee; --text:#c7ccd4; --muted:#8b93a1;
+    --line:#3a4048; --border:#454c56;
+    --shipped-bg:#123329; --shipped-text:#7fe3c0; --shipped-border:#0f6e56;
+    --partial-bg:#3a2c0f; --partial-text:#f5c765; --partial-border:#8a5a06;
+    --cut-bg:#3a1414; --cut-text:#f7b8b8; --cut-border:#a32d2d;
+    --accent-bg:#122540; --accent-text:#8fc4f7; --accent-border:#185fa5;
+  }
+  :root[data-theme="light"]{
+    --paper:#f7f5ef; --panel:#ffffff; --ink:#20293a; --text:#3d4553; --muted:#6b7482;
+    --line:#c9cdd4; --border:#20293a;
+    --shipped-bg:#e1f5ee; --shipped-text:#0f6e56; --shipped-border:#5dcaa5;
+    --partial-bg:#fdf1d8; --partial-text:#8a5a06; --partial-border:#e3a53c;
+    --cut-bg:#fcebeb; --cut-text:#791f1f; --cut-border:#e24b4a;
+    --accent-bg:#e6f1fb; --accent-text:#0c447c; --accent-border:#85b7eb;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--paper); color:var(--text);
+    font-family:"Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{ font-family:ui-monospace, "Cascadia Mono", Consolas, monospace; font-variant-numeric:tabular-nums; }
+  .wrap{ max-width:880px; margin:0 auto; padding:44px 22px 90px; }
+  .eyebrow{
+    font-family:ui-monospace, "Cascadia Mono", Consolas, monospace; font-size:12px;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--accent-text); font-weight:700; margin:0 0 8px;
+  }
+  h1{ font-size:clamp(24px,4vw,34px); line-height:1.15; margin:0 0 10px; color:var(--ink); font-weight:800; text-wrap:balance; }
+  .lede{ margin:0 0 30px; font-size:15px; line-height:1.6; max-width:64ch; color:var(--text); }
+  .lede code{ font-family:ui-monospace, "Cascadia Mono", Consolas, monospace; font-size:.92em; background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+
+  .totals{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:0 0 40px; }
+  .total-card{
+    background:var(--panel); border:2px solid var(--border); border-radius:14px; padding:16px 18px;
+    box-shadow:3px 3px 0 rgba(0,0,0,.06);
+  }
+  .total-card .label{ font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:700; margin-bottom:8px; }
+  .total-card .figure{ font-size:clamp(18px,2.6vw,24px); font-weight:800; color:var(--ink); line-height:1.2; }
+  .total-card .sub{ font-size:12px; color:var(--muted); margin-top:4px; }
+  .total-card.reduction{ border-color:var(--shipped-border); }
+  .total-card.reduction .figure{ color:var(--shipped-text); }
+
+  h2.section{ font-size:13px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700; margin:0 0 16px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+
+  .phases{ list-style:none; margin:0 0 40px; padding:0; display:flex; flex-direction:column; gap:14px; }
+  .phase{
+    background:var(--panel); border:2px solid var(--border); border-radius:14px;
+    padding:16px 20px; box-shadow:3px 3px 0 rgba(0,0,0,.06);
+  }
+  .phase-head{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:4px; }
+  .phase-name{ font-weight:800; font-size:15.5px; color:var(--ink); }
+  .phase-est{ font-size:12px; color:var(--muted); white-space:nowrap; }
+  .tag{
+    display:inline-block; font-family:ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; font-weight:700;
+    padding:2px 9px; border-radius:999px; margin-bottom:8px; border:1px solid transparent;
+  }
+  .tag-shipped{ background:var(--shipped-bg); color:var(--shipped-text); border-color:var(--shipped-border); }
+  .tag-partial{ background:var(--partial-bg); color:var(--partial-text); border-color:var(--partial-border); }
+  .tag-cut{ background:var(--cut-bg); color:var(--cut-text); border-color:var(--cut-border); }
+
+  .phase-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px 20px; margin-top:10px; }
+  .phase-grid .col .col-label{ font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:700; margin-bottom:3px; }
+  .phase-grid .col .col-body{ font-size:13px; line-height:1.5; color:var(--text); }
+  .phase-grid .col.shipped .col-body{ color:var(--ink); }
+  .phase-grid .col.cut .col-body{ color:var(--muted); }
+
+  @media (max-width:600px){
+    .totals{ grid-template-columns:1fr; }
+    .phase-grid{ grid-template-columns:1fr; }
+  }
+
+  .closing{ background:var(--panel); border:2px dashed var(--accent-border); border-radius:14px; padding:18px 20px; }
+  .closing .title{ font-weight:800; font-size:14.5px; color:var(--ink); margin-bottom:6px; }
+  .closing p{ font-size:13.5px; line-height:1.6; color:var(--text); margin:0 0 8px; }
+  .closing p:last-child{ margin-bottom:0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">EDI 940 · WMS Integration — CR Pipeline</p>
+  <h1>Scope vs. shipped: what V0 actually cost</h1>
+  <p class="lede">The original design for the human-governed autonomous delivery pipeline was scoped at roughly
+    <strong>3.9M–6.5M tokens across 45–72 sessions</strong>, spread over ten phases plus integration hardening.
+    What actually shipped as a working V0 — SQL-backed change requests, three real human gates, automated
+    implementation and merge/rollback dispatch — landed at roughly <strong>150K–200K tokens across 3 sessions</strong>.
+    This is where that gap came from, phase by phase.</p>
+
+  <div class="totals">
+    <div class="total-card">
+      <div class="label">Original scope</div>
+      <div class="figure mono">3.9M–6.5M tok</div>
+      <div class="sub">45–72 sessions, 10 phases + hardening</div>
+    </div>
+    <div class="total-card">
+      <div class="label">Shipped V0</div>
+      <div class="figure mono">&lt;200K tok</div>
+      <div class="sub">3 sessions, 3 phases full + hardening</div>
+    </div>
+    <div class="total-card reduction">
+      <div class="label">Reduction</div>
+      <div class="figure mono">~95–97%</div>
+      <div class="sub">by cutting scope, not by cutting corners on what shipped</div>
+    </div>
+  </div>
+
+  <h2 class="section">Phase-by-phase</h2>
+  <ol class="phases">
+
+    <li class="phase">
+      <div class="phase-head">
+        <div class="phase-name">1. Chat intake &amp; requirements clarification</div>
+        <div class="phase-est mono">est. 300k–500k tok</div>
+      </div>
+      <span class="tag tag-shipped">Shipped</span>
+      <div class="phase-grid">
+        <div class="col shipped">
+          <div class="col-label">What shipped</div>
+          <div class="col-body">Claude-driven chat intake that clarifies scope, classifies Tier A/B/C, and writes a structured change request — built essentially as scoped.</div>
+        </div>
+        <div class="col cut">
+          <div class="col-label">What was cut</div>
+          <div class="col-body">Nothing significant. Closest phase to the original spec.</div>
+        </div>
+      </div>
+    </li>
+
+    <li class="phase">
+      <div class="phase-head">
+        <div class="phase-name">2. Change request store &amp; approval workflow</div>
+        <div class="phase-est mono">est. 250k–400k tok</div>
+      </div>
+      <span class="tag tag-shipped">Shipped</span>
+      <div class="phase-grid">
+        <div class="col shipped">
+          <div class="col-label">What shipped</div>
+          <div class="col-body">SQL-backed CR table (survives redeploys), status-driven approve/reject UI, three real gates instead of one.</div>
+        </div>
+        <div class="col cut">
+          <div class="col-label">What was cut</div>
+          <div class="col-body">No separate audit-log table — each CR keeps only its current status line (approver + timestamp), not a full history of every transition.</div>
+        </div>
+      </div>
+    </li>
+
+    <li class="phase">
+      <div class="phase-head">
+        <div class="phase-name">3. Spec / acceptance criteria / test cases / deploy plan</div>
+        <div class="phase-est mono">est. 350k–550k tok</div>
+      </div>
+      <span class="tag tag-cut">Cut</span>
+      <div class="phase-grid">
+        <div class="col shipped">
+          <div class="col-label">What shipped</div>
+          <div class="col-body">The CR schema itself carries requirements, touch points, and out-of-scope notes — a lightweight spec, not a separate document.</div>
+        </div>
+        <div class="col cut">
+          <div class="col-label">What was cut</div>
+          <div class="col-body">No dedicated acceptance-criteria doc, no generated test-case list, no deploy plan. Folded entirely into the coding agent's own judgment.</div>
+        </div>
+      </div>
+    </li>
+
+    <li class="phase">
+      <div class="phase-head">
+        <div class="phase-name">4. Coding-agent orchestration</div>
+        <div class="phase-est mono">est. 800k–1.4M tok</div>
+      </div>
+      <span class="tag tag-shipped">Shipped</span>
+      <div class="phase-grid">
+        <div class="col shipped">
+          <div class="col-label">What shipped</div>
+          <div class="col-body">Headless Claude Code, isolated git worktrees, automated branch/commit/push, an actual budget cap. Self-healing within the run itself — the agent writes tests, sees a failure, and fixes it before finishing. The one phase built close to spec.</div>
+        </div>
+        <div class="col cut">
+          <div class="col-label">What was cut</div>
+          <div class="col-body">Guardrails are a tool allowlist + budget cap, not a hardened sandbox.</div>
+        </div>
+      </div>
+    </li>
+
+    <li class="phase">
+      <div class="phase-head">
+        <div class="phase-name">5. PR packaging &amp; automated checks</div>
+        <div class="phase-est mono">est. 500k–900k tok</div>
+      </div>
+      <span class="tag tag-cut">Cut</span>
+      <div class="phase-grid">
+        <div class="col shipped">
+          <div class="col-label">What shipped</div>
+          <div class="col-body">A one-click "Approve &amp; Merge" that runs a real merge and pushes.</div>
+        </div>
+        <div class="col cut">
+          <div class="col-label">What was cut</div>
+          <div class="col-body">No pull request is ever opened — straight merge to <code class="mono">main</code>. No dedicated security scan, lint gate, or regression suite; verification rests on whatever the agent did while implementing.</div>
+        </div>
+      </div>
+    </li>
+
+    <li class="phase">
+      <div class="phase-head">
+        <div class="phase-name">6. Dev/staging deploy automation</div>
+        <div class="phase-est mono">est. 150k–300k tok</div>
+      </div>
+      <span class="tag tag-cut">Cut</span>
+      <div class="phase-grid">
+        <div class="col shipped">
+          <div class="col-label">What shipped</div>
+          <div class="col-body">Production-only auto-deploy on every merge to <code class="mono">main</code>.</div>
+        </div>
+        <div class="col cut">
+          <div class="col-label">What was cut</div>
+          <div class="col-body">No staging tier, no versioning, no promotion step — every test happens directly against production. Flagged as the next real gap to close.</div>
+        </div>
+      </div>
+    </li>
+
+    <li class="phase">
+      <div class="phase-head">
+        <div class="phase-name">7. Notifications</div>
+        <div class="phase-est mono">est. 100k–200k tok</div>
+      </div>
+      <span class="tag tag-cut">Cut</span>
+      <div class="phase-grid">
+        <div class="col shipped">
+          <div class="col-label">What shipped</div>
+          <div class="col-body">Nothing.</div>
+        </div>
+        <div class="col cut">
+          <div class="col-label">What was cut</div>
+          <div class="col-body">No email/Teams/Slack integration at all. Admin checks the CR-Workflow tab manually.</div>
+        </div>
+      </div>
+    </li>
+
+    <li class="phase">
+      <div class="phase-head">
+        <div class="phase-name">8. UAT capture &amp; formal approval</div>
+        <div class="phase-est mono">est. 200k–300k tok</div>
+      </div>
+      <span class="tag tag-cut">Cut</span>
+      <div class="phase-grid">
+        <div class="col shipped">
+          <div class="col-label">What shipped</div>
+          <div class="col-body">The Gate 2 human click stands in as the final sign-off.</div>
+        </div>
+        <div class="col cut">
+          <div class="col-label">What was cut</div>
+          <div class="col-body">No distinct UAT environment, no stakeholder click-through, no formal sign-off record separate from the merge click itself.</div>
+        </div>
+      </div>
+    </li>
+
+    <li class="phase">
+      <div class="phase-head">
+        <div class="phase-name">9. Production promotion (versioned package)</div>
+        <div class="phase-est mono">est. 350k–550k tok</div>
+      </div>
+      <span class="tag tag-cut">Cut</span>
+      <div class="phase-grid">
+        <div class="col shipped">
+          <div class="col-label">What shipped</div>
+          <div class="col-body">Nothing beyond the standard zip-deploy already in place.</div>
+        </div>
+        <div class="col cut">
+          <div class="col-label">What was cut</div>
+          <div class="col-body">No artifact versioning, no blue-green or slot-swap — each merge overwrites the live app directly.</div>
+        </div>
+      </div>
+    </li>
+
+    <li class="phase">
+      <div class="phase-head">
+        <div class="phase-name">10. Monitoring &amp; rollback</div>
+        <div class="phase-est mono">est. 350k–550k tok</div>
+      </div>
+      <span class="tag tag-partial">Partial</span>
+      <div class="phase-grid">
+        <div class="col shipped">
+          <div class="col-label">What shipped</div>
+          <div class="col-body">Real, automated rollback — one click reverts the merge commit and pushes, dispatched via GitHub Actions when needed.</div>
+        </div>
+        <div class="col cut">
+          <div class="col-label">What was cut</div>
+          <div class="col-body">No App Insights / Azure Monitor alerting. Self-healing stops at deploy time -- there's no post-deployment equivalent, so rollback is human-triggered because a person noticed something wrong, not monitor-triggered.</div>
+        </div>
+      </div>
+    </li>
+
+    <li class="phase">
+      <div class="phase-head">
+        <div class="phase-name">Integration &amp; end-to-end hardening</div>
+        <div class="phase-est mono">est. 500k–800k tok</div>
+      </div>
+      <span class="tag tag-shipped">Shipped</span>
+      <div class="phase-grid">
+        <div class="col shipped">
+          <div class="col-label">What shipped</div>
+          <div class="col-body">This was most of the actual work: SQL migration off markdown files, the SuperUser/Admin permission split, remote build/merge/rollback dispatch, worktree cleanup, and fixing every real bug that surfaced along the way.</div>
+        </div>
+        <div class="col cut">
+          <div class="col-label">What was cut</div>
+          <div class="col-body">Compressed from an estimated 5–8 sessions into 3 — the saving here is fewer context reloads, not less rigor.</div>
+        </div>
+      </div>
+    </li>
+
+  </ol>
+
+  <div class="closing">
+    <div class="title">Where the reduction actually came from</div>
+    <p>Three phases shipped close to their original scope: intake, the CR store, and the coding-agent orchestration itself — the hardest and most expensive part of the original estimate. Everything cut was a phase that duplicates a check a human is already doing at one of the three gates: a separate test-case generator when the agent already writes its own tests, a PR review when Gate 2 already requires a human click, a staging promotion when nothing has broken production yet.</p>
+    <p>The two gaps worth closing next are the ones already flagged along the way: a real staging environment (Phase 6), and monitoring that triggers rollback instead of waiting for someone to notice (Phase 10).</p>
+  </div>
+</div>
+</body>
+</html>
