@@ -400,7 +400,7 @@ setError(
           <article className="card action-card" onClick={() => (isAuthenticated ? setChatOpen(true) : signIn())}>
             <div>
               <span>Support</span>
-              <b>Ask PO / ISA</b>
+              <b>Ask PO / ISA / Change Request</b>
             </div>
           </article>
 
