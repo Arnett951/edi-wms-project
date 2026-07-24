@@ -57,6 +57,18 @@ def test_po_lookup_not_found(client, monkeypatch):
     assert "couldn't find PO/order UNKNOWN" in body["reply"]
 
 
+def test_file_download_denied_without_permission(client, monkeypatch):
+    monkeypatch.setattr(main, "get_user_permissions", lambda user_oid: [])
+
+    response = client.post("/api/chat", json={"question": "download sample.edi"})
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["intent"] == "file_download_denied"
+    assert "Super User toggle" in body["reply"]
+    assert "admin toggle" not in body["reply"]
+
+
 ISA_SEGMENT = (
     "ISA*00*          *00*          *ZZ*SENDER*ZZ*RECEIVER*250101*1200*U*00401"
     "*000012345*0*P*>~"

@@ -1427,7 +1427,7 @@ def chat(request: ChatRequest, http_request: Request, payload: dict = Depends(re
         if "files.download" not in get_user_permissions(get_user_oid(payload)):
             return {
                 "intent": "file_download_denied",
-                "reply": "You don't have permission to download files yet. Try the demo admin toggle first.",
+                "reply": "You don't have permission to download files yet. Try the Super User toggle first.",
                 "matches": [],
                 "source": "regex",
             }
