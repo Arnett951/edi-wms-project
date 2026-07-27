@@ -978,6 +978,24 @@ def wms_orders(_: dict = Depends(require_auth)):
         ORDER BY WMSOrderHeaderStagingId DESC
     """)
 
+#To power the Funnel Dashboard: one row per pipeline gate, with item counts,
+#oldest-item age, and a RED/GREEN health color for the monitored gates
+#(see sql/views/dbo.vw_PiplineFunnel.sql for the staleness rule).
+@app.get("/api/dashboard/funnel")
+def dashboard_funnel(_: dict = Depends(require_auth)):
+    return rows("""
+        SELECT
+            GateName,
+            GateOrder,
+            IsMonitoredGate,
+            ItemCount,
+            CONVERT(varchar(19), OldestItemDateTime, 120) AS OldestItemDateTime,
+            OldestItemAgeMinutes,
+            GateStatusColor
+        FROM dbo.vw_PiplineFunnel
+        ORDER BY GateOrder
+    """)
+
 #top allow remote start of ADF Pipeline for testing purposes
 @app.post("/api/adf/run")
 def run_adf_pipeline(_: dict = Depends(require_auth)):

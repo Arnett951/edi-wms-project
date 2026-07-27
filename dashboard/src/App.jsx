@@ -8,6 +8,8 @@ import ChatPanel from "./ChatPanel";
 import CapacityDashboard from "./CapacityDashboard.jsx";
 import AdminChangeRequests from "./AdminChangeRequests.jsx";
 import ReportsDashboard from "./ReportsDashboard.jsx";
+import AnalyticsDashboard from "./AnalyticsDashboard.jsx";
+import FunnelDashboard from "./FunnelDashboard.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
@@ -351,6 +353,18 @@ setError(
           Reports
         </button>
       )}
+      <button
+        className={activeTab === "analytics" ? "tab-active" : ""}
+        onClick={() => setActiveTab("analytics")}
+      >
+        Analytics
+      </button>
+      <button
+        className={activeTab === "funnel" ? "tab-active" : ""}
+        onClick={() => setActiveTab("funnel")}
+      >
+        Funnel Dashboard
+      </button>
       {canViewCr && (
         <button
           className={activeTab === "admin" ? "tab-active" : ""}
@@ -512,6 +526,10 @@ setError(
     {activeTab === "capacity" && <CapacityDashboard />}
 
     {activeTab === "reports" && isAuthenticated && <ReportsDashboard />}
+
+    {activeTab === "analytics" && <AnalyticsDashboard />}
+
+    {activeTab === "funnel" && <FunnelDashboard />}
 
     {activeTab === "admin" && canViewCr && <AdminChangeRequests canManageCr={canManageCr} />}
   </main></div >;
