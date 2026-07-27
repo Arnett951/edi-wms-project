@@ -29,13 +29,13 @@ const GREEN_FILL = "#22c55e";
 const RED_FILL = "#ef4444";
 
 const mockFunnelGates = [
-  { GateName: "Files Received", GateOrder: 1, IsMonitoredGate: 0, ItemCount: 42, OldestItemDateTime: "2026-07-27 10:05:00", OldestItemAgeMinutes: 375, GateStatusColor: "GREEN" },
-  { GateName: "Parsed Successfully", GateOrder: 2, IsMonitoredGate: 1, ItemCount: 38, OldestItemDateTime: "2026-07-27 14:10:00", OldestItemAgeMinutes: 75, GateStatusColor: "RED" },
-  { GateName: "Parse Failed", GateOrder: 3, IsMonitoredGate: 0, ItemCount: 4, OldestItemDateTime: "2026-07-27 09:00:00", OldestItemAgeMinutes: 435, GateStatusColor: "GREEN" },
-  { GateName: "WMS Awaiting Pickup", GateOrder: 4, IsMonitoredGate: 1, ItemCount: 12, OldestItemDateTime: "2026-07-27 15:00:00", OldestItemAgeMinutes: 25, GateStatusColor: "GREEN" },
-  { GateName: "WMS Sent", GateOrder: 5, IsMonitoredGate: 0, ItemCount: 15, OldestItemDateTime: "2026-07-27 13:40:00", OldestItemAgeMinutes: 105, GateStatusColor: "GREEN" },
-  { GateName: "WMS Success", GateOrder: 6, IsMonitoredGate: 0, ItemCount: 11, OldestItemDateTime: "2026-07-27 12:00:00", OldestItemAgeMinutes: 225, GateStatusColor: "GREEN" },
-  { GateName: "WMS Failed", GateOrder: 7, IsMonitoredGate: 0, ItemCount: 1, OldestItemDateTime: "2026-07-27 11:00:00", OldestItemAgeMinutes: 285, GateStatusColor: "GREEN" },
+  { GateName: "Files Received", GateOrder: 1, IsMonitoredGate: 0, ItemCount: 14, OldestItemDateTime: "2026-07-24 17:51:15", OldestItemAgeMinutes: 4269, GateStatusColor: "GREEN" },
+  { GateName: "Parsed Successfully", GateOrder: 2, IsMonitoredGate: 1, ItemCount: 0, OldestItemDateTime: null, OldestItemAgeMinutes: null, GateStatusColor: "GREEN" },
+  { GateName: "Parse Failed", GateOrder: 3, IsMonitoredGate: 0, ItemCount: 9, OldestItemDateTime: "2026-07-24 17:51:15", OldestItemAgeMinutes: 4269, GateStatusColor: "GREEN" },
+  { GateName: "WMS Awaiting Pickup", GateOrder: 4, IsMonitoredGate: 1, ItemCount: 2, OldestItemDateTime: "2026-07-27 16:10:48", OldestItemAgeMinutes: 50, GateStatusColor: "GREEN" },
+  { GateName: "WMS Sent", GateOrder: 5, IsMonitoredGate: 0, ItemCount: 0, OldestItemDateTime: null, OldestItemAgeMinutes: null, GateStatusColor: "GREEN" },
+  { GateName: "WMS Success", GateOrder: 6, IsMonitoredGate: 0, ItemCount: 3, OldestItemDateTime: "2026-07-24 17:52:11", OldestItemAgeMinutes: 4268, GateStatusColor: "GREEN" },
+  { GateName: "WMS Failed", GateOrder: 7, IsMonitoredGate: 0, ItemCount: 0, OldestItemDateTime: null, OldestItemAgeMinutes: null, GateStatusColor: "GREEN" },
 ];
 
 function formatAge(minutes) {
