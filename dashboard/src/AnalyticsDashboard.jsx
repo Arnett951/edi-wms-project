@@ -6,7 +6,7 @@ export default function AnalyticsDashboard() {
     <section className="analytics-panel">
 
       <p>
-        Interactive Tableau dashboard showing EDI pipeline health, operational alerts, and customer error trends.
+        Tableau dashboard showing EDI pipeline health, operational alerts, and customer error trends.
       </p>
 
       <tableau-viz
