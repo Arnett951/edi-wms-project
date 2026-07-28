@@ -997,6 +997,29 @@ def dashboard_funnel(_: dict = Depends(require_auth)):
         ORDER BY GateOrder
     """)
 
+#To power the File Reconciliation panel: one row per inbound file with a
+#rolled-up FileStatus (Delivered / In Progress / Needs Attention / Parse
+#Failed) so every file received can be accounted for, and an AttentionReason
+#for the ones that need action (see sql/views/dbo.vw_FileReconciliation.sql
+#for the rollup rule).
+@app.get("/api/dashboard/file-reconciliation")
+def dashboard_file_reconciliation(_: dict = Depends(require_auth)):
+    return rows("""
+        SELECT TOP 500
+            RawId,
+            FileName,
+            LoadDateTime,
+            ProcessStatus,
+            OrderCount,
+            SuccessCount,
+            FailedOrderCount,
+            InFlightCount,
+            FileStatus,
+            AttentionReason
+        FROM dbo.vw_FileReconciliation
+        ORDER BY RawId DESC
+    """)
+
 #Live Azure Cost Management MTD spend for the "Cloud Cost" dashboard card.
 #Requires the DefaultAzureCredential identity to hold Cost Management Reader
 #on the subscription - see AZURE_SUBSCRIPTION_ID used elsewhere for ADF.

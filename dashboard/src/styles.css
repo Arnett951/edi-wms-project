@@ -211,6 +211,45 @@ button:disabled {
   height: 280px;
 }
 
+.funnel-bars {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.funnel-bar-row {
+  display: grid;
+  grid-template-columns: 160px 1fr 48px;
+  align-items: center;
+  gap: 14px;
+}
+
+.funnel-bar-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.funnel-bar-track {
+  height: 26px;
+  border-radius: 8px;
+  background: #eef2f7;
+  overflow: hidden;
+}
+
+.funnel-bar-fill {
+  height: 100%;
+  border-radius: 8px;
+  transition: width 0.3s ease;
+}
+
+.funnel-bar-count {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #0f172a;
+}
+
 .admin-lede {
   color: var(--text-secondary, #6b7482);
   font-size: 13.5px;
