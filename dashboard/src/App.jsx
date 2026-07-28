@@ -24,6 +24,13 @@ const mockSummary = {
   wmsPickedUp: 4,
 };
 
+const mockCloudBudget = {
+  spendMtd: 26.09,
+  budget: 17.0,
+  projectedMonthEnd: 37.84,
+  percentUsed: 153,
+};
+
 const mockRecentFiles = [
   { rawId: 7, fileName: "sample_940_2.edi", processStatus: "PARSED", loadDateTime: "2026-04-28 18:45:50", errorMessage: null },
   { rawId: 6, fileName: "sample_940.edi", processStatus: "PARSED", loadDateTime: "2026-04-28 18:42:13", errorMessage: null },
@@ -52,6 +59,11 @@ function Icon({ type, className = "" }) {
     <svg {...props}>
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3 3" />
+    </svg>
+  );
+  if (type === "cloud") return (
+    <svg {...props}>
+      <path d="M17.5 19H9a5 5 0 1 1 1.3-9.8 4.5 4.5 0 0 1 8.6 1.9A4 4 0 0 1 17.5 19Z" />
     </svg>
   );
   return <svg {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6" /><path d="M16 13H8" /><path d="M16 17H8" /><path d="M10 9H8" /></svg>;
@@ -85,6 +97,7 @@ export default function App() {
   const [summary, setSummary] = useState(null);
   const [recentFiles, setRecentFiles] = useState([]);
   const [wmsOrders, setWmsOrders] = useState([]);
+  const [cloudCost, setCloudCost] = useState(null);
   const [loading, setLoading] = useState(false);
   const [usingMockData, setUsingMockData] = useState(false);
   const [error, setError] = useState(null);
@@ -128,9 +141,19 @@ export default function App() {
     }
   }
 
+  async function loadCloudCost() {
+    try {
+      const data = await fetchJson(`${API_BASE}/api/dashboard/cloud-cost`);
+      setCloudCost(data);
+    } catch (err) {
+      setCloudCost(null);
+    }
+  }
+
   async function loadDashboard() {
     setLoading(true);
     setError(null);
+    loadCloudCost();
     try {
       const [summaryData, filesData, wmsData] = await Promise.all([
         fetchJson(`${API_BASE}/api/dashboard/summary`),
@@ -410,6 +433,27 @@ setError(
               <Icon type={card.icon} />
             </article>
           ))}
+
+          <article className="card budget-card">
+            <div className="budget-card-top">
+              <span>Cloud Cost (MTD){!cloudCost && " (demo)"}</span>
+              <Icon type="cloud" />
+            </div>
+            <b>${(cloudCost ?? mockCloudBudget).spendMtd.toFixed(2)}</b>
+            <div className="budget-bar-row">
+              <span>Budget: ${(cloudCost ?? mockCloudBudget).budget.toFixed(2)}</span>
+              <span>{(cloudCost ?? mockCloudBudget).percentUsed}%</span>
+            </div>
+            <div className="budget-bar-track">
+              <div
+                className={`budget-bar-fill ${
+                  (cloudCost ?? mockCloudBudget).spendMtd > (cloudCost ?? mockCloudBudget).budget ? "over" : ""
+                }`}
+                style={{ width: `${Math.min((cloudCost ?? mockCloudBudget).percentUsed, 100)}%` }}
+              />
+            </div>
+            <small>Projected Month End: ${(cloudCost ?? mockCloudBudget).projectedMonthEnd.toFixed(2)}</small>
+          </article>
 
           <article className="card action-card" onClick={() => (isAuthenticated ? setChatOpen(true) : signIn())}>
             <div>

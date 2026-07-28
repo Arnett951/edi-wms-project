@@ -18,7 +18,26 @@ ALLOWED_ORIGINS=http://localhost:5173,https://your-static-web-app.azurestaticapp
 ANTHROPIC_API_KEY=your-anthropic-api-key   # optional: enables the AI chat fallback
 AZURE_AD_TENANT_ID=your-azure-ad-tenant-id
 AZURE_AD_CLIENT_ID=your-app-registration-client-id
+CLOUD_BUDGET_MTD=17.00   # optional: monthly Azure spend budget shown on the dashboard, defaults to 17.00
 ```
+
+## Cloud Cost card
+
+`/api/dashboard/cloud-cost` reads actual month-to-date Azure spend via the Cost
+Management Query API, using the same `DefaultAzureCredential` and
+`AZURE_SUBSCRIPTION_ID` already used by `/api/adf/run`. The identity behind
+that credential (managed identity in App Service, or your local `az login`)
+needs the built-in **Cost Management Reader** role on the subscription:
+
+```bash
+az role assignment create \
+  --assignee <principal-id-or-client-id> \
+  --role "Cost Management Reader" \
+  --scope /subscriptions/<subscription-id>
+```
+
+Without that role the endpoint returns `502` and the dashboard falls back to
+demo numbers for that card.
 
 ## Auth
 

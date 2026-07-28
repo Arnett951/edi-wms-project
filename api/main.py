@@ -4,6 +4,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from pathlib import Path
 from typing import Optional
+import calendar
 import json
 import os
 import re
@@ -995,6 +996,52 @@ def dashboard_funnel(_: dict = Depends(require_auth)):
         FROM dbo.vw_PiplineFunnel
         ORDER BY GateOrder
     """)
+
+#Live Azure Cost Management MTD spend for the "Cloud Cost" dashboard card.
+#Requires the DefaultAzureCredential identity to hold Cost Management Reader
+#on the subscription - see AZURE_SUBSCRIPTION_ID used elsewhere for ADF.
+@app.get("/api/dashboard/cloud-cost")
+def cloud_cost(_: dict = Depends(require_auth)):
+    budget = float(os.getenv("CLOUD_BUDGET_MTD", "17.00"))
+    try:
+        credential = DefaultAzureCredential()
+        token = credential.get_token("https://management.azure.com/.default").token
+        subscription_id = os.environ["AZURE_SUBSCRIPTION_ID"]
+
+        response = requests.post(
+            f"https://management.azure.com/subscriptions/{subscription_id}/providers/Microsoft.CostManagement/query",
+            params={"api-version": "2023-11-01"},
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={
+                "type": "ActualCost",
+                "timeframe": "MonthToDate",
+                "dataset": {
+                    "granularity": "None",
+                    "aggregation": {"totalCost": {"name": "PreTaxCost", "function": "Sum"}},
+                },
+            },
+            timeout=15,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        columns = [c["name"] for c in payload["properties"]["columns"]]
+        row = payload["properties"]["rows"][0]
+        spend_mtd = float(row[columns.index("PreTaxCost")])
+        currency = row[columns.index("Currency")]
+    except Exception:
+        raise HTTPException(status_code=502, detail="Unable to fetch Azure cost data.")
+
+    now = datetime.now(timezone.utc)
+    days_in_month = calendar.monthrange(now.year, now.month)[1]
+    projected_month_end = (spend_mtd / now.day) * days_in_month if now.day else spend_mtd
+
+    return {
+        "spendMtd": round(spend_mtd, 2),
+        "budget": budget,
+        "projectedMonthEnd": round(projected_month_end, 2),
+        "percentUsed": round((spend_mtd / budget) * 100) if budget else 0,
+        "currency": currency,
+    }
 
 #top allow remote start of ADF Pipeline for testing purposes
 @app.post("/api/adf/run")
