@@ -3,12 +3,10 @@ import "@tableau/embedding-api";
 
 export default function AnalyticsDashboard() {
   return (
-    <section className="panel">
-      <h2>EDI Operations Dashboard</h2>
+    <section className="analytics-panel">
 
       <p>
-        Interactive Tableau dashboard showing EDI pipeline health,
-        operational alerts, and customer error trends.
+        Interactive Tableau dashboard showing EDI pipeline health, operational alerts, and customer error trends.
       </p>
 
       <tableau-viz
