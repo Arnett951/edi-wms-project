@@ -15,10 +15,12 @@ export default function AnalyticsDashboard() {
         src="https://public.tableau.com/views/Book1_17852780799060/EDIOpsDashboard?:showVizHome=no"
         toolbar="bottom"
         hide-tabs
-        device="desktop"
-        style={{ width: "100%", height: "900px" }}
+        style={{
+          width: "100%",
+          height: "1500px",
+          display: "block"
+        }}
       />
-
     </section>
   );
 }
