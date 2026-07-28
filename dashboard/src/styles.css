@@ -353,7 +353,11 @@ button:disabled {
 }
 
 .cr-progress {
-  max-width: 260px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: none;
+    white-space: nowrap;
 }
 
 .cr-progress-detail {
