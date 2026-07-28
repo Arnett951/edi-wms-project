@@ -440,6 +440,23 @@ td {
   text-overflow: clip;
 }
 
+/* CR Work Flow tab: the Actions column holds one or two buttons plus an
+   optional budget input, which needs more room than the global 240px td cap
+   allows. Let the table grow past 100% width instead of squeezing this
+   column -- .panel's overflow-x: auto then gives a horizontal scrollbar on
+   narrow screens instead of the trailing button (e.g. "Reject") getting
+   clipped by overflow: hidden. */
+.cr-table {
+  width: auto;
+  min-width: 100%;
+}
+
+.cr-actions-cell {
+  max-width: none;
+  overflow: visible;
+  white-space: nowrap;
+}
+
 .cr-status-cell .status-badge {
   white-space: normal;
   overflow-wrap: anywhere;

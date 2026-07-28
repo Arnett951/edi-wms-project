@@ -237,7 +237,7 @@ export default function AdminChangeRequests({ canManageCr }) {
       </div>
 
       <section className="panel">
-        <table>
+        <table className="cr-table">
           <thead>
             <tr>
               <th>CR</th>
@@ -249,7 +249,7 @@ export default function AdminChangeRequests({ canManageCr }) {
               <th>Actual tokens</th>
               <th>Actual cost</th>
               <th className="cr-status-cell">Status</th>
-              <th>Actions</th>
+              <th className="cr-actions-cell">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -280,7 +280,7 @@ export default function AdminChangeRequests({ canManageCr }) {
                       </span>
                     )}
                   </td>
-                  <td>
+                  <td className="cr-actions-cell">
                     {cr.status === PENDING_STATUS && (
                       <>
                         <button
