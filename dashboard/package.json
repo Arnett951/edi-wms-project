@@ -8,18 +8,19 @@
   "dependencies": {
     "@azure/msal-browser": "latest",
     "@azure/msal-react": "latest",
+    "@tableau/embedding-api": "^3.16.1",
     "@vitejs/plugin-react": "latest",
     "chart.js": "latest",
-    "vite": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "recharts": "latest"
+    "recharts": "latest",
+    "vite": "latest"
   },
   "devDependencies": {
-    "vitest": "latest",
-    "jsdom": "latest",
-    "@testing-library/react": "latest",
     "@testing-library/jest-dom": "latest",
-    "@testing-library/user-event": "latest"
+    "@testing-library/react": "latest",
+    "@testing-library/user-event": "latest",
+    "jsdom": "latest",
+    "vitest": "latest"
   }
 }
