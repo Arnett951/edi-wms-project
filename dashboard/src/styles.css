@@ -15,10 +15,11 @@ body {
 }
 
 .shell {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: grid;
-  gap: 24px;
+    max-width: 1700px;   /* or 1800px */
+    width: 98%;
+    margin: 0 auto;
+    display: grid;
+    gap: 24px;
 }
 
 .header {
