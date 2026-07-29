@@ -23,6 +23,7 @@ from azure.mgmt.datafactory import DataFactoryManagementClient
 from anthropic import Anthropic
 from typing import List
 import change_request_lib as cr_lib
+from services.google_sheets import update_sheet_values
 
 # Explicit path (relative to this file, not the process's working directory) -
 # load_dotenv()'s default search depends on cwd, which is unreliable across
@@ -614,6 +615,42 @@ def rollback_change_request(cr_number: int, payload: dict = Depends(require_perm
 def health():
     return {"status": "ok"}
 
+@app.post("/api/tableau/test-google-sheet")
+def test_google_sheet(_: dict = Depends(require_auth)):
+    spreadsheet_id = os.getenv("GOOGLE_SPREADSHEET_ID")
+
+    if not spreadsheet_id:
+        raise HTTPException(
+            status_code=500,
+            detail="GOOGLE_SPREADSHEET_ID is not configured",
+        )
+
+    values = [
+        ["Status", "UpdatedAt"],
+        [
+            "FastAPI connected successfully",
+            datetime.now(timezone.utc).isoformat(),
+        ],
+    ]
+
+    try:
+        result = update_sheet_values(
+            spreadsheet_id=spreadsheet_id,
+            sheet_range="OperationalAlerts!A1",
+            values=values,
+        )
+    except Exception as exc:
+        print(f"[google-sheets-test] error: {exc}")
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to update Google Sheet",
+        )
+
+    return {
+        "status": "success",
+        "updatedRange": result.get("updatedRange"),
+        "updatedCells": result.get("updatedCells"),
+    }
 
 # To trigger the Logic App for EDI processing
 @app.post("/api/actions/trigger-edi")
