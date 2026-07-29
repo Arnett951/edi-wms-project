@@ -9,7 +9,7 @@ import pyodbc
 def get_sql_connection() -> pyodbc.Connection:
     server = os.getenv("SQL_SERVER")
     database = os.getenv("SQL_DATABASE")
-    username = os.getenv("SQL_USERNAME")
+    username = os.getenv("SQL_USER")
     password = os.getenv("SQL_PASSWORD")
 
     missing = [
@@ -17,7 +17,7 @@ def get_sql_connection() -> pyodbc.Connection:
         for name, value in {
             "SQL_SERVER": server,
             "SQL_DATABASE": database,
-            "SQL_USERNAME": username,
+            "SQL_USER": username,
             "SQL_PASSWORD": password,
         }.items()
         if not value
