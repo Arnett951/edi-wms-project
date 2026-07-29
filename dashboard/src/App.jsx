@@ -366,7 +366,7 @@ setError(
         className={activeTab === "capacity" ? "tab-active" : ""}
         onClick={() => setActiveTab("capacity")}
       >
-        Capacity Planning(Machine Learning)
+        Digital Twin
       </button>
       {isAuthenticated && (
         <button
