@@ -23,7 +23,11 @@ from azure.mgmt.datafactory import DataFactoryManagementClient
 from anthropic import Anthropic
 from typing import List
 import change_request_lib as cr_lib
-from services.google_sheets import update_sheet_values
+from services.google_sheets import (
+    clear_sheet_values,
+    update_sheet_values,
+)
+from services.sql_export import query_to_sheet_values
 
 # Explicit path (relative to this file, not the process's working directory) -
 # load_dotenv()'s default search depends on cwd, which is unreliable across
@@ -614,6 +618,57 @@ def rollback_change_request(cr_number: int, payload: dict = Depends(require_perm
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+OPERATIONAL_ALERTS_QUERY = """
+SELECT *
+FROM dbo.vw_OperationalAlerts
+ORDER BY 1;
+"""
+@app.post("/api/tableau/load-operational-alerts")
+def load_operational_alerts():
+    spreadsheet_id = os.getenv("GOOGLE_SPREADSHEET_ID")
+
+    if not spreadsheet_id:
+        raise HTTPException(
+            status_code=500,
+            detail="GOOGLE_SPREADSHEET_ID is not configured",
+        )
+
+    try:
+        values = query_to_sheet_values(
+            OPERATIONAL_ALERTS_QUERY
+        )
+
+        clear_sheet_values(
+            spreadsheet_id=spreadsheet_id,
+            sheet_range="OperationalAlerts!A:ZZ",
+        )
+
+        result = update_sheet_values(
+            spreadsheet_id=spreadsheet_id,
+            sheet_range="OperationalAlerts!A1",
+            values=values,
+        )
+
+        return {
+            "status": "success",
+            "sheet": "OperationalAlerts",
+            "data_rows": max(len(values) - 1, 0),
+            "columns": len(values[0]) if values else 0,
+            "updated_cells": result.get(
+                "updatedCells",
+                0,
+            ),
+            "completed_at": datetime.now(
+                timezone.utc
+            ).isoformat(),
+        }
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Operational Alerts export failed: {exc}",
+        ) from exc
 
 @app.post("/api/tableau/test-google-sheet")
 def test_google_sheet(_: dict = Depends(require_auth)):

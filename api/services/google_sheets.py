@@ -8,6 +8,22 @@ from googleapiclient.discovery import build
 
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 
+def clear_sheet_values(
+    spreadsheet_id: str,
+    sheet_range: str,
+) -> dict:
+    service = get_sheets_service()
+
+    return (
+        service.spreadsheets()
+        .values()
+        .clear(
+            spreadsheetId=spreadsheet_id,
+            range=sheet_range,
+            body={},
+        )
+        .execute()
+    )
 
 def get_sheets_service():
     encoded_credentials = os.getenv(
