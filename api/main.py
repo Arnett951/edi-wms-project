@@ -624,6 +624,36 @@ SELECT *
 FROM dbo.vw_OperationalAlerts
 ORDER BY 1;
 """
+CUSTOMER_ERRORS_QUERY = """
+SELECT *
+FROM dbo.vw_CustomerErrors
+WHERE ErrorDate >= DATEADD(DAY,-30,GETDATE())
+ORDER BY ErrorDate DESC;
+"""
+@app.post("/api/tableau/load-customer-errors")
+def load_customer_errors():
+
+    spreadsheet_id = os.getenv("GOOGLE_SPREADSHEET_ID")
+
+    values = query_to_sheet_values(CUSTOMER_ERRORS_QUERY)
+
+    clear_sheet_values(
+        spreadsheet_id=spreadsheet_id,
+        sheet_range="ORDERS_CUST_ERROR!A:ZZ"
+    )
+
+    result = update_sheet_values(
+        spreadsheet_id=spreadsheet_id,
+        sheet_range="ORDERS_CUST_ERROR!A1",
+        values=values
+    )
+
+    return {
+        "status": "success",
+        "rows": len(values)-1,
+        "updatedCells": result.get("updatedCells")
+    }
+
 @app.post("/api/tableau/load-operational-alerts")
 def load_operational_alerts():
     spreadsheet_id = os.getenv("GOOGLE_SPREADSHEET_ID")
