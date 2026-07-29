@@ -107,7 +107,6 @@ export default function App() {
   const [permissions, setPermissions] = useState([]);
   const canDownloadFiles = permissions.includes("files.download");
   const canManageCr = permissions.includes("cr.admin");
-  const canViewCr = canManageCr || canDownloadFiles;
 
   async function loadPermissions() {
     try {
@@ -389,14 +388,12 @@ setError(
       >
         Funnel Dashboard
       </button>
-      {canViewCr && (
-        <button
-          className={activeTab === "admin" ? "tab-active" : ""}
-          onClick={() => setActiveTab("admin")}
-        >
-          CR-WorkFlow
-        </button>
-      )}
+      <button
+        className={activeTab === "admin" ? "tab-active" : ""}
+        onClick={() => setActiveTab("admin")}
+      >
+        CR-WorkFlow
+      </button>
     </div>
 
     {activeTab === "operations" && (
@@ -576,6 +573,6 @@ setError(
 
     {activeTab === "funnel" && <FunnelDashboard />}
 
-    {activeTab === "admin" && canViewCr && <AdminChangeRequests canManageCr={canManageCr} />}
+    {activeTab === "admin" && <AdminChangeRequests canManageCr={canManageCr} />}
   </main></div >;
 }

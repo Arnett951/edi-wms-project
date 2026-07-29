@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useIsAuthenticated } from "@azure/msal-react";
 import { authFetch } from "./apiClient.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
@@ -8,6 +9,127 @@ const PENDING_BUILD_PREFIX = "Pending Build Approval";
 const APPROVED_PREFIX = "Approved";
 const IMPLEMENTED_PREFIX = "Implemented";
 const MERGED_PREFIX = "Merged";
+const CLOSED_PREFIXES = [MERGED_PREFIX, "Rejected", "Auto-denied", "Rolled back"];
+
+const mockChangeRequests = [
+  {
+    crNumber: 101,
+    title: "Add carrier SCAC validation on inbound 940",
+    tier: "B",
+    tierLabel: "Moderate",
+    status: PENDING_STATUS,
+    estimatedTokens: 42000,
+    estimatedCost: 3.15,
+    costRatioPct: 18,
+    tokensSoFar: null,
+    actualCostUsd: null,
+    date: "2026-07-24",
+    originalRequest: "Reject 940s with an unrecognized SCAC code instead of silently staging them.",
+    requirements: ["Validate SCAC against the carrier reference table on ingest", "Route unrecognized SCACs to a new PARSE_FAILED reason"],
+    touchPoints: ["EDI parser", "dbo.RawFiles"],
+    outOfScope: ["Backfilling historical files"],
+  },
+  {
+    crNumber: 100,
+    title: "Surface WMS retry count on Recent Files table",
+    tier: "A",
+    tierLabel: "Low risk",
+    status: `${PENDING_BUILD_PREFIX}`,
+    estimatedTokens: 15000,
+    estimatedCost: 1.1,
+    costRatioPct: 6,
+    tokensSoFar: null,
+    actualCostUsd: null,
+    date: "2026-07-22",
+    originalRequest: "Show attemptCount next to WMS orders so stuck retries are visible without querying SQL directly.",
+    requirements: ["Add a Retries column to the WMS orders table"],
+    touchPoints: ["dashboard/src/App.jsx"],
+    outOfScope: ["Changing retry behavior itself"],
+  },
+  {
+    crNumber: 99,
+    title: "Auto-close stale Gate 1 reviews after 7 days",
+    tier: "B",
+    tierLabel: "Moderate",
+    status: "Approved — implementing",
+    estimatedTokens: 20000,
+    estimatedCost: 1.5,
+    costRatioPct: 41,
+    tokensSoFar: 8300,
+    actualCostUsd: 0.62,
+    date: "2026-07-20",
+    originalRequest: "CRs sitting in Gate 1 review past 7 days should auto-reject with an explanatory note.",
+    requirements: ["Nightly job flags and rejects stale pending CRs"],
+    touchPoints: ["api/main.py"],
+    outOfScope: ["Notifying requesters by email"],
+  },
+  {
+    crNumber: 98,
+    title: "Add cost-ratio column to CR table",
+    tier: "A",
+    tierLabel: "Low risk",
+    status: "Implemented — ready to merge",
+    mergeReadiness: "Clean merge available",
+    estimatedTokens: 13000,
+    estimatedCost: 0.98,
+    costRatioPct: 96,
+    tokensSoFar: 12400,
+    actualCostUsd: 0.94,
+    date: "2026-07-18",
+    branch: "cr-98-cost-ratio-column",
+    originalRequest: "Show actual-vs-estimated cost ratio per CR so reviewers can spot runaway builds early.",
+    requirements: ["Add CostRatioPct column to the CR table and detail modal"],
+    touchPoints: ["dashboard/src/AdminChangeRequests.jsx"],
+    outOfScope: ["Historical backfill of past CRs"],
+    implementationSummary: "Added a CostRatioPct column sourced from the existing estimate/actual fields; no schema changes needed.",
+  },
+  {
+    crNumber: 97,
+    title: "Fix duplicate ISA control number false-positive",
+    tier: "A",
+    tierLabel: "Low risk",
+    status: "Merged",
+    mergeReadiness: "Clean merge available",
+    mergeCommit: "a1b2c3d4e5",
+    estimatedTokens: 9500,
+    estimatedCost: 0.75,
+    costRatioPct: 96,
+    tokensSoFar: 9100,
+    actualCostUsd: 0.71,
+    date: "2026-07-12",
+    branch: "cr-97-fix-isa-dup",
+    originalRequest: "The duplicate-ISA check was flagging same-day resubmits from the same trading partner as duplicates.",
+    requirements: ["Scope the duplicate check to control number + partner + calendar day"],
+    touchPoints: ["EDI parser"],
+    outOfScope: [],
+    implementationSummary: "Narrowed the duplicate-ISA check to (ControlNumber, PartnerId, Date) instead of ControlNumber alone.",
+  },
+  {
+    crNumber: 96,
+    title: "Add Slack alert on WMS integration failure",
+    tier: "C",
+    tierLabel: "High risk",
+    status: "Auto-denied — Tier C requests require manual scoping",
+    estimatedTokens: 60000,
+    estimatedCost: 4.5,
+    costRatioPct: 0,
+    tokensSoFar: null,
+    actualCostUsd: null,
+    date: "2026-07-10",
+    originalRequest: "Post a Slack message whenever a WMS order integration fails.",
+    requirements: [],
+    touchPoints: ["New external integration"],
+    outOfScope: [],
+  },
+];
+
+function isClosedStatus(status) {
+  return CLOSED_PREFIXES.some((prefix) => status.startsWith(prefix));
+}
+
+function mockRequestsForTab(tab) {
+  return mockChangeRequests.filter((cr) => (tab === "closed" ? isClosedStatus(cr.status) : !isClosedStatus(cr.status)));
+}
 
 function statusBadgeClass(status) {
   if (status === PENDING_STATUS) return "neutral";
@@ -33,9 +155,11 @@ function needsAttention(cr) {
 }
 
 export default function AdminChangeRequests({ canManageCr }) {
-  const [requests, setRequests] = useState([]);
+  const isAuthenticated = useIsAuthenticated();
+  const [requests, setRequests] = useState(mockRequestsForTab("active"));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [usingMockData, setUsingMockData] = useState(!isAuthenticated);
   const [actioningCr, setActioningCr] = useState(null);
   const [selectedCr, setSelectedCr] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -49,6 +173,10 @@ export default function AdminChangeRequests({ canManageCr }) {
   const [pendingDispatch, setPendingDispatch] = useState({});
 
   async function openDetail(crNumber) {
+    if (usingMockData) {
+      setSelectedCr(mockChangeRequests.find((cr) => cr.crNumber === crNumber) || { crNumber });
+      return;
+    }
     setSelectedCr({ crNumber });
     setDetailLoading(true);
     setDetailError(null);
@@ -72,12 +200,19 @@ export default function AdminChangeRequests({ canManageCr }) {
   async function loadRequests(tab = crTab) {
     setLoading(true);
     setError(null);
+    if (!isAuthenticated) {
+      setRequests(mockRequestsForTab(tab));
+      setUsingMockData(true);
+      setLoading(false);
+      return;
+    }
     try {
       const res = await authFetch(`${API_BASE}/api/change-requests?status_group=${tab}`);
       const data = await res.json().catch(() => []);
       if (!res.ok) throw new Error(data.detail || "Failed to load change requests.");
       const fresh = Array.isArray(data) ? data : [];
       setRequests(fresh);
+      setUsingMockData(false);
       // Clear a "dispatched" marker once the remote merge/rollback has
       // actually landed (status changed), not just because a poll ran --
       // without this the row would flip back to its clickable state well
@@ -94,6 +229,8 @@ export default function AdminChangeRequests({ canManageCr }) {
         return next;
       });
     } catch (err) {
+      setRequests(mockRequestsForTab(tab));
+      setUsingMockData(true);
       setError(err.message || "Failed to load change requests.");
     } finally {
       setLoading(false);
@@ -161,7 +298,7 @@ export default function AdminChangeRequests({ canManageCr }) {
   // the CRs for the selected tab, so no full page reload is needed.
   useEffect(() => {
     loadRequests(crTab);
-  }, [crTab]);
+  }, [crTab, isAuthenticated]);
 
   // Simple polling: while any CR is Approved (implementation auto-starts on
   // approval server-side), refresh its live progress -- session id, running
@@ -174,7 +311,7 @@ export default function AdminChangeRequests({ canManageCr }) {
   const approvedCrNumbers = requests.filter((cr) => cr.status.startsWith(APPROVED_PREFIX)).map((cr) => cr.crNumber);
   const pendingDispatchCount = Object.keys(pendingDispatch).length;
   useEffect(() => {
-    if (approvedCrNumbers.length === 0 && pendingDispatchCount === 0) return undefined;
+    if (usingMockData || (approvedCrNumbers.length === 0 && pendingDispatchCount === 0)) return undefined;
     const interval = setInterval(async () => {
       for (const crNumber of approvedCrNumbers) {
         try {
@@ -188,7 +325,7 @@ export default function AdminChangeRequests({ canManageCr }) {
       loadRequests();
     }, 4000);
     return () => clearInterval(interval);
-  }, [approvedCrNumbers.join(","), pendingDispatchCount]);
+  }, [approvedCrNumbers.join(","), pendingDispatchCount, usingMockData]);
 
   const attentionCount = requests.filter(needsAttention).length;
 
@@ -213,6 +350,9 @@ export default function AdminChangeRequests({ canManageCr }) {
         </p>
         {error && <section className="alert"><div><strong>Error</strong><p>{error}</p></div></section>}
         {info && <section className="mock"><p>{info}</p></section>}
+        {usingMockData && !loading && (
+          <p className="admin-lede">Showing mock data — sign in for live change requests and to manage the pipeline.</p>
+        )}
         <button onClick={loadRequests} disabled={loading}>
           {loading ? "Loading..." : "Refresh"}
         </button>{" "}
@@ -281,98 +421,104 @@ export default function AdminChangeRequests({ canManageCr }) {
                     )}
                   </td>
                   <td className="cr-actions-cell">
-                    {cr.status === PENDING_STATUS && (
+                    {usingMockData ? (
+                      <span className="status-badge neutral">Sign in to manage</span>
+                    ) : (
                       <>
-                        <button
-                          onClick={() => decide(cr.crNumber, "approve")}
-                          disabled={actioningCr === cr.crNumber}
-                        >
-                          Approve
-                        </button>{" "}
-                        <button
-                          onClick={() => decide(cr.crNumber, "reject")}
-                          disabled={actioningCr === cr.crNumber}
-                        >
-                          Reject
-                        </button>
-                      </>
-                    )}
-                    {cr.status.startsWith(PENDING_BUILD_PREFIX) && (
-                      canManageCr ? (
-                        <div className="cr-progress">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            placeholder="Max $ (optional)"
-                            value={maxBudgetByCr[cr.crNumber] ?? ""}
-                            onChange={(e) => setMaxBudgetByCr((prev) => ({ ...prev, [cr.crNumber]: e.target.value }))}
-                            style={{ width: 110 }}
-                          />{" "}
-                          <button
-                            onClick={() => startBuild(cr.crNumber)}
-                            disabled={actioningCr === cr.crNumber}
-                          >
-                            Start Build
-                          </button>{" "}
-                          <button
-                            onClick={() => decide(cr.crNumber, "reject")}
-                            disabled={actioningCr === cr.crNumber}
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="status-badge neutral">Awaiting Admin build approval</span>
-                      )
-                    )}
-                    {cr.status.startsWith(APPROVED_PREFIX) && (
-                      <div className="cr-progress">
-                        <span className="status-badge neutral">
-                          {progressByCr[cr.crNumber]?.status === "failed" ? "Implementation failed" : "Implementing..."}
-                        </span>
-                        {progressByCr[cr.crNumber]?.sessionId && (
-                          <div className="cr-progress-detail">
-                            Session {progressByCr[cr.crNumber].sessionId.slice(0, 8)} &middot;{" "}
-                            {progressByCr[cr.crNumber].tokensSoFar ?? 0} tokens
+                        {cr.status === PENDING_STATUS && (
+                          <>
+                            <button
+                              onClick={() => decide(cr.crNumber, "approve")}
+                              disabled={actioningCr === cr.crNumber}
+                            >
+                              Approve
+                            </button>{" "}
+                            <button
+                              onClick={() => decide(cr.crNumber, "reject")}
+                              disabled={actioningCr === cr.crNumber}
+                            >
+                              Reject
+                            </button>
+                          </>
+                        )}
+                        {cr.status.startsWith(PENDING_BUILD_PREFIX) && (
+                          canManageCr ? (
+                            <div className="cr-progress">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                placeholder="Max $ (optional)"
+                                value={maxBudgetByCr[cr.crNumber] ?? ""}
+                                onChange={(e) => setMaxBudgetByCr((prev) => ({ ...prev, [cr.crNumber]: e.target.value }))}
+                                style={{ width: 110 }}
+                              />{" "}
+                              <button
+                                onClick={() => startBuild(cr.crNumber)}
+                                disabled={actioningCr === cr.crNumber}
+                              >
+                                Start Build
+                              </button>{" "}
+                              <button
+                                onClick={() => decide(cr.crNumber, "reject")}
+                                disabled={actioningCr === cr.crNumber}
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="status-badge neutral">Awaiting Admin build approval</span>
+                          )
+                        )}
+                        {cr.status.startsWith(APPROVED_PREFIX) && (
+                          <div className="cr-progress">
+                            <span className="status-badge neutral">
+                              {progressByCr[cr.crNumber]?.status === "failed" ? "Implementation failed" : "Implementing..."}
+                            </span>
+                            {progressByCr[cr.crNumber]?.sessionId && (
+                              <div className="cr-progress-detail">
+                                Session {progressByCr[cr.crNumber].sessionId.slice(0, 8)} &middot;{" "}
+                                {progressByCr[cr.crNumber].tokensSoFar ?? 0} tokens
+                              </div>
+                            )}
+                            {progressByCr[cr.crNumber]?.lastAction && (
+                              <div className="cr-progress-detail">{progressByCr[cr.crNumber].lastAction.slice(0, 140)}</div>
+                            )}
                           </div>
                         )}
-                        {progressByCr[cr.crNumber]?.lastAction && (
-                          <div className="cr-progress-detail">{progressByCr[cr.crNumber].lastAction.slice(0, 140)}</div>
+                        {cr.status.startsWith(IMPLEMENTED_PREFIX) && (
+                          pendingDispatch[cr.crNumber] === "merge" ? (
+                            <span className="status-badge neutral">Merge dispatched -- check Actions tab</span>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Merge ${crCode(cr.crNumber)}'s branch into main and push?`)) {
+                                  decide(cr.crNumber, "merge");
+                                }
+                              }}
+                              disabled={actioningCr === cr.crNumber}
+                            >
+                              Approve &amp; Merge
+                            </button>
+                          )
                         )}
-                      </div>
-                    )}
-                    {cr.status.startsWith(IMPLEMENTED_PREFIX) && (
-                      pendingDispatch[cr.crNumber] === "merge" ? (
-                        <span className="status-badge neutral">Merge dispatched -- check Actions tab</span>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            if (window.confirm(`Merge ${crCode(cr.crNumber)}'s branch into main and push?`)) {
-                              decide(cr.crNumber, "merge");
-                            }
-                          }}
-                          disabled={actioningCr === cr.crNumber}
-                        >
-                          Approve &amp; Merge
-                        </button>
-                      )
-                    )}
-                    {cr.status.startsWith(MERGED_PREFIX) && (
-                      pendingDispatch[cr.crNumber] === "rollback" ? (
-                        <span className="status-badge neutral">Rollback dispatched -- check Actions tab</span>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            if (window.confirm(`Revert ${crCode(cr.crNumber)}'s merge commit and push?`)) {
-                              decide(cr.crNumber, "rollback");
-                            }
-                          }}
-                          disabled={actioningCr === cr.crNumber}
-                        >
-                          Rollback
-                        </button>
-                      )
+                        {cr.status.startsWith(MERGED_PREFIX) && (
+                          pendingDispatch[cr.crNumber] === "rollback" ? (
+                            <span className="status-badge neutral">Rollback dispatched -- check Actions tab</span>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Revert ${crCode(cr.crNumber)}'s merge commit and push?`)) {
+                                  decide(cr.crNumber, "rollback");
+                                }
+                              }}
+                              disabled={actioningCr === cr.crNumber}
+                            >
+                              Rollback
+                            </button>
+                          )
+                        )}
+                      </>
                     )}
                   </td>
                 </tr>
