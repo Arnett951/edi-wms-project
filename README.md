@@ -116,6 +116,8 @@ Today's forecasted order volume
 
 The estimator shows a live projection with an 80% confidence range, a status badge (ON TRACK / TIGHT / AT RISK) comparing that range to the forecast, and a 30-day trend chart (Chart.js) of shipped vs. forecasted orders with today's projection highlighted. This is a self-contained, client-side "what-if" tool - it doesn't call the API, so it works the same whether the FastAPI backend has live data or not.
 
+**Relationship to digital twins:** this estimator is a lightweight cousin of a digital twin, not the real thing. A full warehouse digital twin would ingest live telemetry - barcode/RFID scan events, conveyor and sortation sensors, labor time-and-motion tracking - continuously recalibrate against that stream, and often simulate the physical layout (stations, queues, travel paths) rather than a single regression equation. This prototype uses the same underlying approach (a statistical model turning operational inputs into a throughput forecast) but trained on a static 30-day dataset with manually adjustable sliders instead of live scanner/IoT feeds - same category of insight, without the sensor fusion behind it.
+
 Data Model
 Raw EDI Layer
 EDI940_Raw
