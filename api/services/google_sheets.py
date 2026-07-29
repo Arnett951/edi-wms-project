@@ -36,3 +36,23 @@ def get_sheets_service():
         credentials=credentials,
         cache_discovery=False,
     )
+
+
+def update_sheet_values(
+    spreadsheet_id: str,
+    sheet_range: str,
+    values: list[list],
+) -> dict:
+    service = get_sheets_service()
+
+    return (
+        service.spreadsheets()
+        .values()
+        .update(
+            spreadsheetId=spreadsheet_id,
+            range=sheet_range,
+            valueInputOption="RAW",
+            body={"values": values},
+        )
+        .execute()
+    )
