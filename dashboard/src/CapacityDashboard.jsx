@@ -185,12 +185,20 @@ export default function CapacityDashboard() {
 
   return (
     <div className="capacity-widget">
-      <div className="cap-eyebrow">Fulfillment Capacity ·  Digital Twin (ML Prototype)</div>
+      <div className="cap-eyebrow">
+        Fulfillment Capacity ·{" "}
+        <span
+          className="cap-eyebrow-hint"
+          title="A lightweight cousin of a digital twin — same modeling approach, without the live IoT/scanner feeds behind it."
+        >
+          Digital Twin (ML Prototype)
+        </span>
+      </div>
       <h1 className="cap-title">Will today's crew ship today's orders?</h1>
       <p className="cap-subtitle">
-        "a lightweight cousin of a digital twin — same modeling approach, without the live IoT/scanner feeds."
-        Some common Machine Learning models were evaluated on 30 days of pick/pack activity. Linear regression showed 
-        the best fit — cross-validated R² of 0.91 — using packer-hours available and order complexity to 
+        A lightweight cousin of a digital twin — same modeling approach, without the live IoT/scanner feeds behind
+        it. Some common Machine Learning models were evaluated on 30 days of pick/pack activity. Linear regression
+        showed the best fit — cross-validated R² of 0.91 — using packer-hours available and order complexity to
         predict orders shipped. Adjust today's inputs below to see the live projection.
       </p>
 

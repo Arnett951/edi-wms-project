@@ -365,6 +365,7 @@ setError(
       <button
         className={activeTab === "capacity" ? "tab-active" : ""}
         onClick={() => setActiveTab("capacity")}
+        title="A lightweight cousin of a digital twin — same modeling approach, without the live IoT/scanner feeds behind it."
       >
         Digital Twin (Lightweight Capacity Planning)
       </button>
