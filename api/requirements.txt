@@ -3,6 +3,7 @@ uvicorn
 gunicorn
 pyodbc
 requests
+pysocks
 azure-storage-blob
 python-dotenv
 azure-mgmt-datafactory

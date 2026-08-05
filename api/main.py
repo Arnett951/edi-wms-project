@@ -1460,11 +1460,15 @@ def detect_file_download_handler(question: str):
 
 
 # ---------------------------------------------------------------------------
-# Phase 2 chat: AI fallback. When the regex patterns above don't match, hand
-# the question to Claude with a fixed set of tools (the same lookup functions
-# used by the regex path, plus list_failed_orders). Claude only ever picks a
-# tool and supplies its arguments - it never sees or writes SQL - so the
-# backend stays in full control of what gets queried.
+# Phase 2 chat: AI fallback, three tiers. When the regex patterns above don't
+# match: (1) try the self-hosted local model first (free -- an OpenAI-
+# compatible vLLM server on the home tailnet, reached over the tailscale
+# sidecar's SOCKS5 proxy in this deployment), (2) fall back to Claude if the
+# local model is unset, offline, or errors. Both tiers get the same fixed set
+# of tools (the same lookup functions used by the regex path, plus
+# list_failed_orders) -- the model only ever picks a tool and supplies its
+# arguments, it never sees or writes SQL, so the backend stays in full control
+# of what gets queried.
 # ---------------------------------------------------------------------------
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -1620,6 +1624,89 @@ def handle_ai_fallback(question: str, tools: list, dispatch: dict) -> Optional[d
         return {"intent": "ai_error", "reply": build_unknown_reply(), "matches": [], "source": "regex"}
 
 
+# LOCAL_MODEL_BASE_URL is intentionally unset by default (not the raw
+# tailscale IP) so deployments without a tailscale sidecar -- or without
+# LOCAL_MODEL_BASE_URL configured -- skip this tier outright instead of
+# stalling on a request to a host they have no route to. LOCAL_MODEL_PROXY is
+# only set in the deployment that has the tailscale sidecar (socks5h://
+# localhost:1055); local dev, which already runs tailscale on the host
+# machine, sets LOCAL_MODEL_BASE_URL to the tailnet IP directly with no proxy.
+LOCAL_MODEL_BASE_URL = os.getenv("LOCAL_MODEL_BASE_URL")
+LOCAL_MODEL_NAME = os.getenv("LOCAL_MODEL_NAME", "Qwen/Qwen2.5-3B-Instruct")
+LOCAL_MODEL_PROXY = os.getenv("LOCAL_MODEL_SOCKS5_PROXY")
+LOCAL_MODEL_TIMEOUT_SECONDS = (3, 30)  # (connect, read) -- generation is the slow part, connect should be near-instant over the tailnet
+
+
+def _openai_style_tools(tools: list) -> list:
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": tool["name"],
+                "description": tool["description"],
+                "parameters": tool["input_schema"],
+            },
+        }
+        for tool in tools
+    ]
+
+
+def handle_local_model_fallback(question: str, tools: list, dispatch: dict) -> Optional[dict]:
+    """Tries the self-hosted local model via its OpenAI-compatible /chat/completions
+    endpoint. Returns None on any failure (unconfigured, offline, timeout, malformed
+    response) so the caller falls through to the next tier (Claude) -- never raises."""
+    if not LOCAL_MODEL_BASE_URL:
+        return None
+
+    try:
+        response = requests.post(
+            f"{LOCAL_MODEL_BASE_URL.rstrip('/')}/chat/completions",
+            proxies={"http": LOCAL_MODEL_PROXY, "https": LOCAL_MODEL_PROXY} if LOCAL_MODEL_PROXY else None,
+            timeout=LOCAL_MODEL_TIMEOUT_SECONDS,
+            json={
+                "model": LOCAL_MODEL_NAME,
+                "messages": [
+                    {"role": "system", "content": AI_SYSTEM_PROMPT},
+                    {"role": "user", "content": question},
+                ],
+                "tools": _openai_style_tools(tools),
+                "max_tokens": 400,
+            },
+        )
+        response.raise_for_status()
+        message = response.json()["choices"][0]["message"]
+        tool_calls = message.get("tool_calls") or []
+
+        if not tool_calls:
+            return {
+                "intent": "ai_unhandled",
+                "reply": message.get("content") or build_unknown_reply(),
+                "matches": [],
+                "source": "local_ai",
+            }
+
+        call = tool_calls[0]["function"]
+        tool_fn = dispatch.get(call["name"])
+        if not tool_fn:
+            return {"intent": "ai_unhandled", "reply": build_unknown_reply(), "matches": [], "source": "local_ai"}
+
+        tool_result = tool_fn(json.loads(call["arguments"] or "{}"))
+        result = {
+            "intent": f"ai_{call['name']}",
+            "reply": tool_result.get("reply", ""),
+            "matches": tool_result.get("matches", []),
+            "source": "local_ai",
+        }
+        if "downloads" in tool_result:
+            result["downloads"] = tool_result["downloads"]
+        return result
+    except Exception as exc:
+        # Local model unreachable/offline/misbehaving -- degrade silently to
+        # the Claude tier rather than surfacing this to the chat UI.
+        print(f"[chat] local model fallback error (falling back to Claude): {exc}")
+        return None
+
+
 @app.get("/api/chat/sample-isa")
 def sample_isa(_: dict = Depends(require_auth)):
     return {"isaControlNumber": get_latest_failed_isa()}
@@ -1651,17 +1738,26 @@ def chat(request: ChatRequest, http_request: Request, payload: dict = Depends(re
     if po_match:
         return {**handle_po_lookup(po_match.group(1).strip()), "source": "regex"}
 
-    if not _anthropic_client:
-        return {"intent": "unknown", "reply": build_unknown_reply(), "matches": [], "source": "regex"}
-
-    if is_ai_rate_limited(get_client_ip(http_request)):
-        return {"intent": "ai_rate_limited", "reply": build_unknown_reply(), "matches": [], "source": "regex"}
-
     tools = list(AI_TOOLS)
     dispatch = dict(AI_TOOL_DISPATCH)
     if "files.download" in get_user_permissions(get_user_oid(payload)):
         tools.append(FILE_DOWNLOAD_TOOL)
         dispatch["get_file_download_link"] = lambda tool_input: handle_file_download_by_isa(tool_input["isa_number"])
+
+    # Tier 2: local model. Unrate-limited (it's free, self-hosted) and tried
+    # before Claude regardless of ANTHROPIC_API_KEY -- handle_local_model_fallback
+    # itself is a no-op (returns None) when LOCAL_MODEL_BASE_URL isn't set.
+    local_result = handle_local_model_fallback(question, tools, dispatch)
+    if local_result:
+        return local_result
+
+    # Tier 3: Claude, only reached when the local model is unconfigured or
+    # unreachable.
+    if not _anthropic_client:
+        return {"intent": "unknown", "reply": build_unknown_reply(), "matches": [], "source": "regex"}
+
+    if is_ai_rate_limited(get_client_ip(http_request)):
+        return {"intent": "ai_rate_limited", "reply": build_unknown_reply(), "matches": [], "source": "regex"}
 
     ai_result = handle_ai_fallback(question, tools, dispatch)
     if ai_result:
