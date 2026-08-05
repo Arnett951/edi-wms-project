@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EDI 940 Chat — System Architecture</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef0f3;
+    --ink: #1b222c;
+    --ink-soft: #5b6472;
+    --line: #c7ccd4;
+    --cloud: #4f7295;
+    --tailnet: #b56a1f;
+    --claude: #7a5da3;
+    --font-sans: -apple-system, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, "Roboto Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10141b;
+      --surface: #171d26;
+      --surface-2: #1e2530;
+      --ink: #e7eaef;
+      --ink-soft: #9aa4b2;
+      --line: #333c49;
+      --cloud: #7fa2c6;
+      --tailnet: #e0954a;
+      --claude: #ab8fcb;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10141b;
+    --surface: #171d26;
+    --surface-2: #1e2530;
+    --ink: #e7eaef;
+    --ink-soft: #9aa4b2;
+    --line: #333c49;
+    --cloud: #7fa2c6;
+    --tailnet: #e0954a;
+    --claude: #ab8fcb;
+  }
+  :root[data-theme="light"] {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef0f3;
+    --ink: #1b222c;
+    --ink-soft: #5b6472;
+    --line: #c7ccd4;
+    --cloud: #4f7295;
+    --tailnet: #b56a1f;
+    --claude: #7a5da3;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    line-height: 1.55;
+  }
+
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  /* ---------- title block ---------- */
+  .titleblock {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 24px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(26px, 3.4vw, 34px);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  .dek {
+    max-width: 66ch;
+    color: var(--ink-soft);
+    font-size: 15px;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 22px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- legend ---------- */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 28px;
+    padding: 14px 18px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-soft);
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .swatch { width: 22px; height: 2px; flex: none; }
+  .swatch.dashed { background-image: linear-gradient(90deg, currentColor 60%, transparent 0%); background-size: 8px 2px; background-repeat: repeat-x; height: 2px; background-color: transparent; }
+  .swatch.loop { width: 14px; height: 14px; border-radius: 50%; border: 2px solid; background: none; }
+
+  /* ---------- section ---------- */
+  section.block { display: flex; flex-direction: column; gap: 14px; }
+  h2 {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin: 0;
+  }
+  p.lede {
+    max-width: 74ch;
+    font-size: 15px;
+  }
+  p.lede code, .meta-row code {
+    font-family: var(--font-mono);
+    font-size: .92em;
+    background: var(--surface-2);
+    padding: .1em .35em;
+    border-radius: 3px;
+  }
+
+  /* ---------- figure / diagram sheet ---------- */
+  figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+  .sheet {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    padding: 8px;
+  }
+  .diagram-scroll { overflow-x: auto; }
+  svg { display: block; width: 100%; height: auto; min-width: 760px; font-variant-numeric: tabular-nums; }
+  figcaption {
+    font-size: 13px;
+    color: var(--ink-soft);
+    max-width: 74ch;
+  }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- notes panel ---------- */
+  .notes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+  }
+  .note {
+    background: var(--surface);
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .note .k {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .note .v { font-size: 13.5px; }
+  .note .v code { font-family: var(--font-mono); font-size: .93em; background: var(--surface-2); padding: .05em .3em; }
+
+  footer.scope-note {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+  }
+
+  a { color: var(--cloud); }
+  :focus-visible { outline: 2px solid var(--cloud); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="titleblock">
+    <div class="eyebrow">System Architecture — Reference Drawing</div>
+    <h1>EDI 940 Chat: Container App, Tailscale Tunnel &amp; the AI Fallback Chain</h1>
+    <p class="dek">How a chat question travels from the dashboard to a reply — through the regex fast path, a self-hosted
+      local model reached over a private tailnet, and Claude as the last resort.</p>
+    <div class="meta-row">
+      <span><b>Runtime</b> Azure Container Apps</span>
+      <span><b>App</b> ediwms-api · West US 2</span>
+      <span><b>Local model</b> Qwen2.5-3B-Instruct (vLLM)</span>
+      <span><b>Fallback model</b> claude-sonnet-5</span>
+    </div>
+  </div>
+
+  <div class="legend" aria-hidden="true">
+    <div class="legend-item"><span class="swatch" style="background:var(--cloud)"></span> public/Azure hop (HTTPS)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--tailnet)"></span> tailnet hop (SOCKS5 / WireGuard)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--claude)"></span> Anthropic hop (HTTPS)</div>
+    <div class="legend-item"><span class="swatch dashed" style="color:var(--ink-soft)"></span> fallback path — only if tier above fails</div>
+    <div class="legend-item"><span class="swatch loop" style="color:var(--ink-soft)"></span> in-process step, no network hop</div>
+  </div>
+
+  <section class="block">
+    <h2>Figure 1 — Where the pieces live</h2>
+    <p class="lede">One Container App revision runs <b>two containers sharing a network namespace</b>: the FastAPI app
+      and a tailscale sidecar. That's what lets the app reach a GPU box on a home network it has no public route to —
+      it dials <code>localhost:1055</code>, not the internet.</p>
+    <figure>
+      <div class="sheet"><div class="diagram-scroll">
+        <svg viewBox="0 0 1180 700" role="img" aria-label="Topology diagram: the browser reaches the Azure Container App and Azure AD over the public internet; inside the Container App, the FastAPI container and a tailscale sidecar share a network namespace and talk over a local SOCKS5 proxy; the sidecar tunnels over a private tailnet to a home GPU box running Qwen; the FastAPI container also calls Azure SQL directly and Claude over the public internet as a fallback.">
+          <defs>
+            <marker id="aI" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-soft)"/></marker>
+            <marker id="aC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--cloud)"/></marker>
+            <marker id="aT" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--tailnet)"/></marker>
+            <marker id="aA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--claude)"/></marker>
+          </defs>
+
+          <g font-family="var(--font-sans)" fill="var(--ink)">
+
+            <!-- Browser -->
+            <rect x="40" y="50" width="170" height="64" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5"/>
+            <text x="125" y="76" text-anchor="middle" font-size="14" font-weight="700">Browser</text>
+            <text x="125" y="96" text-anchor="middle" font-size="10.5" font-family="var(--font-mono)" fill="var(--ink-soft)">React dashboard · MSAL</text>
+
+            <!-- Azure AD -->
+            <rect x="430" y="18" width="200" height="54" fill="var(--surface)" stroke="var(--cloud)" stroke-width="1.5"/>
+            <text x="530" y="40" text-anchor="middle" font-size="13" font-weight="700" fill="var(--cloud)">Azure AD (Entra ID)</text>
+            <text x="530" y="58" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">issues + validates JWT</text>
+
+            <!-- Static Web App -->
+            <rect x="40" y="176" width="170" height="78" fill="var(--surface)" stroke="var(--cloud)" stroke-width="1.5"/>
+            <text x="125" y="204" text-anchor="middle" font-size="13" font-weight="700" fill="var(--cloud)">Static Web App</text>
+            <text x="125" y="222" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">edi.chrisarnett.me</text>
+            <text x="125" y="238" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">serves built React bundle</text>
+
+            <!-- Container App outer boundary -->
+            <rect x="300" y="140" width="560" height="330" fill="none" stroke="var(--cloud)" stroke-width="2"/>
+            <text x="316" y="164" font-size="13.5" font-weight="700" fill="var(--cloud)">Azure Container App — ediwms-api</text>
+            <text x="316" y="180" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">env: ediwms-env · West US 2 · 1 replica (scale-to-zero)</text>
+
+            <!-- shared namespace -->
+            <rect x="330" y="206" width="500" height="146" fill="none" stroke="var(--ink-soft)" stroke-width="1.25" stroke-dasharray="5 4"/>
+            <text x="580" y="198" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">shared network namespace (loopback)</text>
+
+            <!-- main container -->
+            <rect x="350" y="226" width="220" height="106" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5"/>
+            <text x="460" y="252" text-anchor="middle" font-size="13" font-weight="700">edi-wms-api</text>
+            <text x="460" y="270" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">FastAPI · gunicorn -w2</text>
+            <text x="460" y="284" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">--timeout 90 · :8000</text>
+            <text x="460" y="300" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">chat() tiers: regex → local → Claude</text>
+
+            <!-- sidecar -->
+            <rect x="590" y="226" width="220" height="106" fill="var(--surface)" stroke="var(--tailnet)" stroke-width="1.5"/>
+            <text x="700" y="252" text-anchor="middle" font-size="13" font-weight="700" fill="var(--tailnet)">tailscale sidecar</text>
+            <text x="700" y="270" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">tailscaled --tun=userspace</text>
+            <text x="700" y="284" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">--socks5-server=:1055</text>
+            <text x="700" y="300" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">node: edi-wms-containerapp-N</text>
+
+            <!-- azure files -->
+            <ellipse cx="700" cy="374" rx="88" ry="9" fill="var(--surface)" stroke="var(--ink-soft)" stroke-width="1.25"/>
+            <rect x="612" y="374" width="176" height="46" fill="var(--surface)" stroke="var(--ink-soft)" stroke-width="1.25"/>
+            <ellipse cx="700" cy="420" rx="88" ry="9" fill="var(--surface)" stroke="var(--ink-soft)" stroke-width="1.25"/>
+            <text x="700" y="399" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">Azure Files: /tailscale-state</text>
+
+            <!-- home tailnet -->
+            <rect x="900" y="176" width="240" height="200" fill="none" stroke="var(--tailnet)" stroke-width="1.5" stroke-dasharray="6 4"/>
+            <text x="916" y="200" font-size="13" font-weight="700" fill="var(--tailnet)">home tailnet</text>
+            <rect x="925" y="266" width="190" height="90" fill="var(--surface)" stroke="var(--tailnet)" stroke-width="1.5"/>
+            <text x="1020" y="292" text-anchor="middle" font-size="12.5" font-weight="700">skynet</text>
+            <text x="1020" y="310" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">100.123.161.53</text>
+            <text x="1020" y="326" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">vLLM · Qwen2.5-3B :8000</text>
+
+            <!-- Azure SQL -->
+            <rect x="320" y="560" width="220" height="90" fill="var(--surface)" stroke="var(--cloud)" stroke-width="1.5"/>
+            <text x="430" y="592" text-anchor="middle" font-size="13" font-weight="700" fill="var(--cloud)">Azure SQL Database</text>
+            <text x="430" y="610" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">pyodbc · SQL auth</text>
+            <text x="430" y="626" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">dbo.EDI940_Raw · wms.OrderHeader</text>
+
+            <!-- Anthropic -->
+            <rect x="620" y="560" width="220" height="90" fill="var(--surface)" stroke="var(--claude)" stroke-width="1.5"/>
+            <text x="730" y="592" text-anchor="middle" font-size="13" font-weight="700" fill="var(--claude)">Anthropic — Claude API</text>
+            <text x="730" y="610" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">claude-sonnet-5</text>
+            <text x="730" y="626" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--ink-soft)">HTTPS · x-api-key</text>
+
+            <!-- ARROWS -->
+            <!-- browser -> SWA -->
+            <line x1="125" y1="114" x2="125" y2="174" stroke="var(--cloud)" stroke-width="1.5" marker-end="url(#aC)"/>
+            <text x="134" y="148" font-size="10" font-family="var(--font-mono)" fill="var(--cloud)">GET / (HTTPS)</text>
+
+            <!-- browser <-> AAD -->
+            <line x1="207" y1="66" x2="428" y2="42" stroke="var(--cloud)" stroke-width="1.5" marker-end="url(#aC)" marker-start="url(#aC)"/>
+            <text x="215" y="52" font-size="10" font-family="var(--font-mono)" fill="var(--cloud)">MSAL sign-in → JWT</text>
+
+            <!-- browser -> main container (api call) -->
+            <polyline points="210,88 262,88 262,278 348,278" fill="none" stroke="var(--cloud)" stroke-width="1.5" marker-end="url(#aC)"/>
+            <text x="270" y="190" font-size="10" font-family="var(--font-mono)" fill="var(--cloud)">POST /api/chat</text>
+            <text x="270" y="204" font-size="10" font-family="var(--font-mono)" fill="var(--cloud)">Authorization: Bearer JWT</text>
+
+            <!-- main container <-> AAD jwks -->
+            <line x1="470" y1="224" x2="510" y2="74" stroke="var(--cloud)" stroke-width="1.25" stroke-dasharray="4 3" marker-end="url(#aC)"/>
+            <text x="478" y="150" font-size="9.5" font-family="var(--font-mono)" fill="var(--ink-soft)">validates sig (JWKS)</text>
+
+            <!-- main <-> sidecar -->
+            <line x1="572" y1="279" x2="588" y2="279" stroke="var(--tailnet)" stroke-width="2" marker-end="url(#aT)" marker-start="url(#aT)"/>
+            <text x="580" y="222" text-anchor="middle" font-size="9.5" font-family="var(--font-mono)" fill="var(--tailnet)">SOCKS5</text>
+            <text x="580" y="352" text-anchor="middle" font-size="9.5" font-family="var(--font-mono)" fill="var(--tailnet)">:1055</text>
+
+            <!-- sidecar <-> files -->
+            <line x1="700" y1="332" x2="700" y2="372" stroke="var(--ink-soft)" stroke-width="1.25" marker-end="url(#aI)"/>
+
+            <!-- sidecar -> skynet -->
+            <line x1="812" y1="279" x2="923" y2="300" stroke="var(--tailnet)" stroke-width="1.5" marker-end="url(#aT)"/>
+            <text x="825" y="270" font-size="9.5" font-family="var(--font-mono)" fill="var(--tailnet)">WireGuard, DERP-relayed</text>
+
+            <!-- main -> SQL -->
+            <polyline points="440,470 440,558" fill="none" stroke="var(--cloud)" stroke-width="1.5" marker-end="url(#aC)"/>
+            <text x="448" y="510" font-size="10" font-family="var(--font-mono)" fill="var(--cloud)">pyodbc / TDS</text>
+
+            <!-- main -> Anthropic -->
+            <polyline points="640,470 730,558" fill="none" stroke="var(--claude)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#aA)"/>
+            <text x="648" y="510" font-size="10" font-family="var(--font-mono)" fill="var(--claude)">HTTPS · x-api-key</text>
+            <text x="648" y="524" font-size="9.5" font-family="var(--font-mono)" fill="var(--ink-soft)">(fallback only)</text>
+
+          </g>
+        </svg>
+      </div></div>
+      <figcaption><b>Figure 1.</b> The FastAPI container never gets a public route to the home network — it only ever
+        dials <code>localhost:1055</code>. The tailscale sidecar is what turns that into a real tunnel to <code>skynet</code>,
+        and the Azure Files mount is what lets that tunnel's identity survive a scale-to-zero restart instead of
+        re-registering as a new device every time.</figcaption>
+    </figure>
+  </section>
+
+  <section class="block">
+    <h2>Figure 2 — What happens on one chat question</h2>
+    <p class="lede">Below: a question that misses the regex fast path, gets answered by the local model in two round
+      trips, with the SQL lookup sandwiched in between. If either local-model call is slow or fails, the same shape
+      repeats against Claude instead — shown dashed at the bottom, since it's the exception, not the common case.</p>
+    <figure>
+      <div class="sheet"><div class="diagram-scroll">
+        <svg viewBox="0 0 1180 900" role="img" aria-label="Sequence diagram across five lanes: Browser, Container App, Qwen local model, Claude, and Azure SQL. Ten numbered steps show the primary path: the browser posts a question, the container app's regex check misses, it asks Qwen which tool to call, Qwen picks list_failed_orders, the container app runs that tool against Azure SQL, sends the result back to Qwen to phrase a reply, and returns that reply to the browser. A dashed lower section shows the same pattern repeating against Claude if the Qwen calls time out or fail.">
+          <defs>
+            <marker id="bI" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-soft)"/></marker>
+            <marker id="bC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--cloud)"/></marker>
+            <marker id="bT" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--tailnet)"/></marker>
+            <marker id="bA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--claude)"/></marker>
+          </defs>
+
+          <!-- lane x positions: Browser 90, ContainerApp 340, Qwen 590, Claude 820, SQL 1040 -->
+          <g font-family="var(--font-sans)" fill="var(--ink)">
+
+            <!-- lane headers -->
+            <g font-size="12.5" font-weight="700" text-anchor="middle">
+              <rect x="20" y="18" width="140" height="40" fill="var(--surface-2)" stroke="var(--ink)" stroke-width="1.25"/>
+              <text x="90" y="43">Browser</text>
+              <rect x="270" y="18" width="140" height="40" fill="var(--surface-2)" stroke="var(--ink)" stroke-width="1.25"/>
+              <text x="340" y="43">Container App</text>
+              <rect x="520" y="18" width="140" height="40" fill="var(--surface-2)" stroke="var(--tailnet)" stroke-width="1.25"/>
+              <text x="590" y="43" fill="var(--tailnet)">Qwen (local)</text>
+              <rect x="750" y="18" width="140" height="40" fill="var(--surface-2)" stroke="var(--claude)" stroke-width="1.25"/>
+              <text x="820" y="43" fill="var(--claude)">Claude</text>
+              <rect x="970" y="18" width="140" height="40" fill="var(--surface-2)" stroke="var(--cloud)" stroke-width="1.25"/>
+              <text x="1040" y="43" fill="var(--cloud)">Azure SQL</text>
+            </g>
+
+            <!-- lifelines -->
+            <g stroke="var(--line)" stroke-width="1.25">
+              <line x1="90" y1="58" x2="90" y2="860"/>
+              <line x1="340" y1="58" x2="340" y2="860"/>
+              <line x1="590" y1="58" x2="590" y2="860"/>
+              <line x1="820" y1="58" x2="820" y2="860"/>
+              <line x1="1040" y1="58" x2="1040" y2="860"/>
+            </g>
+
+            <!-- step 1: browser -> container app -->
+            <line x1="90" y1="90" x2="336" y2="90" stroke="var(--cloud)" stroke-width="1.5" marker-end="url(#bC)"/>
+            <text x="100" y="83" font-size="11" font-family="var(--font-mono)" fill="var(--cloud)">① POST /api/chat {question}</text>
+
+            <!-- step 2: self note, regex miss -->
+            <path d="M340,120 C 400,120 400,150 340,150" fill="none" stroke="var(--ink-soft)" stroke-width="1.25" marker-end="url(#bI)"/>
+            <text x="408" y="140" font-size="11" font-family="var(--font-mono)" fill="var(--ink-soft)">② regex check (ISA / PO / file) → no match</text>
+
+            <!-- step 3: container -> qwen -->
+            <line x1="340" y1="185" x2="586" y2="185" stroke="var(--tailnet)" stroke-width="1.5" marker-end="url(#bT)"/>
+            <text x="350" y="178" font-size="11" font-family="var(--font-mono)" fill="var(--tailnet)">③ POST /chat/completions — which tool?</text>
+
+            <!-- step 4: qwen -> container, tool_call -->
+            <line x1="590" y1="220" x2="344" y2="220" stroke="var(--tailnet)" stroke-width="1.5" marker-end="url(#bT)"/>
+            <text x="350" y="213" font-size="11" font-family="var(--font-mono)" fill="var(--tailnet)">④ tool_call: list_failed_orders {customer:"LOW"}</text>
+
+            <!-- step 5: self note, runs handler -->
+            <path d="M340,250 C 400,250 400,280 340,280" fill="none" stroke="var(--ink-soft)" stroke-width="1.25" marker-end="url(#bI)"/>
+            <text x="408" y="270" font-size="11" font-family="var(--font-mono)" fill="var(--ink-soft)">⑤ handle_failed_orders() — in-process</text>
+
+            <!-- step 6: container -> sql -->
+            <line x1="340" y1="315" x2="1036" y2="315" stroke="var(--cloud)" stroke-width="1.5" marker-end="url(#bC)"/>
+            <text x="350" y="308" font-size="11" font-family="var(--font-mono)" fill="var(--cloud)">⑥ SELECT ... WHERE ISASender = 'LOW'</text>
+
+            <!-- step 7: sql -> container -->
+            <line x1="1040" y1="350" x2="344" y2="350" stroke="var(--cloud)" stroke-width="1.5" marker-end="url(#bC)"/>
+            <text x="700" y="343" text-anchor="middle" font-size="11" font-family="var(--font-mono)" fill="var(--cloud)">⑦ rows</text>
+
+            <!-- step 8: container -> qwen, tool result -->
+            <line x1="340" y1="385" x2="586" y2="385" stroke="var(--tailnet)" stroke-width="1.5" marker-end="url(#bT)"/>
+            <text x="350" y="378" font-size="11" font-family="var(--font-mono)" fill="var(--tailnet)">⑧ tool result → phrase the reply</text>
+
+            <!-- step 9: qwen -> container, final text -->
+            <line x1="590" y1="420" x2="344" y2="420" stroke="var(--tailnet)" stroke-width="1.5" marker-end="url(#bT)"/>
+            <text x="350" y="413" font-size="11" font-family="var(--font-mono)" fill="var(--tailnet)">⑨ final reply text</text>
+
+            <!-- step 10: container -> browser -->
+            <line x1="340" y1="455" x2="94" y2="455" stroke="var(--cloud)" stroke-width="1.5" marker-end="url(#bC)"/>
+            <text x="100" y="448" font-size="11" font-family="var(--font-mono)" fill="var(--cloud)">⑩ 200 OK {reply, source:"local_ai"}</text>
+
+            <!-- divider -->
+            <line x1="20" y1="500" x2="1160" y2="500" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 4"/>
+            <text x="20" y="524" font-size="11.5" font-family="var(--font-mono)" fill="var(--ink-soft)">Tier 3 — only reached if ③ or ⑧ times out (&gt;7s) or errors</text>
+
+            <!-- fallback: container -> claude -->
+            <line x1="340" y1="560" x2="816" y2="560" stroke="var(--claude)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#bA)"/>
+            <text x="350" y="553" font-size="11" font-family="var(--font-mono)" fill="var(--claude)">③′ which tool?</text>
+
+            <line x1="820" y1="595" x2="344" y2="595" stroke="var(--claude)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#bA)"/>
+            <text x="350" y="588" font-size="11" font-family="var(--font-mono)" fill="var(--claude)">④′ tool_call</text>
+
+            <text x="690" y="630" text-anchor="middle" font-size="10.5" font-family="var(--font-mono)" fill="var(--ink-soft)" font-style="italic">⑤′–⑦′ same SQL round trip as ⑤–⑦</text>
+
+            <line x1="340" y1="662" x2="816" y2="662" stroke="var(--claude)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#bA)"/>
+            <text x="350" y="655" font-size="11" font-family="var(--font-mono)" fill="var(--claude)">⑧′ tool result → phrase reply</text>
+
+            <line x1="820" y1="697" x2="344" y2="697" stroke="var(--claude)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#bA)"/>
+            <text x="350" y="690" font-size="11" font-family="var(--font-mono)" fill="var(--claude)">⑨′ final reply text</text>
+
+            <line x1="340" y1="732" x2="94" y2="732" stroke="var(--claude)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#bA)"/>
+            <text x="100" y="725" font-size="11" font-family="var(--font-mono)" fill="var(--claude)">⑩′ 200 OK {reply, source:"ai"}</text>
+
+          </g>
+        </svg>
+      </div></div>
+      <figcaption><b>Figure 2.</b> Ten steps, two of them AI calls, for a question the quick regex path can't answer.
+        The <code>source</code> field in the final response (<code>local_ai</code> vs <code>ai</code>) is how the chat
+        UI knows whether to show the <code>AI-L</code> badge or the plain <code>AI</code> one.</figcaption>
+    </figure>
+  </section>
+
+  <section class="block">
+    <h2>Operational notes</h2>
+    <div class="notes">
+      <div class="note">
+        <div class="k">Cold start</div>
+        <div class="v">minReplicas is <code>0</code>. First request after idle waits on the whole replica (both
+          containers) coming up before it's routed — tailscale has to re-auth too.</div>
+      </div>
+      <div class="note">
+        <div class="k">Local-model timeout</div>
+        <div class="v">7s connect+read on each of the two Qwen calls. Fails fast to Claude rather than making the
+          user wait on a slow GPU box.</div>
+      </div>
+      <div class="note">
+        <div class="k">Worker timeout headroom</div>
+        <div class="v">gunicorn runs with <code>--timeout 90</code> — enough for both AI tiers to fail in sequence
+          without the worker getting killed mid-request.</div>
+      </div>
+      <div class="note">
+        <div class="k">Identity persistence</div>
+        <div class="v">The sidecar's <code>/tailscale-state</code> lives on Azure Files, not container-local
+          <code>/tmp</code> — so it resumes the same tailnet node instead of registering a new one on every restart.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="scope-note">
+    Scope: request-time traffic for /api/chat only. Not shown: the ACR image build/push path, GitHub Actions,
+    or the decommissioned App Service this replaced.
+  </footer>
+
+</div>
+</body>
+</html>
