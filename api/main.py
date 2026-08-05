@@ -1634,7 +1634,7 @@ def handle_ai_fallback(question: str, tools: list, dispatch: dict) -> Optional[d
 LOCAL_MODEL_BASE_URL = os.getenv("LOCAL_MODEL_BASE_URL")
 LOCAL_MODEL_NAME = os.getenv("LOCAL_MODEL_NAME", "Qwen/Qwen2.5-3B-Instruct")
 LOCAL_MODEL_PROXY = os.getenv("LOCAL_MODEL_SOCKS5_PROXY")
-LOCAL_MODEL_TIMEOUT_SECONDS = (3, 30)  # (connect, read) -- generation is the slow part, connect should be near-instant over the tailnet
+LOCAL_MODEL_TIMEOUT_SECONDS = (3, 7)  # (connect, read) -- fail fast to Claude rather than making the user wait on a slow local response; well under gunicorn's --timeout (90s)
 
 
 def _openai_style_tools(tools: list) -> list:

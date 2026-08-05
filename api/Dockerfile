@@ -30,4 +30,11 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
-CMD ["gunicorn", "main:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "2"]
+
+# 90s: enough for a local-model attempt (up to 7s, see LOCAL_MODEL_TIMEOUT_SECONDS
+# in main.py) plus a full Claude fallback afterward, with margin. gunicorn's
+# default (30s) raced with our own 30s local-model read timeout -- when the
+# local model was slow, gunicorn SIGKILLed the worker before either our
+# timeout fired or the Claude fallback ever ran, surfacing as a raw
+# connection reset ("Failed to fetch") client-side instead of a clean error.
+CMD ["gunicorn", "main:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "90"]
