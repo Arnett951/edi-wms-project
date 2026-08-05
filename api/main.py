@@ -1353,22 +1353,35 @@ def handle_po_lookup(po_number: str) -> dict:
     return {"intent": "po_lookup", "reply": reply, "matches": wms_rows}
 
 
-def handle_failed_orders() -> dict:
-    failed_rows = rows("""
+def handle_failed_orders(customer: Optional[str] = None) -> dict:
+    # loadDateTime is included so date-scoped questions ("today", "yesterday")
+    # can be answered by the model reasoning over these rows -- no separate
+    # date param/query needed for that.
+    base_query = """
         SELECT TOP 20
             FileName AS fileName,
+            ISASender AS sender,
             ProcessStatus AS processStatus,
-            ErrorMessage AS errorMessage
+            ErrorMessage AS errorMessage,
+            CONVERT(varchar(19), LoadDateTime, 120) AS loadDateTime
         FROM dbo.EDI940_Raw
-        WHERE ProcessStatus = 'PARSE_FAILED'
+        WHERE ProcessStatus = 'PARSE_FAILED'{customer_filter}
         ORDER BY RawId DESC
-    """)
+    """
+    if customer:
+        failed_rows = rows_params(
+            base_query.format(customer_filter=" AND ISASender = ?"),
+            (customer,),
+        )
+    else:
+        failed_rows = rows(base_query.format(customer_filter=""))
 
     if not failed_rows:
-        return {"intent": "failed_orders", "reply": "No failed files in the EDI intake right now.", "matches": []}
+        scope = f" for customer {customer}" if customer else ""
+        return {"intent": "failed_orders", "reply": f"No failed files{scope} in the EDI intake right now.", "matches": []}
 
     lines = [
-        f"- {r['fileName']}: {r.get('errorMessage') or 'no error message recorded'}"
+        f"- {r['fileName']} ({r['sender']}, {r['loadDateTime']}): {r.get('errorMessage') or 'no error message recorded'}"
         for r in failed_rows
     ]
     reply = f"There are {len(failed_rows)} failed file(s):\n" + "\n".join(lines)
@@ -1504,15 +1517,28 @@ AI_TOOLS = [
     },
     {
         "name": "list_failed_orders",
-        "description": "List EDI files that failed to parse (ProcessStatus = PARSE_FAILED), most recent first.",
-        "input_schema": {"type": "object", "properties": {}},
+        "description": (
+            "List EDI files that failed to parse (ProcessStatus = PARSE_FAILED), most recent first. "
+            "Each result includes the sender/customer code and load date, so date-scoped questions "
+            "(e.g. 'today', 'yesterday') can be answered by filtering these results yourself -- there's "
+            "no separate date parameter."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "customer": {
+                    "type": "string",
+                    "description": "Exact ISA sender/customer code to filter to (e.g. 'LOW'). Omit to list failures across all customers.",
+                }
+            },
+        },
     },
 ]
 
 AI_TOOL_DISPATCH = {
     "lookup_po": lambda tool_input: handle_po_lookup(tool_input["po_number"]),
     "lookup_isa": lambda tool_input: handle_isa_lookup(tool_input["isa_number"]),
-    "list_failed_orders": lambda tool_input: handle_failed_orders(),
+    "list_failed_orders": lambda tool_input: handle_failed_orders(tool_input.get("customer")),
 }
 
 # Added to a chat request's tools/dispatch only when the caller has the
