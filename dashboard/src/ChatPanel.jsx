@@ -92,7 +92,7 @@ export default function ChatPanel({ onClose, canDownloadFiles = false }) {
       if (!response.ok) throw new Error(data.detail || `Intake API returned HTTP ${response.status}`);
 
       if (data.type === "question") {
-        setIntakeMessages((m) => [...m, { role: "bot", text: data.text }]);
+        setIntakeMessages((m) => [...m, { role: "bot", text: data.text, source: "ai" }]);
         setIntakeHistory((h) => [...h, { role: "user", content: text }, { role: "assistant", content: data.text }]);
       } else if (data.type === "complete") {
         const crCode = `CR-${String(data.crNumber).padStart(3, "0")}`;
@@ -100,6 +100,7 @@ export default function ChatPanel({ onClose, canDownloadFiles = false }) {
           ...m,
           {
             role: "bot",
+            source: "ai",
             text:
               `${crCode} created: "${data.title}" -- Tier ${data.tier}, ~$${data.estimatedCost} ` +
               `(${data.costRatioPct}% of budget). An admin reviews it next in the Admin tab.`,
@@ -157,7 +158,9 @@ export default function ChatPanel({ onClose, canDownloadFiles = false }) {
       <div className="chat-log">
         {activeMessages.map((m, i) => (
           <div key={i} className={`chat-bubble ${m.role}`}>
-            {m.source === "ai" && <span className="ai-badge">AI</span>}
+            {(m.source === "ai" || m.source === "local_ai") && (
+              <span className="ai-badge">{m.source === "local_ai" ? "AI-L" : "AI"}</span>
+            )}
             {m.text}
             {m.downloads?.length > 0 && (
               <div className="chat-downloads">
