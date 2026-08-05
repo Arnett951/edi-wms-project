@@ -1677,6 +1677,20 @@ def _openai_style_tools(tools: list) -> list:
     ]
 
 
+def _local_model_request(messages: list, tools: list, max_tokens: int):
+    return requests.post(
+        f"{LOCAL_MODEL_BASE_URL.rstrip('/')}/chat/completions",
+        proxies={"http": LOCAL_MODEL_PROXY, "https": LOCAL_MODEL_PROXY} if LOCAL_MODEL_PROXY else None,
+        timeout=LOCAL_MODEL_TIMEOUT_SECONDS,
+        json={
+            "model": LOCAL_MODEL_NAME,
+            "messages": messages,
+            "tools": _openai_style_tools(tools),
+            "max_tokens": max_tokens,
+        },
+    )
+
+
 def handle_local_model_fallback(question: str, tools: list, dispatch: dict) -> Optional[dict]:
     """Tries the self-hosted local model via its OpenAI-compatible /chat/completions
     endpoint. Returns None on any failure (unconfigured, offline, timeout, malformed
@@ -1685,20 +1699,11 @@ def handle_local_model_fallback(question: str, tools: list, dispatch: dict) -> O
         return None
 
     try:
-        response = requests.post(
-            f"{LOCAL_MODEL_BASE_URL.rstrip('/')}/chat/completions",
-            proxies={"http": LOCAL_MODEL_PROXY, "https": LOCAL_MODEL_PROXY} if LOCAL_MODEL_PROXY else None,
-            timeout=LOCAL_MODEL_TIMEOUT_SECONDS,
-            json={
-                "model": LOCAL_MODEL_NAME,
-                "messages": [
-                    {"role": "system", "content": AI_SYSTEM_PROMPT},
-                    {"role": "user", "content": question},
-                ],
-                "tools": _openai_style_tools(tools),
-                "max_tokens": 400,
-            },
-        )
+        messages = [
+            {"role": "system", "content": AI_SYSTEM_PROMPT},
+            {"role": "user", "content": question},
+        ]
+        response = _local_model_request(messages, tools, max_tokens=400)
         response.raise_for_status()
         message = response.json()["choices"][0]["message"]
         tool_calls = message.get("tool_calls") or []
@@ -1711,7 +1716,8 @@ def handle_local_model_fallback(question: str, tools: list, dispatch: dict) -> O
                 "source": "local_ai",
             }
 
-        call = tool_calls[0]["function"]
+        tool_call = tool_calls[0]
+        call = tool_call["function"]
         tool_fn = dispatch.get(call["name"])
         if not tool_fn:
             return {"intent": "ai_unhandled", "reply": build_unknown_reply(), "matches": [], "source": "local_ai"}
@@ -1725,6 +1731,28 @@ def handle_local_model_fallback(question: str, tools: list, dispatch: dict) -> O
         }
         if "downloads" in tool_result:
             result["downloads"] = tool_result["downloads"]
+
+        # Second round trip: hand the tool result back to the model to phrase
+        # a natural reply, matching how the Claude tier works (see
+        # handle_ai_fallback). Best-effort only -- any failure here just
+        # keeps the raw tool_result reply set above rather than falling all
+        # the way back to Claude, so a slow/flaky local model still answers
+        # quickly instead of doubling the worst-case wait for nothing.
+        try:
+            messages.append({"role": "assistant", "content": message.get("content"), "tool_calls": [tool_call]})
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call["id"],
+                "content": json.dumps(tool_result),
+            })
+            final = _local_model_request(messages, tools, max_tokens=300)
+            final.raise_for_status()
+            final_text = final.json()["choices"][0]["message"].get("content")
+            if final_text:
+                result["reply"] = final_text
+        except Exception as exc:
+            print(f"[chat] local model final-reply round trip failed (using raw tool reply): {exc}")
+
         return result
     except Exception as exc:
         # Local model unreachable/offline/misbehaving -- degrade silently to
