@@ -57,6 +57,12 @@ param allowedOrigins string
 @description('Placeholder container image used on first deploy, before a real image has been pushed to the ACR created here')
 param placeholderImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
+@description('Azure AD tenant ID -- validates the bearer tokens MSAL issues to the dashboard. Not a secret (also baked into the dashboard build as VITE_AZURE_AD_TENANT_ID).')
+param azureAdTenantId string
+
+@description('Azure AD app registration client ID for this API. Not a secret (also baked into the dashboard build as VITE_AZURE_AD_CLIENT_ID).')
+param azureAdClientId string
+
 @secure()
 @description('Tailscale reusable+ephemeral auth key for the tailscale sidecar (tskey-auth-...). Leave blank to omit the sidecar entirely.')
 param tailscaleAuthKey string = ''
@@ -66,6 +72,36 @@ param tailscaleHostname string = 'edi-wms-containerapp'
 
 @description('Base URL (OpenAI-compatible /v1) of the self-hosted local model, reached over the tailscale sidecar. Leave blank to skip the local-model chat tier entirely.')
 param localModelBaseUrl string = ''
+
+// The remaining params below mirror app settings the original App Service
+// deployment picked up ad hoc over time -- this scaffold predates them, so
+// they were missing on first cutover. Kept optional (empty default) so the
+// features that read them (os.environ[...] in api/main.py) degrade to a
+// clear error on use rather than blocking deploys of this template when a
+// value isn't supplied.
+
+@description('Azure subscription ID -- used for ADF pipeline triggers and the Cost Management dashboard card.')
+param azureSubscriptionId string = ''
+
+@description('Resource group and factory/pipeline names for the ADF "run pipeline" button.')
+param adfResourceGroup string = ''
+param adfFactoryName string = ''
+param adfPipelineName string = ''
+
+@secure()
+@description('Fine-grained GitHub PAT (Actions: write) for the CR gate2/build workflow-dispatch fallback used when this deployment has no local git repo -- which Container Apps never does.')
+param githubDispatchToken string = ''
+
+@secure()
+@description('Base64-encoded Google service account JSON for the Tableau-refresh Sheets export endpoints.')
+param googleServiceAccountJsonBase64 string = ''
+
+@description('Target Google Sheet ID for the Tableau-refresh export endpoints.')
+param googleSpreadsheetId string = ''
+
+@secure()
+@description('Logic App HTTP trigger URL (includes a SAS signature) for /api/actions/trigger-edi.')
+param logicAppTriggerUrl string = ''
 
 var acrName = toLower('${namePrefix}acr${uniqueString(resourceGroup().id)}')
 var logAnalyticsName = '${namePrefix}-logs'
@@ -129,8 +165,18 @@ var mainContainer = {
     { name: 'AZURE_STORAGE_CONNECTION_STRING', secretRef: 'storage-connection-string' }
     { name: 'BLOB_CONTAINER_NAME', value: blobContainerName }
     { name: 'ALLOWED_ORIGINS', value: allowedOrigins }
+    { name: 'AZURE_AD_TENANT_ID', value: azureAdTenantId }
+    { name: 'AZURE_AD_CLIENT_ID', value: azureAdClientId }
     { name: 'LOCAL_MODEL_BASE_URL', value: localModelBaseUrl }
     { name: 'LOCAL_MODEL_SOCKS5_PROXY', value: empty(tailscaleAuthKey) ? '' : 'socks5h://localhost:1055' }
+    { name: 'AZURE_SUBSCRIPTION_ID', value: azureSubscriptionId }
+    { name: 'ADF_RESOURCE_GROUP', value: adfResourceGroup }
+    { name: 'ADF_FACTORY_NAME', value: adfFactoryName }
+    { name: 'ADF_PIPELINE_NAME', value: adfPipelineName }
+    { name: 'GITHUB_DISPATCH_TOKEN', secretRef: 'github-dispatch-token' }
+    { name: 'GOOGLE_SERVICE_ACCOUNT_JSON_BASE64', secretRef: 'google-service-account-json' }
+    { name: 'GOOGLE_SPREADSHEET_ID', value: googleSpreadsheetId }
+    { name: 'LOGIC_APP_TRIGGER_URL', secretRef: 'logic-app-trigger-url' }
   ]
   probes: [
     {
@@ -272,6 +318,9 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
         { name: 'api-key', value: apiKey }
         { name: 'anthropic-api-key', value: anthropicApiKey }
         { name: 'storage-connection-string', value: storageConnectionString }
+        { name: 'github-dispatch-token', value: githubDispatchToken }
+        { name: 'google-service-account-json', value: googleServiceAccountJsonBase64 }
+        { name: 'logic-app-trigger-url', value: logicAppTriggerUrl }
       ], empty(tailscaleAuthKey) ? [] : [
         { name: 'tailscale-authkey', value: tailscaleAuthKey }
       ])
@@ -312,6 +361,19 @@ resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
     principalId: containerApp.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+  }
+}
+
+// Mirrors the role the old App Service's identity held -- required for
+// /api/dashboard/cloud-cost's DefaultAzureCredential-based call to Azure
+// Cost Management. Subscription-scoped (Cost Management is subscription-
+// level), which needs its own module since this template deploys at
+// resource-group scope -- see modules/cost-management-reader.bicep.
+module costManagementReaderAssignment 'modules/cost-management-reader.bicep' = {
+  name: 'costManagementReaderAssignment'
+  scope: subscription()
+  params: {
+    principalId: containerApp.identity.principalId
   }
 }
 
