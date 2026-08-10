@@ -1353,7 +1353,23 @@ def handle_po_lookup(po_number: str) -> dict:
     return {"intent": "po_lookup", "reply": reply, "matches": wms_rows}
 
 
+def resolve_customer_alias(term: str) -> str:
+    # dbo.CustomerAliases maps free-text names ("Lowes", "Lowe's") to the
+    # canonical ISASender code ("LOW"). SQL Server's default collation is
+    # already case-insensitive, so this only needs to handle genuinely
+    # different spellings, not case. Falls back to the term as-typed when
+    # there's no alias row, so an already-correct code still works.
+    match = rows_params(
+        "SELECT TOP 1 CustomerCode FROM dbo.CustomerAliases WHERE Alias = ?",
+        (term.strip(),),
+    )
+    return match[0]["CustomerCode"] if match else term
+
+
 def handle_failed_orders(customer: Optional[str] = None) -> dict:
+    if customer:
+        customer = resolve_customer_alias(customer)
+
     # loadDateTime is included so date-scoped questions ("today", "yesterday")
     # can be answered by the model reasoning over these rows -- no separate
     # date param/query needed for that.
@@ -1528,7 +1544,7 @@ AI_TOOLS = [
             "properties": {
                 "customer": {
                     "type": "string",
-                    "description": "Exact ISA sender/customer code to filter to (e.g. 'LOW'). Omit to list failures across all customers.",
+                    "description": "ISA sender/customer code or common customer name to filter to (e.g. 'LOW' or 'Lowes' -- known aliases are resolved automatically). Omit to list failures across all customers.",
                 }
             },
         },

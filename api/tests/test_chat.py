@@ -154,3 +154,45 @@ def test_get_latest_failed_isa_returns_none_when_no_rows(monkeypatch):
     monkeypatch.setattr(main, "rows", lambda sql: [])
 
     assert main.get_latest_failed_isa() is None
+
+
+def test_resolve_customer_alias_maps_known_alias(monkeypatch):
+    captured = {}
+
+    def fake_rows_params(sql, params):
+        captured["sql"] = sql
+        captured["params"] = params
+        return [{"CustomerCode": "LOW"}]
+
+    monkeypatch.setattr(main, "rows_params", fake_rows_params)
+
+    assert main.resolve_customer_alias("Lowes") == "LOW"
+    assert captured["params"] == ("Lowes",)
+    assert "dbo.CustomerAliases" in captured["sql"]
+
+
+def test_resolve_customer_alias_falls_back_to_input_when_unknown(monkeypatch):
+    monkeypatch.setattr(main, "rows_params", lambda sql, params: [])
+
+    assert main.resolve_customer_alias("SOMECODE") == "SOMECODE"
+
+
+def test_handle_failed_orders_resolves_alias_before_filtering(monkeypatch):
+    captured = {}
+
+    def fake_rows_params(sql, params):
+        captured["sql"] = sql
+        captured["params"] = params
+        return []
+
+    def fake_resolve(term):
+        assert term == "Lowes"
+        return "LOW"
+
+    monkeypatch.setattr(main, "rows_params", fake_rows_params)
+    monkeypatch.setattr(main, "resolve_customer_alias", fake_resolve)
+
+    result = main.handle_failed_orders(customer="Lowes")
+
+    assert captured["params"] == ("LOW",)
+    assert "for customer LOW" in result["reply"]
