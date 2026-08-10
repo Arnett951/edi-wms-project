@@ -1209,7 +1209,8 @@ def run_adf_pipeline(_: dict = Depends(require_auth)):
             "message": "ADF pipeline started.",
             "runId": run_response.run_id,
         }
-    except Exception:
+    except Exception as exc:
+        print(f"[adf-run] error: {exc}")
         raise HTTPException(
             status_code=500,
             detail="Unable to start the ADF pipeline.",

@@ -15,11 +15,3 @@ BEGIN
         [CreatedDateTime] datetime2(7) NOT NULL DEFAULT (sysutcdatetime())
     );
 END;
-
-IF NOT EXISTS (SELECT 1 FROM dbo.CustomerAliases)
-BEGIN
-    INSERT INTO dbo.CustomerAliases (Alias, CustomerCode) VALUES
-        ('Lowes', 'LOW'),
-        ('Lowe''s', 'LOW'),
-        ('Lowe''s Companies', 'LOW');
-END;
