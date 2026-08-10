@@ -64,10 +64,10 @@ ISA_SEGMENT = (
 
 
 def test_isa_lookup_found(client, monkeypatch):
-    monkeypatch.setattr(
-        main,
-        "rows_params",
-        lambda sql, params: [
+    def fake_rows_params(sql, params):
+        if "dbo.ErrorKnowledgeBase" in sql:
+            return []
+        return [
             {
                 "rawId": 42,
                 "fileName": "sample.edi",
@@ -76,8 +76,9 @@ def test_isa_lookup_found(client, monkeypatch):
                 "errorMessage": "No ST*940 transaction sets were parsed from this file.",
                 "rawContent": ISA_SEGMENT,
             }
-        ],
-    )
+        ]
+
+    monkeypatch.setattr(main, "rows_params", fake_rows_params)
 
     response = client.post("/api/chat", json={"question": "What happened with ISA 000012345?"})
     body = response.json()
@@ -196,3 +197,68 @@ def test_handle_failed_orders_resolves_alias_before_filtering(monkeypatch):
 
     assert captured["params"] == ("LOW",)
     assert "for customer LOW" in result["reply"]
+
+
+def test_explain_error_returns_none_for_empty_message():
+    assert main.explain_error(None) is None
+    assert main.explain_error("") is None
+
+
+def test_explain_error_returns_none_when_no_match(monkeypatch):
+    monkeypatch.setattr(main, "rows_params", lambda sql, params: [])
+
+    assert main.explain_error("some unrecognized SQL error") is None
+
+
+def test_explain_error_combines_explanation_and_remediation(monkeypatch):
+    captured = {}
+
+    def fake_rows_params(sql, params):
+        captured["sql"] = sql
+        captured["params"] = params
+        return [{
+            "Explanation": "A W01 line is missing a valid quantity.",
+            "RemediationStep": "Ask the sender to resend with a corrected quantity.",
+        }]
+
+    monkeypatch.setattr(main, "rows_params", fake_rows_params)
+
+    result = main.explain_error("EDI 940 validation failed: W01 quantity is missing, invalid, or zero.")
+
+    assert result == (
+        "A W01 line is missing a valid quantity. "
+        "Ask the sender to resend with a corrected quantity."
+    )
+    assert captured["params"] == ("EDI 940 validation failed: W01 quantity is missing, invalid, or zero.",)
+    assert "dbo.ErrorKnowledgeBase" in captured["sql"]
+
+
+def test_explain_error_omits_remediation_when_absent(monkeypatch):
+    monkeypatch.setattr(
+        main,
+        "rows_params",
+        lambda sql, params: [{"Explanation": "Just an explanation.", "RemediationStep": None}],
+    )
+
+    assert main.explain_error("whatever") == "Just an explanation."
+
+
+def test_handle_failed_orders_appends_explanation_when_available(monkeypatch):
+    failed_row = {
+        "fileName": "bad.edi",
+        "sender": "LOW",
+        "processStatus": "PARSE_FAILED",
+        "errorMessage": "some parse error",
+        "loadDateTime": "2026-01-01 12:00:00",
+    }
+
+    def fake_rows_params(sql, params):
+        assert "dbo.ErrorKnowledgeBase" in sql
+        return [{"Explanation": "Known issue.", "RemediationStep": None}]
+
+    monkeypatch.setattr(main, "rows_params", fake_rows_params)
+    monkeypatch.setattr(main, "rows", lambda sql: [failed_row])
+
+    result = main.handle_failed_orders()
+
+    assert "some parse error (Known issue.)" in result["reply"]

@@ -1272,6 +1272,24 @@ def extract_isa_control_number(raw_content: Optional[str]) -> Optional[str]:
     return None
 
 
+def explain_error(error_message: Optional[str]) -> Optional[str]:
+    # dbo.ErrorKnowledgeBase maps a substring of a raw EDI940_Raw.ErrorMessage
+    # (SQL Server's ERROR_MESSAGE(), set by ParseEDI940RawByFile's CATCH
+    # block) to a plain-English explanation and remediation step, so the
+    # chat can go beyond repeating the bare SQL error text back at the user.
+    if not error_message:
+        return None
+    match = rows_params(
+        "SELECT TOP 1 Explanation, RemediationStep FROM dbo.ErrorKnowledgeBase WHERE ? LIKE '%' + ErrorPattern + '%'",
+        (error_message,),
+    )
+    if not match:
+        return None
+    explanation = match[0]["Explanation"]
+    remediation = match[0].get("RemediationStep")
+    return f"{explanation} {remediation}" if remediation else explanation
+
+
 def describe_file_status(file_row: dict) -> str:
     status = file_row.get("processStatus")
     loaded = file_row.get("loadDateTime") or "an unknown time"
@@ -1279,7 +1297,9 @@ def describe_file_status(file_row: dict) -> str:
         return f"File {file_row['fileName']} (ISA {file_row.get('isaControlNumber')}) was received and parsed successfully at {loaded}."
     if status == "PARSE_FAILED":
         error = file_row.get("errorMessage") or "no error message was recorded"
-        return f"File {file_row['fileName']} (ISA {file_row.get('isaControlNumber')}) was received at {loaded} but failed to parse: {error}"
+        note = explain_error(file_row.get("errorMessage"))
+        suffix = f" ({note})" if note else ""
+        return f"File {file_row['fileName']} (ISA {file_row.get('isaControlNumber')}) was received at {loaded} but failed to parse: {error}{suffix}"
     return f"File {file_row['fileName']} (ISA {file_row.get('isaControlNumber')}) was received at {loaded}. Current status: {status or 'UNKNOWN'}."
 
 
@@ -1397,10 +1417,13 @@ def handle_failed_orders(customer: Optional[str] = None) -> dict:
         scope = f" for customer {customer}" if customer else ""
         return {"intent": "failed_orders", "reply": f"No failed files{scope} in the EDI intake right now.", "matches": []}
 
-    lines = [
-        f"- {r['fileName']} ({r['sender']}, {r['loadDateTime']}): {r.get('errorMessage') or 'no error message recorded'}"
-        for r in failed_rows
-    ]
+    def describe_failure(r: dict) -> str:
+        error = r.get("errorMessage") or "no error message recorded"
+        note = explain_error(r.get("errorMessage"))
+        suffix = f" ({note})" if note else ""
+        return f"- {r['fileName']} ({r['sender']}, {r['loadDateTime']}): {error}{suffix}"
+
+    lines = [describe_failure(r) for r in failed_rows]
     reply = f"There are {len(failed_rows)} failed file(s):\n" + "\n".join(lines)
     return {"intent": "failed_orders", "reply": reply, "matches": failed_rows}
 
