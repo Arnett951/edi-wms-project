@@ -131,7 +131,7 @@ describe("App", () => {
     render(<App />);
     await screen.findByText("a.edi");
 
-    await user.click(screen.getByText("Ask PO / ISA"));
+    await user.click(screen.getByText("Ask PO / ISA / Change Request"));
     expect(await screen.findByText("Ask about a PO or ISA #")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "×" }));
