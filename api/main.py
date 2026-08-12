@@ -247,10 +247,21 @@ def grep_repo(query: str) -> dict:
     if not query:
         return {"matches": []}
 
+    # REPO_ROOT is the full monorepo root for local dev (main.py sits inside
+    # a real git checkout), but the deployed container image is built with
+    # `./api` as its Docker context (see api/Dockerfile's `COPY . .` into
+    # WORKDIR /app) -- only the api/ folder ever lands in the image, so
+    # REPO_ROOT (main.py's parent.parent) resolves to the container's
+    # filesystem root there, and rglob'ing it walks the entire OS image.
+    # Same "no .git = not a real checkout" signal require_git_repo() already
+    # uses; fall back to just this file's own directory, the one thing
+    # guaranteed to exist and be scoped correctly in every environment.
+    search_root = REPO_ROOT if (REPO_ROOT / ".git").exists() else Path(__file__).resolve().parent
+
     pattern = re.compile(re.escape(query), re.IGNORECASE)
     matches = []
     scanned = 0
-    for path in REPO_ROOT.rglob("*"):
+    for path in search_root.rglob("*"):
         if len(matches) >= GREP_REPO_MAX_MATCHES or scanned >= GREP_REPO_MAX_FILES_SCANNED:
             break
         if path.is_dir() or path.suffix not in GREP_REPO_ALLOWED_EXTENSIONS:
@@ -265,7 +276,7 @@ def grep_repo(query: str) -> dict:
         for line_number, line in enumerate(text.splitlines(), start=1):
             if pattern.search(line):
                 matches.append({
-                    "file": str(path.relative_to(REPO_ROOT)),
+                    "file": str(path.relative_to(search_root)),
                     "line": line_number,
                     "snippet": line.strip()[:200],
                 })
