@@ -994,6 +994,9 @@ def escape_odbc(value):
     value = (value or "").strip()
     return "{" + value.replace("}", "}}") + "}"
 
+SQL_RESUME_RETRY_ATTEMPTS = 4
+SQL_RESUME_RETRY_DELAY_SECONDS = 5
+
 def get_conn():
     server = (os.getenv("SQL_SERVER") or "").strip()
     database = (os.getenv("SQL_DATABASE") or "").strip()
@@ -1015,7 +1018,7 @@ def get_conn():
 
     password = escape_odbc(password_raw)
 
-    return pyodbc.connect(
+    connection_string = (
         f"DRIVER={{ODBC Driver 18 for SQL Server}};"
         f"SERVER=tcp:{server},1433;"
         f"DATABASE={database};"
@@ -1025,6 +1028,19 @@ def get_conn():
         "TrustServerCertificate=yes;"
         "Connection Timeout=30;"
     )
+
+    # This DB is on Azure SQL's serverless tier, which auto-pauses after
+    # inactivity -- the first connection after a gap gets error 40613
+    # ("not currently available... retry the connection later") while it
+    # resumes, not a real outage. Retry with a short delay instead of
+    # surfacing that as a 500/502 to every caller.
+    for attempt in range(SQL_RESUME_RETRY_ATTEMPTS):
+        try:
+            return pyodbc.connect(connection_string)
+        except pyodbc.Error as exc:
+            if "40613" not in str(exc) or attempt == SQL_RESUME_RETRY_ATTEMPTS - 1:
+                raise
+            time.sleep(SQL_RESUME_RETRY_DELAY_SECONDS)
 
 def rows(sql: str):
     with get_conn() as conn:

@@ -15,6 +15,7 @@ the connection lifecycle via get_conn() below.
 import json
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -142,6 +143,10 @@ def escape_odbc(value):
     return "{" + value.replace("}", "}}") + "}"
 
 
+SQL_RESUME_RETRY_ATTEMPTS = 4
+SQL_RESUME_RETRY_DELAY_SECONDS = 5
+
+
 def get_conn():
     import os
     server = (os.getenv("SQL_SERVER") or "").strip()
@@ -159,7 +164,7 @@ def get_conn():
         raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
 
     password = escape_odbc(password_raw)
-    return pyodbc.connect(
+    connection_string = (
         f"DRIVER={{ODBC Driver 18 for SQL Server}};"
         f"SERVER=tcp:{server},1433;"
         f"DATABASE={database};"
@@ -169,6 +174,20 @@ def get_conn():
         "TrustServerCertificate=yes;"
         "Connection Timeout=30;"
     )
+
+    # This DB is on Azure SQL's serverless tier, which auto-pauses after
+    # inactivity -- the first connection after a gap gets error 40613
+    # ("not currently available... retry the connection later") while it
+    # resumes, not a real outage. Retry with a short delay instead of
+    # surfacing that as a failure to every caller. Kept in sync with the
+    # identical retry in api/main.py's get_conn() -- see that copy's comment.
+    for attempt in range(SQL_RESUME_RETRY_ATTEMPTS):
+        try:
+            return pyodbc.connect(connection_string)
+        except pyodbc.Error as exc:
+            if "40613" not in str(exc) or attempt == SQL_RESUME_RETRY_ATTEMPTS - 1:
+                raise
+            time.sleep(SQL_RESUME_RETRY_DELAY_SECONDS)
 
 
 CR_COLUMNS = [
