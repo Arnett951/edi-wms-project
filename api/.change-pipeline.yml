@@ -31,6 +31,26 @@ tiers:
       - Schema drops or renames
       - New Azure resources or secrets
       - Production data-mutation logic
+    # Deterministic backstop -- if any of these show up anywhere in the CR's
+    # title/risk_notes/requirements/touch_points/original request, the tier
+    # is force-escalated to C regardless of what the model itself classified
+    # it as. See change_request_lib.find_forced_tier_c_keyword().
+    force_keywords:
+      - auth
+      - password
+      - secret
+      - credential
+      - token
+      - jwt
+      - rbac
+      - permission
+      - role
+      - drop table
+      - drop column
+      - connection string
+      - azure resource
+      - api key
+      - encrypt
 
 cost:
   reference_monthly_budget_usd: 20

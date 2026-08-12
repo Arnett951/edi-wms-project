@@ -225,6 +225,148 @@ CR_PIPELINE_CONFIG = cr_lib.load_config(Path(__file__).resolve().parent / ".chan
 CR_INTAKE_SYSTEM_PROMPT = cr_lib.build_system_prompt(CR_PIPELINE_CONFIG)
 
 
+# ---------------------------------------------------------------------------
+# CR intake verification tools: narrow, read-only lookups the intake model
+# can call to check its own classification against reality (e.g. "does this
+# request really touch an auth file?") instead of guessing from the request
+# text alone. Same allowlist-dispatch pattern as AI_TOOL_DISPATCH further
+# below -- the model can only ever invoke one of these four functions, never
+# arbitrary SQL or a shell command. This is a quality aid for classification,
+# not the security backstop -- that's the deterministic keyword floor in
+# cr_lib.find_forced_tier_c_keyword(), which doesn't trust the model at all.
+# ---------------------------------------------------------------------------
+
+GREP_REPO_ALLOWED_EXTENSIONS = {".py", ".ts", ".tsx", ".js", ".jsx", ".sql", ".yml", ".yaml", ".json", ".md"}
+GREP_REPO_EXCLUDED_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"}
+GREP_REPO_MAX_MATCHES = 20
+GREP_REPO_MAX_FILES_SCANNED = 3000
+
+
+def grep_repo(query: str) -> dict:
+    query = (query or "").strip()
+    if not query:
+        return {"matches": []}
+
+    pattern = re.compile(re.escape(query), re.IGNORECASE)
+    matches = []
+    scanned = 0
+    for path in REPO_ROOT.rglob("*"):
+        if len(matches) >= GREP_REPO_MAX_MATCHES or scanned >= GREP_REPO_MAX_FILES_SCANNED:
+            break
+        if path.is_dir() or path.suffix not in GREP_REPO_ALLOWED_EXTENSIONS:
+            continue
+        if GREP_REPO_EXCLUDED_DIRS & set(path.parts):
+            continue
+        scanned += 1
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if pattern.search(line):
+                matches.append({
+                    "file": str(path.relative_to(REPO_ROOT)),
+                    "line": line_number,
+                    "snippet": line.strip()[:200],
+                })
+                if len(matches) >= GREP_REPO_MAX_MATCHES:
+                    break
+    return {"matches": matches}
+
+
+def read_rbac_schema() -> dict:
+    return {
+        "roles": rows("SELECT RoleId, RoleName FROM dbo.Roles"),
+        "permissions": rows("SELECT PermissionId, PermissionName FROM dbo.Permissions"),
+        "rolePermissions": rows("""
+            SELECT r.RoleName, p.PermissionName
+            FROM dbo.RolePermissions rp
+            JOIN dbo.Roles r ON r.RoleId = rp.RoleId
+            JOIN dbo.Permissions p ON p.PermissionId = rp.PermissionId
+        """),
+    }
+
+
+def list_schema_columns(table_name: str) -> dict:
+    columns = rows_params(
+        """
+        SELECT COLUMN_NAME AS columnName, DATA_TYPE AS dataType, IS_NULLABLE AS isNullable
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = ?
+        ORDER BY ORDINAL_POSITION
+        """,
+        (table_name,),
+    )
+    return {"tableExists": bool(columns), "columns": columns}
+
+
+def check_endpoint_exists(path: str) -> dict:
+    normalized = path if path.startswith("/") else f"/{path}"
+    existing_paths = {route.path for route in app.routes if hasattr(route, "path")}
+    return {"exists": normalized in existing_paths}
+
+
+CR_INTAKE_TOOLS = [
+    {
+        "name": "grep_repo",
+        "description": (
+            "Case-insensitive text search across this repo's source files (.py, .ts, .tsx, "
+            ".sql, .yml, .json, .md). Use this to verify whether a request actually touches "
+            "auth/security code, a specific table, or an existing feature, instead of "
+            "guessing. Returns up to 20 matching file:line snippets."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Text to search for, e.g. a function name, table name, or keyword."}
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "read_rbac_schema",
+        "description": (
+            "Return this project's actual roles, permissions, and role-permission mappings, "
+            "so you can check a claim like 'touches auth' against the real permission model."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "list_schema_columns",
+        "description": (
+            "Look up the real columns of a database table by name, to verify a claimed schema "
+            "touch-point (e.g. 'adds a column to X') against what the table actually has today."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"table_name": {"type": "string", "description": "Table name without schema prefix, e.g. 'EDI940_Raw'."}},
+            "required": ["table_name"],
+        },
+    },
+    {
+        "name": "check_endpoint_exists",
+        "description": "Check whether an API route path already exists, to verify a claim like 'new GET endpoint' is genuinely new.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "Route path, e.g. '/api/reports/daily-volume'."}},
+            "required": ["path"],
+        },
+    },
+]
+
+CR_INTAKE_TOOL_DISPATCH = {
+    "grep_repo": lambda tool_input: grep_repo(tool_input["query"]),
+    "read_rbac_schema": lambda tool_input: read_rbac_schema(),
+    "list_schema_columns": lambda tool_input: list_schema_columns(tool_input["table_name"]),
+    "check_endpoint_exists": lambda tool_input: check_endpoint_exists(tool_input["path"]),
+}
+
+# Hard cap on tool round trips per intake message -- bounds latency/cost and
+# guarantees the loop below terminates rather than trusting the model to stop
+# calling tools on its own.
+CR_INTAKE_MAX_TOOL_ITERATIONS = 4
+
+
 class IntakeHistoryTurn(BaseModel):
     role: str  # "user" or "assistant"
     content: str
@@ -253,18 +395,53 @@ def change_request_intake(
     messages = [{"role": turn.role, "content": turn.content} for turn in request.history]
     messages.append({"role": "user", "content": request.message})
 
+    # Tool round trips (grep_repo, read_rbac_schema, ...) happen on a working
+    # copy, not `messages` itself -- they're local to this request and never
+    # echoed back into request.history by the frontend, so `messages` stays
+    # exactly request.history + the new user turn for the transcript-pairing
+    # logic below, which assumes strict user/assistant alternation.
+    loop_messages = list(messages)
+    reply = None
     try:
-        response = _anthropic_client.messages.create(
-            model="claude-sonnet-5",
-            max_tokens=1500,
-            system=CR_INTAKE_SYSTEM_PROMPT,
-            messages=messages,
-        )
+        for _ in range(CR_INTAKE_MAX_TOOL_ITERATIONS):
+            response = _anthropic_client.messages.create(
+                model="claude-sonnet-5",
+                max_tokens=1500,
+                system=CR_INTAKE_SYSTEM_PROMPT,
+                tools=CR_INTAKE_TOOLS,
+                messages=loop_messages,
+            )
+            tool_use = next((block for block in response.content if block.type == "tool_use"), None)
+            if not tool_use:
+                reply = "".join(block.text for block in response.content if block.type == "text")
+                break
+
+            tool_fn = CR_INTAKE_TOOL_DISPATCH.get(tool_use.name)
+            tool_result = tool_fn(tool_use.input) if tool_fn else {"error": f"Unknown tool '{tool_use.name}'"}
+            loop_messages.append({"role": "assistant", "content": response.content})
+            loop_messages.append({
+                "role": "user",
+                "content": [{
+                    "type": "tool_result",
+                    "tool_use_id": tool_use.id,
+                    "content": json.dumps(tool_result),
+                }],
+            })
+        else:
+            # Hit the iteration cap while the model was still calling tools --
+            # force a final answer with tools stripped so the request always
+            # terminates instead of leaving the user stuck mid-loop.
+            response = _anthropic_client.messages.create(
+                model="claude-sonnet-5",
+                max_tokens=1500,
+                system=CR_INTAKE_SYSTEM_PROMPT,
+                messages=loop_messages,
+            )
+            reply = "".join(block.text for block in response.content if block.type == "text")
     except Exception as exc:
         print(f"[change-request-intake] error: {exc}")
         raise HTTPException(status_code=502, detail="AI intake call failed. Try again.")
 
-    reply = "".join(block.text for block in response.content if block.type == "text")
     cr_data = cr_lib.extract_json_block(reply)
 
     if cr_data is None:

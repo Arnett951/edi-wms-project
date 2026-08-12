@@ -34,7 +34,7 @@ DEFAULT_CONFIG = {
     "tiers": {
         "A": {"label": "In scope", "examples": []},
         "B": {"label": "Semi-automated", "examples": []},
-        "C": {"label": "Excluded -- handle manually", "examples": []},
+        "C": {"label": "Excluded -- handle manually", "examples": [], "force_keywords": []},
     },
     "cost": {
         "reference_monthly_budget_usd": 20,
@@ -90,6 +90,15 @@ want. Your job has two parts:
      still needs this number for future roadmap sizing if it's ever picked up
      manually; "it won't be automated" is not a reason to write 0.
 
+3. Before you finalize "touch_points" or a "tier" of B or C, use the available
+   tools to check your claims against the real codebase/database instead of
+   guessing -- e.g. grep_repo to see whether this actually reaches an
+   auth-related file, read_rbac_schema to check the real permission model,
+   list_schema_columns to check what a table's columns actually are, or
+   check_endpoint_exists to confirm a proposed route is genuinely new. A
+   couple of targeted calls is enough -- don't verify things already obvious
+   from the request, and don't call a tool just because it exists.
+
 Tier rules for this project:
 {tier_block}
 
@@ -97,7 +106,12 @@ If the request clearly belongs to Tier C, still produce the JSON (with tier
 "C" and risk_notes explaining why) rather than refusing -- the pipeline itself
 decides what happens with a Tier C request, not you. The impact analysis and
 token estimate you already did to reach that conclusion should still be
-reported, not discarded."""
+reported, not discarded.
+
+Note: your "tier" is independently re-checked against a keyword list after
+you respond -- if the request text matches a security-sensitive term even
+when you didn't classify it as C, it will be force-escalated to C anyway. So
+there's no benefit to under-reporting risk; report it accurately."""
 
 
 def extract_json_block(text: str):
@@ -202,9 +216,36 @@ def next_cr_number(conn) -> int:
     return cur.fetchone()[0]
 
 
+def find_forced_tier_c_keyword(text: str, config: dict) -> Optional[str]:
+    """Case-insensitive substring scan of the CR's combined text against
+    config['tiers']['C']['force_keywords'] -- an independent, deterministic
+    floor that doesn't rely on the model's own self-reported tier. Returns
+    the first matching keyword, or None."""
+    keywords = config.get("tiers", {}).get("C", {}).get("force_keywords", [])
+    lowered = text.lower()
+    for keyword in keywords:
+        if keyword.lower() in lowered:
+            return keyword
+    return None
+
+
 def create_cr(conn, cr_number: int, original_request: str, transcript: list, cr_data: dict,
               dollars: float, ratio_pct: float, config: dict) -> dict:
     tier = cr_data.get("tier", "?")
+    risk_notes = cr_data.get("risk_notes", "")
+
+    scan_text = " ".join([
+        original_request,
+        cr_data.get("title", ""),
+        risk_notes,
+        " ".join(cr_data.get("requirements", [])),
+        " ".join(cr_data.get("touch_points", [])),
+    ])
+    forced_keyword = find_forced_tier_c_keyword(scan_text, config)
+    if forced_keyword and tier != "C":
+        risk_notes = f"{risk_notes} (force-escalated to Tier C: matched keyword '{forced_keyword}')".strip()
+        tier = "C"
+
     tier_label = config["tiers"].get(tier, {}).get("label", "")
     status = "Auto-denied -- Tier C, handle manually" if tier == "C" else PENDING_STATUS
 
@@ -219,7 +260,7 @@ def create_cr(conn, cr_number: int, original_request: str, transcript: list, cr_
         """,
         cr_number, cr_data.get("title", "(untitled)"), tier, tier_label, status, original_request,
         json.dumps([{"question": q, "answer": a} for q, a in transcript]),
-        cr_data.get("risk_notes", ""),
+        risk_notes,
         json.dumps(cr_data.get("requirements", [])),
         json.dumps(cr_data.get("touch_points", [])),
         json.dumps(cr_data.get("out_of_scope", [])),
