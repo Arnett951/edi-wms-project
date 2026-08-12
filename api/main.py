@@ -417,7 +417,18 @@ def change_request_intake(
                 break
 
             tool_fn = CR_INTAKE_TOOL_DISPATCH.get(tool_use.name)
-            tool_result = tool_fn(tool_use.input) if tool_fn else {"error": f"Unknown tool '{tool_use.name}'"}
+            if not tool_fn:
+                tool_result = {"error": f"Unknown tool '{tool_use.name}'"}
+            else:
+                try:
+                    tool_result = tool_fn(tool_use.input)
+                except Exception as tool_exc:
+                    # A tool failing (e.g. DB unreachable) shouldn't kill the
+                    # whole intake conversation -- feed the model an error
+                    # result so it can proceed without that piece of info,
+                    # rather than surfacing an opaque 502 to the user.
+                    print(f"[change-request-intake] tool '{tool_use.name}' failed: {tool_exc}")
+                    tool_result = {"error": f"Tool '{tool_use.name}' failed: {tool_exc}"}
             loop_messages.append({"role": "assistant", "content": response.content})
             loop_messages.append({
                 "role": "user",
