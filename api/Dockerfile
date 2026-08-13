@@ -16,6 +16,13 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# Python fully buffers stdout when it isn't attached to a real terminal (the
+# normal case in a container), so print()/logging output can sit in an
+# internal buffer and never reach `docker logs`/Container Apps Log stream at
+# all for a low-traffic process. Force unbuffered output so every print()
+# actually shows up in real time.
+ENV PYTHONUNBUFFERED=1
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
