@@ -27,36 +27,6 @@ export function buildStatusChart(summary) {
   ];
 }
 
-// Columns exported to CSV — mirrors the Recent EDI Files list on the main
-// dashboard (see App.jsx). Order matches the on-screen table.
-export const RECENT_FILES_CSV_COLUMNS = [
-  { key: "isaControlNumber", label: "ISA Control Number" },
-  { key: "isaSender", label: "ISA Sender" },
-  { key: "fileName", label: "File Name" },
-  { key: "processStatus", label: "Process Status" },
-  { key: "loadDateTime", label: "Load DateTime" },
-  { key: "errorMessage", label: "Error Message" },
-];
-
-function csvEscape(value) {
-  if (value === null || value === undefined) return "";
-  const text = String(value);
-  // Quote fields containing delimiters, quotes, or newlines per RFC 4180.
-  if (/[",\r\n]/.test(text)) {
-    return `"${text.replace(/"/g, '""')}"`;
-  }
-  return text;
-}
-
-export function recentFilesToCsv(rows, columns = RECENT_FILES_CSV_COLUMNS) {
-  const safeRows = Array.isArray(rows) ? rows : [];
-  const lines = [columns.map(col => csvEscape(col.label)).join(",")];
-  for (const row of safeRows) {
-    lines.push(columns.map(col => csvEscape(row?.[col.key])).join(","));
-  }
-  return lines.join("\r\n");
-}
-
 export function statusClass(status) {
   switch (status) {
     case "PARSED":

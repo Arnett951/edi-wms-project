@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
-import { buildStatusChart, normalizeSummary, recentFilesToCsv, statusClass } from "./dashboardUtils";
+import { buildStatusChart, normalizeSummary, statusClass } from "./dashboardUtils";
 import { authFetch } from "./apiClient.js";
 import { loginRequest } from "./authConfig.js";
 import ChatPanel from "./ChatPanel";
@@ -138,21 +138,6 @@ export default function App() {
     } catch (err) {
       setError(err.message || "Failed to download file.");
     }
-  }
-
-  function exportRecentFilesCsv() {
-    // Client-side export of the rows currently shown in the Recent EDI Files
-    // list — no extra fetch or server-side filtering.
-    const csv = recentFilesToCsv(recentFiles);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "recent-edi-files.csv";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   }
 
   async function loadCloudCost() {
@@ -504,17 +489,7 @@ setError(
 
         <section className="grid">
           <div className="panel">
-            <div className="panel-header">
-              <h2>Recent EDI Files</h2>
-              <button
-                type="button"
-                className="export-csv-btn"
-                onClick={exportRecentFilesCsv}
-                disabled={recentFiles.length === 0}
-              >
-                Export to CSV
-              </button>
-            </div>
+            <h2>Recent EDI Files</h2>
             <table>
               <thead>
                 <tr>
