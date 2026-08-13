@@ -422,33 +422,37 @@ def change_request_intake(
                 tools=CR_INTAKE_TOOLS,
                 messages=loop_messages,
             )
-            tool_use = next((block for block in response.content if block.type == "tool_use"), None)
-            if not tool_use:
+            # Claude can emit more than one tool_use block in a single turn
+            # (parallel tool calls) -- the API requires every tool_use id to
+            # have a matching tool_result in the very next message, so all of
+            # them must be resolved and answered together, not just the first.
+            tool_use_blocks = [block for block in response.content if block.type == "tool_use"]
+            if not tool_use_blocks:
                 reply = "".join(block.text for block in response.content if block.type == "text")
                 break
 
-            tool_fn = CR_INTAKE_TOOL_DISPATCH.get(tool_use.name)
-            if not tool_fn:
-                tool_result = {"error": f"Unknown tool '{tool_use.name}'"}
-            else:
-                try:
-                    tool_result = tool_fn(tool_use.input)
-                except Exception as tool_exc:
-                    # A tool failing (e.g. DB unreachable) shouldn't kill the
-                    # whole intake conversation -- feed the model an error
-                    # result so it can proceed without that piece of info,
-                    # rather than surfacing an opaque 502 to the user.
-                    print(f"[change-request-intake] tool '{tool_use.name}' failed: {tool_exc}")
-                    tool_result = {"error": f"Tool '{tool_use.name}' failed: {tool_exc}"}
             loop_messages.append({"role": "assistant", "content": response.content})
-            loop_messages.append({
-                "role": "user",
-                "content": [{
+            tool_result_blocks = []
+            for tool_use in tool_use_blocks:
+                tool_fn = CR_INTAKE_TOOL_DISPATCH.get(tool_use.name)
+                if not tool_fn:
+                    tool_result = {"error": f"Unknown tool '{tool_use.name}'"}
+                else:
+                    try:
+                        tool_result = tool_fn(tool_use.input)
+                    except Exception as tool_exc:
+                        # A tool failing (e.g. DB unreachable) shouldn't kill the
+                        # whole intake conversation -- feed the model an error
+                        # result so it can proceed without that piece of info,
+                        # rather than surfacing an opaque 502 to the user.
+                        print(f"[change-request-intake] tool '{tool_use.name}' failed: {tool_exc}")
+                        tool_result = {"error": f"Tool '{tool_use.name}' failed: {tool_exc}"}
+                tool_result_blocks.append({
                     "type": "tool_result",
                     "tool_use_id": tool_use.id,
                     "content": json.dumps(tool_result),
-                }],
-            })
+                })
+            loop_messages.append({"role": "user", "content": tool_result_blocks})
         else:
             # Hit the iteration cap while the model was still calling tools --
             # force a final answer with tools stripped so the request always
