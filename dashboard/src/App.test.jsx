@@ -58,6 +58,13 @@ const recentFilesPayload = [
   },
 ];
 
+const cloudCostPayload = {
+  spendMtd: 12.5,
+  budget: 20.0,
+  projectedMonthEnd: 18.0,
+  percentUsed: 62,
+};
+
 const wmsOrdersPayload = [
   {
     wmsOrderHeaderStagingId: 1,
@@ -77,6 +84,7 @@ function mockDashboardFetch({ failDashboard = false } = {}) {
     if (url.includes("/api/dashboard/summary")) return failDashboard ? jsonResponse({}, false) : jsonResponse(summaryPayload);
     if (url.includes("/api/dashboard/recent-files")) return failDashboard ? jsonResponse({}, false) : jsonResponse(recentFilesPayload);
     if (url.includes("/api/dashboard/wms-orders")) return failDashboard ? jsonResponse({}, false) : jsonResponse(wmsOrdersPayload);
+    if (url.includes("/api/dashboard/cloud-cost")) return jsonResponse(cloudCostPayload);
     if (url.includes("/api/wms/simulate-pickup")) {
       return jsonResponse({ success: true, pickedUp: 2, message: "Simulated WMS pickup for 2 order(s)." });
     }
@@ -123,6 +131,50 @@ describe("App", () => {
     expect(await screen.findByText(/Mock mode is active/)).toBeInTheDocument();
     expect(screen.getByText(/Showing mock data/)).toBeInTheDocument();
     expect(screen.getByText("sample_940.edi")).toBeInTheDocument();
+  });
+
+  it("exports the recent EDI files list to a CSV download", async () => {
+    mockDashboardFetch();
+    const user = userEvent.setup();
+
+    const createObjectURL = vi.fn(() => "blob:mock");
+    const revokeObjectURL = vi.fn();
+    global.URL.createObjectURL = createObjectURL;
+    global.URL.revokeObjectURL = revokeObjectURL;
+
+    let capturedBlob = null;
+    const OriginalBlob = global.Blob;
+    global.Blob = vi.fn(function Blob(parts, options) {
+      capturedBlob = { text: parts.join(""), options };
+      return new OriginalBlob(parts, options);
+    });
+
+    const realCreateElement = document.createElement.bind(document);
+    let clicked = false;
+    let downloadName = null;
+    vi.spyOn(document, "createElement").mockImplementation((tag) => {
+      const el = realCreateElement(tag);
+      if (tag === "a") {
+        el.click = () => {
+          clicked = true;
+          downloadName = el.download;
+        };
+      }
+      return el;
+    });
+
+    render(<App />);
+    await screen.findByText("a.edi");
+
+    await user.click(screen.getByRole("button", { name: "Export to CSV" }));
+
+    expect(clicked).toBe(true);
+    expect(downloadName).toBe("recent-edi-files.csv");
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(capturedBlob.text).toContain("ISA Control Number");
+    expect(capturedBlob.text).toContain("a.edi");
+
+    global.Blob = OriginalBlob;
   });
 
   it("opens and closes the chat panel from the support card", async () => {
