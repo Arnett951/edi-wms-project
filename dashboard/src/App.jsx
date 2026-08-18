@@ -145,7 +145,8 @@ export default function App() {
       const data = await fetchJson(`${API_BASE}/api/dashboard/cloud-cost`);
       setCloudCost(data);
     } catch (err) {
-      setCloudCost(null);
+      // Azure cost API can flake on frequent polling; keep showing the
+      // last good value instead of reverting to the mock/demo default.
     }
   }
 
