@@ -243,6 +243,30 @@ def test_explain_error_omits_remediation_when_absent(monkeypatch):
     assert main.explain_error("whatever") == "Just an explanation."
 
 
+def test_dispatch_file_download_prefers_file_name(monkeypatch):
+    monkeypatch.setattr(main, "handle_file_download_by_filename", lambda name: {"called_with": name})
+    monkeypatch.setattr(main, "handle_file_download_by_isa", lambda isa: {"called_with": isa})
+
+    result = main.dispatch_file_download({"file_name": "sample.edi", "isa_number": "000012345"})
+
+    assert result == {"called_with": "sample.edi"}
+
+
+def test_dispatch_file_download_falls_back_to_isa_number(monkeypatch):
+    monkeypatch.setattr(main, "handle_file_download_by_isa", lambda isa: {"called_with": isa})
+
+    result = main.dispatch_file_download({"isa_number": "000012345"})
+
+    assert result == {"called_with": "000012345"}
+
+
+def test_dispatch_file_download_requires_some_input():
+    result = main.dispatch_file_download({})
+
+    assert result["downloads"] == []
+    assert "file name or the ISA control number" in result["reply"]
+
+
 def test_handle_failed_orders_appends_explanation_when_available(monkeypatch):
     failed_row = {
         "fileName": "bad.edi",

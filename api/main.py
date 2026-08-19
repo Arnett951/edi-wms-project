@@ -1950,19 +1950,46 @@ AI_TOOL_DISPATCH = {
 # Added to a chat request's tools/dispatch only when the caller has the
 # files.download permission - see chat(). Kept out of AI_TOOLS/AI_TOOL_DISPATCH
 # so non-admin callers never even have this tool offered to Claude.
+#
+# Accepts either file_name or isa_number because the conversation history the
+# model sees often only has one of the two -- e.g. handle_failed_orders()'s
+# reply text lists file names but never surfaces an ISA control number, so a
+# follow-up like "give me that file" (referring to an earlier failed-files
+# list) has nothing to extract an isa_number from. Mirrors the two lookup
+# paths detect_file_download_handler() already supports on the regex path.
 FILE_DOWNLOAD_TOOL = {
     "name": "get_file_download_link",
     "description": (
-        "Get a temporary download link for the original EDI file associated with a specific "
-        "ISA control number. Only call this if the user explicitly asks to download, retrieve, "
-        "or get a copy of the file itself, not just its status."
+        "Get a temporary download link for the original EDI file. Provide file_name if the exact "
+        "file name is known (e.g. from an earlier list of files in this conversation), otherwise "
+        "provide isa_number. Only call this if the user explicitly asks to download, retrieve, or "
+        "get a copy of the file itself, not just its status."
     ),
     "input_schema": {
         "type": "object",
-        "properties": {"isa_number": {"type": "string", "description": "The ISA control number"}},
-        "required": ["isa_number"],
+        "properties": {
+            "file_name": {"type": "string", "description": "The exact EDI file name, if known."},
+            "isa_number": {"type": "string", "description": "The ISA control number, if the file name isn't known."},
+        },
     },
 }
+
+
+def dispatch_file_download(tool_input: dict) -> dict:
+    file_name = tool_input.get("file_name")
+    if file_name:
+        return handle_file_download_by_filename(file_name)
+
+    isa_number = tool_input.get("isa_number")
+    if isa_number:
+        return handle_file_download_by_isa(isa_number)
+
+    return {
+        "intent": "file_download",
+        "reply": "I need either the file name or the ISA control number to find that file.",
+        "matches": [],
+        "downloads": [],
+    }
 
 # In-memory, per-process rate limit on the AI fallback path only - the regex
 # fast path is free and unlimited. This resets per Azure App Service worker
@@ -2209,7 +2236,7 @@ def chat(request: ChatRequest, http_request: Request, payload: dict = Depends(re
     dispatch = dict(AI_TOOL_DISPATCH)
     if "files.download" in get_user_permissions(get_user_oid(payload)):
         tools.append(FILE_DOWNLOAD_TOOL)
-        dispatch["get_file_download_link"] = lambda tool_input: handle_file_download_by_isa(tool_input["isa_number"])
+        dispatch["get_file_download_link"] = dispatch_file_download
 
     # CR-025: recent disliked-response comments, folded into both AI tiers'
     # system prompt below so future replies can steer away from them.
