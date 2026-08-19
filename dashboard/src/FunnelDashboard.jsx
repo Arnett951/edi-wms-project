@@ -238,6 +238,18 @@ export default function FunnelDashboard() {
     () => Array.from(new Set(actionableFiles.map((r) => r.ISASender).filter(Boolean))).sort(),
     [actionableFiles]
   );
+
+  // If the customer currently filtered on drops out of the actionable list
+  // (e.g. every one of their files just got marked Reported to Customer),
+  // the filter would otherwise keep pointing at a customer with zero rows
+  // left and the table would look stuck/stale until someone manually
+  // re-picked a customer. Snap back to "All customers" instead.
+  useEffect(() => {
+    if (customerFilter && !customers.includes(customerFilter)) {
+      setCustomerFilter("");
+    }
+  }, [customers, customerFilter]);
+
   const visibleFiles = (customerFilter ? actionableFiles.filter((r) => r.ISASender === customerFilter) : actionableFiles).slice(0, 20);
 
   // Selection is scoped to a single customer at a time so a generated report
