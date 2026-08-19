@@ -1,10 +1,6 @@
 -- View: File Reconciliation
 -- One row per inbound file (EDI940_Raw), rolled up to a single outcome so
 -- every file received can be accounted for:
---   Reported to Customer - CustomerReportedDateTime has been set (Funnel
---                       Dashboard "mark as reported" action); overrides
---                       every other outcome below, since the exception has
---                       already been handed off, not silently fixed.
 --   Parse Failed     - never produced any orders (dbo.EDI940_Header rows)
 --   Needs Attention  - stuck parsing/staging past the 60-min staleness
 --                       threshold, or produced at least one WMS order that
@@ -47,19 +43,13 @@ FileRollup AS (
 SELECT
     r.RawId,
     r.FileName,
-    r.ISASender,
-    r.ISA_ControlNumber,
     CONVERT(varchar(19), r.LoadDateTime, 120) AS LoadDateTime,
     r.ProcessStatus,
     fr.OrderCount,
     fr.SuccessCount,
     fr.FailedOrderCount,
     fr.InFlightCount,
-    CONVERT(varchar(19), r.CustomerReportedDateTime, 120) AS CustomerReportedDateTime,
-    r.CustomerReportedBy,
     CASE
-        WHEN r.CustomerReportedDateTime IS NOT NULL THEN 'Reported to Customer'
-
         WHEN r.ProcessStatus = 'PARSE_FAILED' THEN 'Parse Failed'
 
         WHEN r.ProcessStatus IN ('RAW_LOADED', 'PARSED')

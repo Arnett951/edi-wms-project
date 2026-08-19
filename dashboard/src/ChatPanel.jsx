@@ -33,7 +33,6 @@ export default function ChatPanel({ onClose, canDownloadFiles = false }) {
   const [intakeHistory, setIntakeHistory] = useState([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [feedback, setFeedback] = useState({});
   const [suggestions, setSuggestions] = useState([
     "Where is PO ORDER1001?",
     DEFAULT_ISA_SUGGESTION,
@@ -71,15 +70,7 @@ export default function ChatPanel({ onClose, canDownloadFiles = false }) {
       const data = await response.json();
       setMessages((m) => [
         ...m,
-        {
-          id: crypto.randomUUID(),
-          role: "bot",
-          text: data.reply || "No answer returned.",
-          source: data.source,
-          downloads: data.downloads,
-          question: text,
-          feedbackEligible: true,
-        },
+        { role: "bot", text: data.reply || "No answer returned.", source: data.source, downloads: data.downloads },
       ]);
     } catch (err) {
       setMessages((m) => [...m, { role: "bot", text: `Couldn't reach the chat API: ${err.message}` }]);
@@ -101,10 +92,7 @@ export default function ChatPanel({ onClose, canDownloadFiles = false }) {
       if (!response.ok) throw new Error(data.detail || `Intake API returned HTTP ${response.status}`);
 
       if (data.type === "question") {
-        setIntakeMessages((m) => [
-          ...m,
-          { id: crypto.randomUUID(), role: "bot", text: data.text, source: "ai", question: text, feedbackEligible: true },
-        ]);
+        setIntakeMessages((m) => [...m, { role: "bot", text: data.text, source: "ai" }]);
         setIntakeHistory((h) => [...h, { role: "user", content: text }, { role: "assistant", content: data.text }]);
       } else if (data.type === "complete") {
         const crCode = `CR-${String(data.crNumber).padStart(3, "0")}`;
@@ -126,42 +114,6 @@ export default function ChatPanel({ onClose, canDownloadFiles = false }) {
       setIntakeMessages((m) => [...m, { role: "bot", text: `Couldn't reach the intake API: ${err.message}` }]);
     } finally {
       setSending(false);
-    }
-  }
-
-  function selectFeedbackRating(messageId, rating) {
-    setFeedback((f) => ({
-      ...f,
-      [messageId]: { ...(f[messageId] || {}), rating, submitted: false, error: null },
-    }));
-  }
-
-  function setFeedbackComment(messageId, comment) {
-    setFeedback((f) => ({ ...f, [messageId]: { ...(f[messageId] || {}), comment } }));
-  }
-
-  async function submitFeedback(message, channel) {
-    const entry = feedback[message.id];
-    if (!entry?.rating || entry.submitted || entry.pending) return;
-
-    setFeedback((f) => ({ ...f, [message.id]: { ...f[message.id], pending: true, error: null } }));
-    try {
-      const response = await authFetch(`${API_BASE}/api/chat/feedback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question: message.question,
-          reply: message.text,
-          source: message.source,
-          channel,
-          rating: entry.rating,
-          comment: entry.comment?.trim() || null,
-        }),
-      });
-      if (!response.ok) throw new Error(`Feedback API returned HTTP ${response.status}`);
-      setFeedback((f) => ({ ...f, [message.id]: { ...f[message.id], pending: false, submitted: true } }));
-    } catch (err) {
-      setFeedback((f) => ({ ...f, [message.id]: { ...f[message.id], pending: false, error: err.message } }));
     }
   }
 
@@ -204,76 +156,25 @@ export default function ChatPanel({ onClose, canDownloadFiles = false }) {
         </button>
       </div>
       <div className="chat-log">
-        {activeMessages.map((m, i) => {
-          const fb = feedback[m.id];
-          return (
-            <div key={m.id ?? i} className={`chat-bubble ${m.role}`}>
-              {(m.source === "ai" || m.source === "local_ai") && (
-                <span className="ai-badge">{m.source === "local_ai" ? "AI-L" : "AI"}</span>
-              )}
-              {m.text}
-              {m.downloads?.length > 0 && (
-                <div className="chat-downloads">
-                  {m.downloads.map((d) => (
-                    <div key={d.downloadUrl}>
-                      <a href={d.downloadUrl} target="_blank" rel="noopener noreferrer">
-                        Download {d.fileName}
-                      </a>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {m.feedbackEligible && (
-                <div className="chat-feedback">
-                  {fb?.submitted ? (
-                    <span className="chat-feedback-thanks">Thanks for the feedback!</span>
-                  ) : (
-                    <>
-                      <div className="chat-feedback-buttons">
-                        <button
-                          type="button"
-                          className={`chat-feedback-btn${fb?.rating === 1 ? " active" : ""}`}
-                          aria-label="Helpful"
-                          aria-pressed={fb?.rating === 1}
-                          onClick={() => selectFeedbackRating(m.id, 1)}
-                        >
-                          👍
-                        </button>
-                        <button
-                          type="button"
-                          className={`chat-feedback-btn${fb?.rating === -1 ? " active" : ""}`}
-                          aria-label="Not helpful"
-                          aria-pressed={fb?.rating === -1}
-                          onClick={() => selectFeedbackRating(m.id, -1)}
-                        >
-                          👎
-                        </button>
-                      </div>
-                      {fb?.rating && (
-                        <div className="chat-feedback-comment">
-                          <textarea
-                            placeholder="Optional: tell us why (helps improve future replies)"
-                            value={fb.comment || ""}
-                            maxLength={1000}
-                            onChange={(e) => setFeedbackComment(m.id, e.target.value)}
-                          />
-                          <button
-                            type="button"
-                            disabled={fb.pending}
-                            onClick={() => submitFeedback(m, mode === "intake" ? "intake" : "support")}
-                          >
-                            {fb.pending ? "Submitting..." : "Submit feedback"}
-                          </button>
-                          {fb.error && <span className="chat-feedback-error">{fb.error}</span>}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {activeMessages.map((m, i) => (
+          <div key={i} className={`chat-bubble ${m.role}`}>
+            {(m.source === "ai" || m.source === "local_ai") && (
+              <span className="ai-badge">{m.source === "local_ai" ? "AI-L" : "AI"}</span>
+            )}
+            {m.text}
+            {m.downloads?.length > 0 && (
+              <div className="chat-downloads">
+                {m.downloads.map((d) => (
+                  <div key={d.downloadUrl}>
+                    <a href={d.downloadUrl} target="_blank" rel="noopener noreferrer">
+                      Download {d.fileName}
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
       <div className="chat-suggestions">
         {activeSuggestions.map((s) => (

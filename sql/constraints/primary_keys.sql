@@ -91,7 +91,3 @@ IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_ChangeRequests
 BEGIN
     ALTER TABLE dbo.ChangeRequests ADD CONSTRAINT [PK_ChangeRequests] PRIMARY KEY CLUSTERED ([CRNumber]);
 END;
-IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_ChatFeedback')
-BEGIN
-    ALTER TABLE dbo.ChatFeedback ADD CONSTRAINT [PK_ChatFeedback] PRIMARY KEY CLUSTERED ([FeedbackId]);
-END;

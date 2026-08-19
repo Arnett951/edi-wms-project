@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from pathlib import Path
 from typing import Optional
 import calendar
-import hashlib
 import json
 import os
 import re
@@ -1340,18 +1339,16 @@ def dashboard_funnel(_: dict = Depends(require_auth)):
     """)
 
 #To power the File Reconciliation panel: one row per inbound file with a
-#rolled-up FileStatus (Reported to Customer / Delivered / In Progress / Needs
-#Attention / Parse Failed) so every file received can be accounted for, and
-#an AttentionReason for the ones that need action (see
-#sql/views/dbo.vw_FileReconciliation.sql for the rollup rule).
+#rolled-up FileStatus (Delivered / In Progress / Needs Attention / Parse
+#Failed) so every file received can be accounted for, and an AttentionReason
+#for the ones that need action (see sql/views/dbo.vw_FileReconciliation.sql
+#for the rollup rule).
 @app.get("/api/dashboard/file-reconciliation")
 def dashboard_file_reconciliation(_: dict = Depends(require_auth)):
     return rows("""
         SELECT TOP 500
             RawId,
             FileName,
-            ISASender,
-            ISA_ControlNumber,
             LoadDateTime,
             ProcessStatus,
             OrderCount,
@@ -1359,76 +1356,10 @@ def dashboard_file_reconciliation(_: dict = Depends(require_auth)):
             FailedOrderCount,
             InFlightCount,
             FileStatus,
-            AttentionReason,
-            CustomerReportedDateTime,
-            CustomerReportedBy
+            AttentionReason
         FROM dbo.vw_FileReconciliation
         ORDER BY RawId DESC
     """)
-
-#Line/PO-level detail for the customer exception report: one row per failed
-#WMS order line for "Needs Attention" files, or one row per file for
-#"Parse Failed" files (which never made it far enough to have orders/lines).
-#Powers the "Generate Customer Report" action on the Funnel Dashboard.
-@app.get("/api/dashboard/file-reconciliation/report-detail")
-def file_reconciliation_report_detail(raw_ids: str, _: dict = Depends(require_auth)):
-    try:
-        ids = [int(x) for x in raw_ids.split(",") if x.strip()]
-    except ValueError:
-        raise HTTPException(status_code=400, detail="raw_ids must be a comma-separated list of integers")
-    if not ids:
-        raise HTTPException(status_code=400, detail="raw_ids is required")
-
-    placeholders = ",".join("?" for _ in ids)
-    return rows_params(f"""
-        SELECT
-            r.RawId AS rawId,
-            r.FileName AS fileName,
-            r.ISASender AS isaSender,
-            r.ISA_ControlNumber AS isaControlNumber,
-            COALESCE(ohs.WarehouseOrderNumber, '—') AS po,
-            CASE WHEN ods.LineNumber IS NOT NULL
-                 THEN CONCAT('Line ', ods.LineNumber, ' — ', ods.SKU)
-                 ELSE '—' END AS lineItem,
-            COALESCE(ohs.ErrorMessage, vw.AttentionReason, 'No details available') AS errorMessage
-        FROM dbo.EDI940_Raw r
-        JOIN dbo.vw_FileReconciliation vw ON vw.RawId = r.RawId
-        LEFT JOIN dbo.EDI940_Header h ON h.RawId = r.RawId
-        LEFT JOIN wms.OrderHeader_Staging ohs ON ohs.SourceHeaderId = h.HeaderId AND ohs.IntegrationStatus = 'FAILED'
-        LEFT JOIN wms.OrderDetail_Staging ods ON ods.WMSOrderHeaderStagingId = ohs.WMSOrderHeaderStagingId
-        WHERE r.RawId IN ({placeholders})
-        ORDER BY r.RawId, ohs.WarehouseOrderNumber, ods.LineNumber
-    """, tuple(ids))
-
-
-class MarkFilesReportedRequest(BaseModel):
-    rawIds: List[int]
-
-
-#Flips selected files to "Reported to Customer" once their exceptions have
-#been handed off (see the Funnel Dashboard's mass-select report tool). Only
-#sets a timestamp/author on EDI940_Raw -- never touches ProcessStatus, which
-#the parsing/staging pipeline owns.
-@app.post("/api/dashboard/file-reconciliation/mark-reported")
-def mark_files_reported(body: MarkFilesReportedRequest, payload: dict = Depends(require_auth)):
-    if not body.rawIds:
-        raise HTTPException(status_code=400, detail="rawIds is required")
-
-    reported_by = payload.get("name") or payload.get("preferred_username") or get_user_oid(payload)
-    placeholders = ",".join("?" for _ in body.rawIds)
-    with get_conn() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"""
-            UPDATE dbo.EDI940_Raw
-            SET CustomerReportedDateTime = SYSUTCDATETIME(),
-                CustomerReportedBy = ?
-            WHERE RawId IN ({placeholders})
-            """,
-            (reported_by, *body.rawIds),
-        )
-        conn.commit()
-    return {"success": True, "rawIds": body.rawIds, "reportedBy": reported_by}
 
 #Live Azure Cost Management MTD spend for the "Cloud Cost" dashboard card.
 #Requires the DefaultAzureCredential identity to hold Cost Management Reader
@@ -1512,19 +1443,6 @@ def run_adf_pipeline(_: dict = Depends(require_auth)):
 
 class ChatRequest(BaseModel):
     question: str
-
-
-CHAT_FEEDBACK_COMMENT_MAX_LENGTH = 1000
-CHAT_FEEDBACK_CHANNELS = {"support", "intake"}
-
-
-class ChatFeedbackRequest(BaseModel):
-    question: str
-    reply: str
-    source: Optional[str] = None
-    channel: Optional[str] = "support"
-    rating: int
-    comment: Optional[str] = None
 
 PO_PATTERN = re.compile(
     r"\b(?:po|p\.o\.|purchase\s+order|order|warehouse\s+order)\b[\s#:\-]*([a-z0-9\-]+)",
@@ -1876,47 +1794,6 @@ AI_TOOLS = [
     },
 ]
 
-# CR-025: recent disliked chat responses are folded into the AI-tier system
-# prompt so future replies can steer away from whatever the comment flagged.
-# Only rows with a comment are useful here -- a bare thumbs-down with no
-# comment gives the model nothing actionable to change.
-CHAT_FEEDBACK_CONTEXT_LIMIT = 5
-
-
-def get_recent_negative_feedback(limit: int = CHAT_FEEDBACK_CONTEXT_LIMIT) -> list[dict]:
-    return rows_params(
-        """
-        SELECT TOP (?) QuestionText, ResponseText, Comment
-        FROM dbo.ChatFeedback
-        WHERE Rating = -1
-        ORDER BY CreatedDateTime DESC
-        """,
-        (limit,),
-    )
-
-
-def build_feedback_context() -> str:
-    try:
-        negative = get_recent_negative_feedback()
-    except Exception as exc:
-        # Best-effort only -- a feedback-table hiccup shouldn't take down chat.
-        print(f"[chat] failed to load recent feedback context: {exc}")
-        return ""
-
-    lines = [
-        f'- A user disliked a past reply to "{row["QuestionText"]}" because: "{(row.get("Comment") or "").strip()}"'
-        for row in negative
-        if (row.get("Comment") or "").strip()
-    ]
-    if not lines:
-        return ""
-
-    return (
-        "\n\nRecent user feedback on past responses -- take this into account and avoid "
-        "repeating the same mistakes:\n" + "\n".join(lines)
-    )
-
-
 AI_TOOL_DISPATCH = {
     "lookup_po": lambda tool_input: handle_po_lookup(tool_input["po_number"]),
     "lookup_isa": lambda tool_input: handle_isa_lookup(tool_input["isa_number"]),
@@ -1967,18 +1844,16 @@ def is_ai_rate_limited(client_ip: str) -> bool:
     return count > AI_RATE_LIMIT_MAX_REQUESTS
 
 
-def handle_ai_fallback(question: str, tools: list, dispatch: dict, feedback_context: str = "") -> Optional[dict]:
+def handle_ai_fallback(question: str, tools: list, dispatch: dict) -> Optional[dict]:
     if not _anthropic_client:
         return None
-
-    system_prompt = AI_SYSTEM_PROMPT + feedback_context
 
     try:
         messages = [{"role": "user", "content": question}]
         response = _anthropic_client.messages.create(
             model="claude-sonnet-5",
             max_tokens=400,
-            system=system_prompt,
+            system=AI_SYSTEM_PROMPT,
             tools=tools,
             messages=messages,
         )
@@ -2012,7 +1887,7 @@ def handle_ai_fallback(question: str, tools: list, dispatch: dict, feedback_cont
         final = _anthropic_client.messages.create(
             model="claude-sonnet-5",
             max_tokens=300,
-            system=system_prompt,
+            system=AI_SYSTEM_PROMPT,
             tools=tools,
             messages=messages,
         )
@@ -2075,7 +1950,7 @@ def _local_model_request(messages: list, tools: list, max_tokens: int):
     )
 
 
-def handle_local_model_fallback(question: str, tools: list, dispatch: dict, feedback_context: str = "") -> Optional[dict]:
+def handle_local_model_fallback(question: str, tools: list, dispatch: dict) -> Optional[dict]:
     """Tries the self-hosted local model via its OpenAI-compatible /chat/completions
     endpoint. Returns None on any failure (unconfigured, offline, timeout, malformed
     response) so the caller falls through to the next tier (Claude) -- never raises."""
@@ -2084,7 +1959,7 @@ def handle_local_model_fallback(question: str, tools: list, dispatch: dict, feed
 
     try:
         messages = [
-            {"role": "system", "content": AI_SYSTEM_PROMPT + feedback_context},
+            {"role": "system", "content": AI_SYSTEM_PROMPT},
             {"role": "user", "content": question},
         ]
         response = _local_model_request(messages, tools, max_tokens=400)
@@ -2182,14 +2057,10 @@ def chat(request: ChatRequest, http_request: Request, payload: dict = Depends(re
         tools.append(FILE_DOWNLOAD_TOOL)
         dispatch["get_file_download_link"] = lambda tool_input: handle_file_download_by_isa(tool_input["isa_number"])
 
-    # CR-025: recent disliked-response comments, folded into both AI tiers'
-    # system prompt below so future replies can steer away from them.
-    feedback_context = build_feedback_context()
-
     # Tier 2: local model. Unrate-limited (it's free, self-hosted) and tried
     # before Claude regardless of ANTHROPIC_API_KEY -- handle_local_model_fallback
     # itself is a no-op (returns None) when LOCAL_MODEL_BASE_URL isn't set.
-    local_result = handle_local_model_fallback(question, tools, dispatch, feedback_context)
+    local_result = handle_local_model_fallback(question, tools, dispatch)
     if local_result:
         return local_result
 
@@ -2201,45 +2072,8 @@ def chat(request: ChatRequest, http_request: Request, payload: dict = Depends(re
     if is_ai_rate_limited(get_client_ip(http_request)):
         return {"intent": "ai_rate_limited", "reply": build_unknown_reply(), "matches": [], "source": "regex"}
 
-    ai_result = handle_ai_fallback(question, tools, dispatch, feedback_context)
+    ai_result = handle_ai_fallback(question, tools, dispatch)
     if ai_result:
         return ai_result
 
     return {"intent": "unknown", "reply": build_unknown_reply(), "matches": [], "source": "regex"}
-
-
-@app.post("/api/chat/feedback")
-def submit_chat_feedback(request: ChatFeedbackRequest, payload: dict = Depends(require_auth)):
-    if request.rating not in (1, -1):
-        raise HTTPException(status_code=400, detail="rating must be 1 (helpful) or -1 (not helpful)")
-
-    question = (request.question or "").strip()
-    reply = (request.reply or "").strip()
-    if not question or not reply:
-        raise HTTPException(status_code=400, detail="question and reply are required")
-
-    comment = (request.comment or "").strip() or None
-    if comment and len(comment) > CHAT_FEEDBACK_COMMENT_MAX_LENGTH:
-        raise HTTPException(
-            status_code=400,
-            detail=f"comment must be {CHAT_FEEDBACK_COMMENT_MAX_LENGTH} characters or fewer",
-        )
-
-    channel = request.channel if request.channel in CHAT_FEEDBACK_CHANNELS else "support"
-    source = request.source or "unknown"
-    message_hash = hashlib.sha256(f"{question}\x1f{reply}".encode("utf-8")).hexdigest()
-    user_oid = get_user_oid(payload)
-
-    with get_conn() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO dbo.ChatFeedback
-                (UserOid, MessageHash, Channel, Source, QuestionText, ResponseText, Rating, Comment)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (user_oid, message_hash, channel, source, question, reply, request.rating, comment),
-        )
-        conn.commit()
-
-    return {"status": "ok"}
