@@ -256,6 +256,82 @@ button:disabled {
   color: #0f172a;
 }
 
+.recon-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.recon-toolbar-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.recon-toolbar-filter select {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.recon-toolbar-selection {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.recon-toolbar-selection button {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+.recon-row-selected {
+  background: #eff6ff;
+}
+
+.report-table-wrap {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.report-table-wrap table {
+  margin: 0;
+}
+
+.recon-mailto-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.recon-mailto-row input {
+  flex: 1;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.recon-modal-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .admin-lede {
   color: var(--text-secondary, #6b7482);
   font-size: 13.5px;
@@ -549,6 +625,64 @@ td {
   background: #0f172a;
   color: white;
   align-self: flex-end;
+}
+
+.chat-feedback {
+  margin-top: 8px;
+}
+
+.chat-feedback-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.chat-feedback-btn {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.chat-feedback-btn.active {
+  background: #0f172a;
+  border-color: #0f172a;
+}
+
+.chat-feedback-comment {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.chat-feedback-comment textarea {
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  resize: vertical;
+  min-height: 44px;
+}
+
+.chat-feedback-comment button {
+  align-self: flex-start;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.chat-feedback-thanks {
+  font-size: 12px;
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.chat-feedback-error {
+  font-size: 11px;
+  color: #dc2626;
 }
 
 .chat-suggestions {

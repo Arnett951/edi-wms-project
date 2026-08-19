@@ -15,3 +15,9 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_EDI940_ProcessingLog_S
 BEGIN
     CREATE NONCLUSTERED INDEX [IX_EDI940_ProcessingLog_Status] ON dbo.EDI940_ProcessingLog ([ProcessStatus]);
 END;
+-- Backs the "recent disliked responses" lookup that chat() uses to build
+-- AI-fallback context (see build_feedback_context() in api/main.py).
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ChatFeedback_Rating_CreatedDateTime' AND object_id = OBJECT_ID('dbo.ChatFeedback'))
+BEGIN
+    CREATE NONCLUSTERED INDEX [IX_ChatFeedback_Rating_CreatedDateTime] ON dbo.ChatFeedback ([Rating], [CreatedDateTime] DESC);
+END;
