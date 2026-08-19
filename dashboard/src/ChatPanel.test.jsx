@@ -60,6 +60,35 @@ describe("ChatPanel", () => {
     expect(await screen.findByText("PO ORDER1001 is ready.")).toBeInTheDocument();
   });
 
+  it("sends recent conversation history with a follow-up question", async () => {
+    const user = userEvent.setup();
+    let secondCallBody = null;
+    let callCount = 0;
+    global.fetch = vi.fn((url, options) => {
+      if (url.includes("sample-isa")) return jsonResponse({ isaControlNumber: null });
+      callCount += 1;
+      if (callCount === 1) return jsonResponse({ reply: "Want a download link for that file?" });
+      secondCallBody = JSON.parse(options.body);
+      return jsonResponse({ reply: "Here you go." });
+    });
+
+    render(<ChatPanel onClose={() => {}} />);
+
+    await user.type(screen.getByPlaceholderText(/where is po/i), "What happened with ISA 1?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Want a download link for that file?");
+
+    await user.type(screen.getByPlaceholderText(/where is po/i), "yes");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Here you go.");
+
+    expect(secondCallBody.question).toBe("yes");
+    expect(secondCallBody.history.slice(-2)).toEqual([
+      expect.objectContaining({ role: "user", content: "What happened with ISA 1?" }),
+      expect.objectContaining({ role: "assistant", content: "Want a download link for that file?" }),
+    ]);
+  });
+
   it("clicking a suggestion sends it as the question", async () => {
     const user = userEvent.setup();
     global.fetch = vi.fn((url) =>

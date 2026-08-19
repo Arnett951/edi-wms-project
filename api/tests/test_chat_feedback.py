@@ -129,7 +129,7 @@ def test_chat_uses_recent_negative_feedback_as_ai_context(client, monkeypatch):
 
     captured_system = {}
 
-    def fake_ai_fallback(question, tools, dispatch, feedback_context=""):
+    def fake_ai_fallback(question, tools, dispatch, feedback_context="", history=None):
         captured_system["context"] = feedback_context
         return {"intent": "ai_unhandled", "reply": "ok", "matches": [], "source": "ai"}
 

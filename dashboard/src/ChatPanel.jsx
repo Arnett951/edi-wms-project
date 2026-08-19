@@ -18,6 +18,11 @@ const INTAKE_SUGGESTIONS = [
   "Add an export-to-CSV button for the WMS staging queue",
 ];
 
+// How many of the most recent support-mode messages to send back as context,
+// so a short follow-up like "yes" to "Want a download link?" has something
+// to resolve against instead of landing as a brand-new, context-free question.
+const CHAT_HISTORY_LIMIT = 5;
+
 export default function ChatPanel({ onClose, canDownloadFiles = false }) {
   const [mode, setMode] = useState("support");
   const [messages, setMessages] = useState([
@@ -59,13 +64,17 @@ export default function ChatPanel({ onClose, canDownloadFiles = false }) {
     : suggestions;
 
   async function sendSupport(text) {
+    const history = messages.slice(-CHAT_HISTORY_LIMIT).map((m) => ({
+      role: m.role === "bot" ? "assistant" : "user",
+      content: m.text,
+    }));
     setMessages((m) => [...m, { role: "user", text }]);
     setSending(true);
     try {
       const response = await authFetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: text }),
+        body: JSON.stringify({ question: text, history }),
       });
       if (!response.ok) throw new Error(`Chat API returned HTTP ${response.status}`);
       const data = await response.json();

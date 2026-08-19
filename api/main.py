@@ -1510,8 +1510,32 @@ def run_adf_pipeline(_: dict = Depends(require_auth)):
 # yet, so they're pulled out of EDI940_Raw.RawContent on the fly.
 # ---------------------------------------------------------------------------
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
 class ChatRequest(BaseModel):
     question: str
+    history: Optional[List[ChatMessage]] = None
+
+
+# Support-mode follow-ups (e.g. answering "yes" to "Want a download link?")
+# need the last few turns of conversation, the same way the CR-intake mode
+# already threads its own history through -- capped at 5 so a long-running
+# chat session doesn't balloon every AI-tier prompt.
+CHAT_HISTORY_MAX_MESSAGES = 5
+
+
+def sanitize_chat_history(history: Optional[List[ChatMessage]]) -> list[dict]:
+    if not history:
+        return []
+    cleaned = [
+        {"role": m.role, "content": m.content}
+        for m in history
+        if m.role in ("user", "assistant") and (m.content or "").strip()
+    ]
+    return cleaned[-CHAT_HISTORY_MAX_MESSAGES:]
 
 
 CHAT_FEEDBACK_COMMENT_MAX_LENGTH = 1000
@@ -1967,14 +1991,16 @@ def is_ai_rate_limited(client_ip: str) -> bool:
     return count > AI_RATE_LIMIT_MAX_REQUESTS
 
 
-def handle_ai_fallback(question: str, tools: list, dispatch: dict, feedback_context: str = "") -> Optional[dict]:
+def handle_ai_fallback(
+    question: str, tools: list, dispatch: dict, feedback_context: str = "", history: Optional[list] = None
+) -> Optional[dict]:
     if not _anthropic_client:
         return None
 
     system_prompt = AI_SYSTEM_PROMPT + feedback_context
 
     try:
-        messages = [{"role": "user", "content": question}]
+        messages = [*(history or []), {"role": "user", "content": question}]
         response = _anthropic_client.messages.create(
             model="claude-sonnet-5",
             max_tokens=400,
@@ -2075,7 +2101,9 @@ def _local_model_request(messages: list, tools: list, max_tokens: int):
     )
 
 
-def handle_local_model_fallback(question: str, tools: list, dispatch: dict, feedback_context: str = "") -> Optional[dict]:
+def handle_local_model_fallback(
+    question: str, tools: list, dispatch: dict, feedback_context: str = "", history: Optional[list] = None
+) -> Optional[dict]:
     """Tries the self-hosted local model via its OpenAI-compatible /chat/completions
     endpoint. Returns None on any failure (unconfigured, offline, timeout, malformed
     response) so the caller falls through to the next tier (Claude) -- never raises."""
@@ -2085,6 +2113,7 @@ def handle_local_model_fallback(question: str, tools: list, dispatch: dict, feed
     try:
         messages = [
             {"role": "system", "content": AI_SYSTEM_PROMPT + feedback_context},
+            *(history or []),
             {"role": "user", "content": question},
         ]
         response = _local_model_request(messages, tools, max_tokens=400)
@@ -2186,10 +2215,15 @@ def chat(request: ChatRequest, http_request: Request, payload: dict = Depends(re
     # system prompt below so future replies can steer away from them.
     feedback_context = build_feedback_context()
 
+    # Last few turns of the conversation so far, so a short follow-up like
+    # "yes" to "Want a download link?" has something to resolve against
+    # instead of landing as a brand-new, context-free question.
+    history = sanitize_chat_history(request.history)
+
     # Tier 2: local model. Unrate-limited (it's free, self-hosted) and tried
     # before Claude regardless of ANTHROPIC_API_KEY -- handle_local_model_fallback
     # itself is a no-op (returns None) when LOCAL_MODEL_BASE_URL isn't set.
-    local_result = handle_local_model_fallback(question, tools, dispatch, feedback_context)
+    local_result = handle_local_model_fallback(question, tools, dispatch, feedback_context, history)
     if local_result:
         return local_result
 
@@ -2201,7 +2235,7 @@ def chat(request: ChatRequest, http_request: Request, payload: dict = Depends(re
     if is_ai_rate_limited(get_client_ip(http_request)):
         return {"intent": "ai_rate_limited", "reply": build_unknown_reply(), "matches": [], "source": "regex"}
 
-    ai_result = handle_ai_fallback(question, tools, dispatch, feedback_context)
+    ai_result = handle_ai_fallback(question, tools, dispatch, feedback_context, history)
     if ai_result:
         return ai_result
 
