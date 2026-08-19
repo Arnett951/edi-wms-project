@@ -24,3 +24,16 @@ BEGIN
         [CustomerReportedBy] nvarchar(200) NULL
     );
 END;
+
+-- CREATE TABLE IF OBJECT_ID(...) IS NULL above is a no-op against a table
+-- that already exists (e.g. the deployed/live DB before this column was
+-- added), so new columns on an existing table need their own idempotent
+-- guard here too.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.EDI940_Raw') AND name = 'CustomerReportedDateTime')
+BEGIN
+    ALTER TABLE dbo.EDI940_Raw ADD [CustomerReportedDateTime] datetime2(7) NULL;
+END;
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.EDI940_Raw') AND name = 'CustomerReportedBy')
+BEGIN
+    ALTER TABLE dbo.EDI940_Raw ADD [CustomerReportedBy] nvarchar(200) NULL;
+END;
