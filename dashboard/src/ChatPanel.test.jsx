@@ -91,6 +91,48 @@ describe("ChatPanel", () => {
     expect(await screen.findByText(/Couldn't reach the chat API/)).toBeInTheDocument();
   });
 
+  it("submits chat feedback with the rating and comment, then shows a thank-you", async () => {
+    const user = userEvent.setup();
+    let feedbackBody = null;
+    global.fetch = vi.fn((url, options) => {
+      if (url.includes("sample-isa")) return jsonResponse({ isaControlNumber: null });
+      if (url.includes("/api/chat/feedback")) {
+        feedbackBody = JSON.parse(options.body);
+        return jsonResponse({ status: "ok" });
+      }
+      return jsonResponse({ reply: "PO ORDER1001 is ready.", source: "regex" });
+    });
+
+    render(<ChatPanel onClose={() => {}} />);
+
+    await user.type(screen.getByPlaceholderText(/where is po/i), "Where is PO ORDER1001?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("PO ORDER1001 is ready.");
+
+    await user.click(screen.getByRole("button", { name: "Not helpful" }));
+    await user.type(screen.getByPlaceholderText(/tell us why/i), "Missed the ISA number.");
+    await user.click(screen.getByRole("button", { name: "Submit feedback" }));
+
+    expect(await screen.findByText("Thanks for the feedback!")).toBeInTheDocument();
+    expect(feedbackBody).toEqual({
+      question: "Where is PO ORDER1001?",
+      reply: "PO ORDER1001 is ready.",
+      source: "regex",
+      channel: "support",
+      rating: -1,
+      comment: "Missed the ISA number.",
+    });
+  });
+
+  it("does not show feedback controls on the initial welcome message", async () => {
+    global.fetch = vi.fn(() => jsonResponse({ isaControlNumber: null }));
+
+    render(<ChatPanel onClose={() => {}} />);
+    await screen.findByText(/Ask me about a PO\/order number/);
+
+    expect(screen.queryByRole("button", { name: "Helpful" })).not.toBeInTheDocument();
+  });
+
   it("calls onClose when the close button is clicked", async () => {
     const user = userEvent.setup();
     global.fetch = vi.fn(() => jsonResponse({ isaControlNumber: null }));

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { authFetch } from "./apiClient.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
@@ -21,12 +21,16 @@ const GREEN_FILL = "#22c55e";
 const RED_FILL = "#ef4444";
 
 // File Reconciliation buckets, in the order every file moves through them.
-// Every inbound file lands in exactly one bucket, so the four counts always
-// sum to the total files received - see sql/views/dbo.vw_FileReconciliation.sql
-// for the rollup rule ("worst status wins" across a file's orders).
-const FILE_STATUS_ORDER = ["Delivered", "In Progress", "Needs Attention", "Parse Failed"];
+// "Reported to Customer" is a manual override (see the mass-select report
+// tool below) that reconciles a file green without it ever having succeeded
+// end to end - so every file still lands in exactly one bucket, and the
+// five counts always sum to the total files received. See
+// sql/views/dbo.vw_FileReconciliation.sql for the rollup rule ("worst
+// status wins", overridden by a customer-reported timestamp).
+const FILE_STATUS_ORDER = ["Delivered", "Reported to Customer", "In Progress", "Needs Attention", "Parse Failed"];
 const FILE_STATUS_FILL = {
   Delivered: GREEN_FILL,
+  "Reported to Customer": "#0ea5e9",
   "In Progress": NEUTRAL_FILL,
   "Needs Attention": RED_FILL,
   "Parse Failed": "#b91c1c",
@@ -44,26 +48,88 @@ const mockFunnelGates = [
 ];
 
 const mockFileReconciliation = [
-  { RawId: 14, FileName: "sample_940_2.edi", LoadDateTime: "2026-07-24 17:51:15", ProcessStatus: "STAGED", OrderCount: 1, SuccessCount: 1, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Delivered", AttentionReason: null },
-  { RawId: 13, FileName: "sample_940.edi", LoadDateTime: "2026-07-24 17:48:02", ProcessStatus: "STAGED", OrderCount: 1, SuccessCount: 1, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Delivered", AttentionReason: null },
-  { RawId: 12, FileName: "sample_940_3.edi", LoadDateTime: "2026-07-24 17:44:37", ProcessStatus: "STAGED", OrderCount: 1, SuccessCount: 1, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Delivered", AttentionReason: null },
-  { RawId: 11, FileName: "order_940_2216.edi", LoadDateTime: "2026-07-27 16:10:48", ProcessStatus: "STAGED", OrderCount: 1, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 1, FileStatus: "In Progress", AttentionReason: null },
-  { RawId: 10, FileName: "order_940_2217.edi", LoadDateTime: "2026-07-27 15:20:11", ProcessStatus: "STAGED", OrderCount: 1, SuccessCount: 0, FailedOrderCount: 1, InFlightCount: 0, FileStatus: "Needs Attention", AttentionReason: "1 of 1 order(s) rejected by WMS: Invalid SKU on line 2" },
-  { RawId: 9, FileName: "bad_940_missing_st.edi", LoadDateTime: "2026-07-24 17:51:15", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "No ST*940 transaction sets were parsed from this file." },
-  { RawId: 8, FileName: "bad_940_bad_isa.edi", LoadDateTime: "2026-07-24 17:49:03", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "ISA segment failed control-number validation." },
-  { RawId: 7, FileName: "bad_940_truncated.edi", LoadDateTime: "2026-07-24 17:46:51", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "File ended before an SE segment was found." },
-  { RawId: 6, FileName: "bad_940_dup_isa.edi", LoadDateTime: "2026-07-24 17:45:20", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "Duplicate ISA control number." },
-  { RawId: 5, FileName: "bad_940_bad_gs.edi", LoadDateTime: "2026-07-24 17:43:12", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "GS segment count did not match trailer." },
-  { RawId: 4, FileName: "bad_940_empty.edi", LoadDateTime: "2026-07-24 17:41:55", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "File was empty." },
-  { RawId: 3, FileName: "bad_940_bad_st.edi", LoadDateTime: "2026-07-24 17:40:08", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "ST segment count did not match SE trailer." },
-  { RawId: 2, FileName: "bad_940_bad_encoding.edi", LoadDateTime: "2026-07-24 17:38:44", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "File was not valid ASCII/EDI text." },
-  { RawId: 1, FileName: "bad_940_missing_gs.edi", LoadDateTime: "2026-07-24 17:36:19", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "No GS segment was found in this file." },
+  { RawId: 14, FileName: "sample_940_2.edi", ISASender: "LOW", ISA_ControlNumber: "000000141", LoadDateTime: "2026-07-24 17:51:15", ProcessStatus: "STAGED", OrderCount: 1, SuccessCount: 1, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Delivered", AttentionReason: null, CustomerReportedDateTime: null, CustomerReportedBy: null },
+  { RawId: 13, FileName: "sample_940.edi", ISASender: "TGT", ISA_ControlNumber: "000000140", LoadDateTime: "2026-07-24 17:48:02", ProcessStatus: "STAGED", OrderCount: 1, SuccessCount: 1, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Delivered", AttentionReason: null, CustomerReportedDateTime: null, CustomerReportedBy: null },
+  { RawId: 12, FileName: "sample_940_3.edi", ISASender: "LOW", ISA_ControlNumber: "000000139", LoadDateTime: "2026-07-24 17:44:37", ProcessStatus: "STAGED", OrderCount: 1, SuccessCount: 1, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Delivered", AttentionReason: null, CustomerReportedDateTime: null, CustomerReportedBy: null },
+  { RawId: 11, FileName: "order_940_2216.edi", ISASender: "HD", ISA_ControlNumber: "000000138", LoadDateTime: "2026-07-27 16:10:48", ProcessStatus: "STAGED", OrderCount: 1, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 1, FileStatus: "In Progress", AttentionReason: null, CustomerReportedDateTime: null, CustomerReportedBy: null },
+  { RawId: 10, FileName: "order_940_2217.edi", ISASender: "LOW", ISA_ControlNumber: "000000137", LoadDateTime: "2026-07-27 15:20:11", ProcessStatus: "STAGED", OrderCount: 1, SuccessCount: 0, FailedOrderCount: 1, InFlightCount: 0, FileStatus: "Needs Attention", AttentionReason: "1 of 1 order(s) rejected by WMS: Invalid SKU on line 2", CustomerReportedDateTime: null, CustomerReportedBy: null },
+  { RawId: 9, FileName: "bad_940_missing_st.edi", ISASender: "LOW", ISA_ControlNumber: null, LoadDateTime: "2026-07-24 17:51:15", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "No ST*940 transaction sets were parsed from this file.", CustomerReportedDateTime: null, CustomerReportedBy: null },
+  { RawId: 8, FileName: "bad_940_bad_isa.edi", ISASender: "TGT", ISA_ControlNumber: null, LoadDateTime: "2026-07-24 17:49:03", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "ISA segment failed control-number validation.", CustomerReportedDateTime: null, CustomerReportedBy: null },
+  { RawId: 7, FileName: "bad_940_truncated.edi", ISASender: "LOW", ISA_ControlNumber: null, LoadDateTime: "2026-07-24 17:46:51", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "File ended before an SE segment was found.", CustomerReportedDateTime: null, CustomerReportedBy: null },
+  { RawId: 6, FileName: "bad_940_dup_isa.edi", ISASender: "HD", ISA_ControlNumber: null, LoadDateTime: "2026-07-24 17:45:20", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "Duplicate ISA control number.", CustomerReportedDateTime: null, CustomerReportedBy: null },
+  { RawId: 5, FileName: "bad_940_bad_gs.edi", ISASender: "LOW", ISA_ControlNumber: null, LoadDateTime: "2026-07-24 17:43:12", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "GS segment count did not match trailer.", CustomerReportedDateTime: null, CustomerReportedBy: null },
+  { RawId: 4, FileName: "bad_940_empty.edi", ISASender: "LOW", ISA_ControlNumber: null, LoadDateTime: "2026-07-24 17:41:55", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "File was empty.", CustomerReportedDateTime: null, CustomerReportedBy: null },
+  { RawId: 3, FileName: "bad_940_bad_st.edi", ISASender: "TGT", ISA_ControlNumber: null, LoadDateTime: "2026-07-24 17:40:08", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "ST segment count did not match SE trailer.", CustomerReportedDateTime: null, CustomerReportedBy: null },
+  { RawId: 2, FileName: "bad_940_bad_encoding.edi", ISASender: "LOW", ISA_ControlNumber: null, LoadDateTime: "2026-07-24 17:38:44", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "File was not valid ASCII/EDI text.", CustomerReportedDateTime: null, CustomerReportedBy: null },
+  { RawId: 1, FileName: "bad_940_missing_gs.edi", ISASender: "LOW", ISA_ControlNumber: null, LoadDateTime: "2026-07-24 17:36:19", ProcessStatus: "PARSE_FAILED", OrderCount: 0, SuccessCount: 0, FailedOrderCount: 0, InFlightCount: 0, FileStatus: "Parse Failed", AttentionReason: "No GS segment was found in this file.", CustomerReportedDateTime: null, CustomerReportedBy: null },
 ];
 
 function formatAge(minutes) {
   if (minutes == null) return "—";
   if (minutes < 60) return `${minutes} min`;
   return `${(minutes / 60).toFixed(1)} hr`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Builds a small self-contained HTML exception report for one customer:
+// ISA control #, file, PO, line, and error per row. Meant to be downloaded
+// and attached to (or pasted into) the email the mass-select tool drafts.
+function buildCustomerReportHtml(customerLabel, detailRows) {
+  const generated = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
+  const bodyRows = detailRows
+    .map(
+      (d) => `
+        <tr>
+          <td>${escapeHtml(d.isaControlNumber || "—")}</td>
+          <td>${escapeHtml(d.fileName)}</td>
+          <td>${escapeHtml(d.po)}</td>
+          <td>${escapeHtml(d.lineItem)}</td>
+          <td>${escapeHtml(d.errorMessage)}</td>
+        </tr>`
+    )
+    .join("");
+
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>EDI Exceptions — ${escapeHtml(customerLabel)}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; padding: 24px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.meta { color: #64748b; font-size: 13px; margin: 0 0 20px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #f1f5f9; color: #475569; }
+</style>
+</head>
+<body>
+  <h1>EDI Exception Report — ${escapeHtml(customerLabel)}</h1>
+  <p class="meta">Generated ${escapeHtml(generated)} · ${detailRows.length} line(s)</p>
+  <table>
+    <thead>
+      <tr><th>ISA Control #</th><th>File</th><th>PO</th><th>Line</th><th>Error</th></tr>
+    </thead>
+    <tbody>${bodyRows}</tbody>
+  </table>
+</body>
+</html>`;
+}
+
+function buildMailtoLink(to, customerLabel, detailRows) {
+  const subject = `EDI Exceptions — ${customerLabel} — ${new Date().toISOString().slice(0, 10)}`;
+  const lines = detailRows.map(
+    (d) => `ISA ${d.isaControlNumber || "—"} | ${d.fileName} | PO ${d.po} | ${d.lineItem} | ${d.errorMessage}`
+  );
+  const body = [`The following ${detailRows.length} exception(s) need review:`, "", ...lines].join("\n");
+  return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 export default function FunnelDashboard() {
@@ -77,56 +143,67 @@ export default function FunnelDashboard() {
   const [fileError, setFileError] = useState(null);
   const [usingMockFileData, setUsingMockFileData] = useState(true);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await authFetch(`${API_BASE}/api/dashboard/funnel`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        if (Array.isArray(json) && json.length > 0) {
-          setGates(json);
-          setUsingMockData(false);
-        } else {
-          setGates(mockFunnelGates);
-          setUsingMockData(true);
-        }
-      } catch (err) {
+  const [customerFilter, setCustomerFilter] = useState("");
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportDetail, setReportDetail] = useState([]);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState(null);
+  const [reportHtml, setReportHtml] = useState("");
+  const [mailTo, setMailTo] = useState("");
+  const [marking, setMarking] = useState(false);
+  const [markMessage, setMarkMessage] = useState(null);
+
+  async function loadFunnel() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await authFetch(`${API_BASE}/api/dashboard/funnel`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      if (Array.isArray(json) && json.length > 0) {
+        setGates(json);
+        setUsingMockData(false);
+      } else {
         setGates(mockFunnelGates);
         setUsingMockData(true);
-        setError(err.message || "Failed to load funnel data.");
-      } finally {
-        setLoading(false);
       }
+    } catch (err) {
+      setGates(mockFunnelGates);
+      setUsingMockData(true);
+      setError(err.message || "Failed to load funnel data.");
+    } finally {
+      setLoading(false);
     }
-    load();
-  }, []);
+  }
 
-  useEffect(() => {
-    async function load() {
-      setFileLoading(true);
-      setFileError(null);
-      try {
-        const res = await authFetch(`${API_BASE}/api/dashboard/file-reconciliation`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        if (Array.isArray(json) && json.length > 0) {
-          setFileRows(json);
-          setUsingMockFileData(false);
-        } else {
-          setFileRows(mockFileReconciliation);
-          setUsingMockFileData(true);
-        }
-      } catch (err) {
+  async function loadFileReconciliation() {
+    setFileLoading(true);
+    setFileError(null);
+    try {
+      const res = await authFetch(`${API_BASE}/api/dashboard/file-reconciliation`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      if (Array.isArray(json) && json.length > 0) {
+        setFileRows(json);
+        setUsingMockFileData(false);
+      } else {
         setFileRows(mockFileReconciliation);
         setUsingMockFileData(true);
-        setFileError(err.message || "Failed to load file reconciliation data.");
-      } finally {
-        setFileLoading(false);
       }
+    } catch (err) {
+      setFileRows(mockFileReconciliation);
+      setUsingMockFileData(true);
+      setFileError(err.message || "Failed to load file reconciliation data.");
+    } finally {
+      setFileLoading(false);
     }
-    load();
+  }
+
+  useEffect(() => {
+    loadFunnel();
+    loadFileReconciliation();
   }, []);
 
   const byName = Object.fromEntries(gates.map((g) => [g.GateName, g]));
@@ -155,9 +232,112 @@ export default function FunnelDashboard() {
     fill: FILE_STATUS_FILL[status],
   }));
   const maxFileBucket = Math.max(1, ...fileBuckets.map((b) => b.count));
-  const actionableFiles = fileRows
-    .filter((r) => ACTIONABLE_STATUSES.has(r.FileStatus))
-    .slice(0, 20);
+
+  const actionableFiles = fileRows.filter((r) => ACTIONABLE_STATUSES.has(r.FileStatus));
+  const customers = useMemo(
+    () => Array.from(new Set(actionableFiles.map((r) => r.ISASender).filter(Boolean))).sort(),
+    [actionableFiles]
+  );
+  const visibleFiles = (customerFilter ? actionableFiles.filter((r) => r.ISASender === customerFilter) : actionableFiles).slice(0, 20);
+
+  // Selection is scoped to a single customer at a time so a generated report
+  // never mixes two customers' exceptions in one email/file.
+  const selectedRows = fileRows.filter((r) => selectedIds.has(r.RawId));
+  const selectedCustomer = selectedRows[0]?.ISASender || null;
+  const allVisibleSelected = visibleFiles.length > 0 && visibleFiles.every((r) => selectedIds.has(r.RawId));
+
+  function toggleRow(row) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(row.RawId)) {
+        next.delete(row.RawId);
+      } else {
+        next.add(row.RawId);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAllVisible() {
+    setSelectedIds((prev) => {
+      if (allVisibleSelected) {
+        const next = new Set(prev);
+        visibleFiles.forEach((r) => next.delete(r.RawId));
+        return next;
+      }
+      // Starting a fresh selection from the visible (already customer-
+      // filtered, if a filter is set) rows keeps it single-customer.
+      return new Set(visibleFiles.map((r) => r.RawId));
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  async function openReportModal() {
+    setReportOpen(true);
+    setReportLoading(true);
+    setReportError(null);
+    setMarkMessage(null);
+    setMailTo("");
+    try {
+      const idsParam = Array.from(selectedIds).join(",");
+      const res = await authFetch(
+        `${API_BASE}/api/dashboard/file-reconciliation/report-detail?raw_ids=${idsParam}`
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const detail = await res.json();
+      setReportDetail(detail);
+      setReportHtml(buildCustomerReportHtml(selectedCustomer || "Customer", detail));
+    } catch (err) {
+      setReportError(err.message || "Failed to build report.");
+    } finally {
+      setReportLoading(false);
+    }
+  }
+
+  function closeReportModal() {
+    setReportOpen(false);
+    setReportDetail([]);
+    setReportHtml("");
+    setReportError(null);
+    setMarkMessage(null);
+  }
+
+  function downloadReport() {
+    const blob = new Blob([reportHtml], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `edi-exceptions-${(selectedCustomer || "customer").toLowerCase()}-${new Date()
+      .toISOString()
+      .slice(0, 10)}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function markSelectedReported() {
+    setMarking(true);
+    setMarkMessage(null);
+    try {
+      const res = await authFetch(`${API_BASE}/api/dashboard/file-reconciliation/mark-reported`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawIds: Array.from(selectedIds) }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setMarkMessage(`Marked ${selectedIds.size} file(s) as Reported to Customer.`);
+      clearSelection();
+      await loadFileReconciliation();
+    } catch (err) {
+      setMarkMessage(`Failed to mark files as reported: ${err.message || err}`);
+    } finally {
+      setMarking(false);
+    }
+  }
 
   return (
     <>
@@ -165,9 +345,9 @@ export default function FunnelDashboard() {
         <h2>File Reconciliation</h2>
         <p className="admin-lede">
           Every inbound file, accounted for from receipt through WMS delivery. A file
-          lands in exactly one bucket below, so the four counts always add up to
-          Files In — "Needs Attention" and "Parse Failed" are the ones that need
-          action.
+          lands in exactly one bucket below, so the five counts always add up to
+          Files In — "Needs Attention" and "Parse Failed" are the ones that still need
+          action; "Reported to Customer" is handled.
         </p>
 
         {fileLoading && <p>Loading…</p>}
@@ -199,28 +379,88 @@ export default function FunnelDashboard() {
         </div>
 
         {actionableFiles.length > 0 && (
-          <table>
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>Loaded</th>
-                <th>Status</th>
-                <th>Reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              {actionableFiles.map((r) => (
-                <tr key={r.RawId}>
-                  <td>{r.FileName}</td>
-                  <td>{r.LoadDateTime}</td>
-                  <td>
-                    <span className="status-badge bad">{r.FileStatus}</span>
-                  </td>
-                  <td>{r.AttentionReason || "—"}</td>
+          <>
+            <div className="recon-toolbar">
+              <div className="recon-toolbar-filter">
+                <label htmlFor="recon-customer-filter">Customer</label>
+                <select
+                  id="recon-customer-filter"
+                  value={customerFilter}
+                  onChange={(e) => {
+                    setCustomerFilter(e.target.value);
+                    clearSelection();
+                  }}
+                >
+                  <option value="">All customers</option>
+                  {customers.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedIds.size > 0 && (
+                <div className="recon-toolbar-selection">
+                  <span>
+                    {selectedIds.size} file(s) selected{selectedCustomer ? ` — ${selectedCustomer}` : ""}
+                  </span>
+                  <button className="link-btn" onClick={clearSelection} type="button">
+                    Clear
+                  </button>
+                  <button onClick={openReportModal} type="button">
+                    Generate Customer Report
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleSelectAllVisible}
+                      aria-label="Select all visible files"
+                    />
+                  </th>
+                  <th>Customer</th>
+                  <th>File</th>
+                  <th>Loaded</th>
+                  <th>Status</th>
+                  <th>Reason</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visibleFiles.map((r) => {
+                  const isSelected = selectedIds.has(r.RawId);
+                  const isDisabled = selectedCustomer && r.ISASender !== selectedCustomer && !isSelected;
+                  return (
+                    <tr key={r.RawId} className={isSelected ? "recon-row-selected" : ""}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          disabled={isDisabled}
+                          onChange={() => toggleRow(r)}
+                          title={isDisabled ? "Clear the current selection to pick a different customer" : undefined}
+                        />
+                      </td>
+                      <td>{r.ISASender || "—"}</td>
+                      <td>{r.FileName}</td>
+                      <td>{r.LoadDateTime}</td>
+                      <td>
+                        <span className="status-badge bad">{r.FileStatus}</span>
+                      </td>
+                      <td>{r.AttentionReason || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </>
         )}
       </section>
 
@@ -308,6 +548,85 @@ export default function FunnelDashboard() {
           )}
         </div>
       </section>
+
+      {reportOpen && (
+        <div className="cr-modal-overlay" onClick={closeReportModal}>
+          <div className="cr-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cr-modal-header">
+              <h2>Customer Exception Report — {selectedCustomer || "—"}</h2>
+              <button className="cr-modal-close" onClick={closeReportModal} aria-label="Close">
+                ×
+              </button>
+            </div>
+
+            <div className="cr-modal-body">
+              {reportLoading && <p>Building report…</p>}
+              {reportError && <p style={{ color: "var(--danger, #ef4444)" }}>Error: {reportError}</p>}
+
+              {!reportLoading && !reportError && (
+                <>
+                  <p className="admin-lede">
+                    {reportDetail.length} line(s) across {selectedIds.size} file(s). Review below, then
+                    download the report, open a mail draft, or mark these files as reported.
+                  </p>
+
+                  <div className="report-table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>ISA</th>
+                          <th>File</th>
+                          <th>PO</th>
+                          <th>Line</th>
+                          <th>Error</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportDetail.map((d, i) => (
+                          <tr key={`${d.rawId}-${i}`}>
+                            <td>{d.isaControlNumber || "—"}</td>
+                            <td>{d.fileName}</td>
+                            <td>{d.po}</td>
+                            <td>{d.lineItem}</td>
+                            <td>{d.errorMessage}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <h3>Send to customer</h3>
+                  <div className="recon-mailto-row">
+                    <input
+                      type="email"
+                      placeholder="customer-contact@example.com (optional)"
+                      value={mailTo}
+                      onChange={(e) => setMailTo(e.target.value)}
+                    />
+                    <a
+                      className="link-btn"
+                      href={buildMailtoLink(mailTo, selectedCustomer || "Customer", reportDetail)}
+                    >
+                      Open Email Draft
+                    </a>
+                  </div>
+
+                  <div className="recon-modal-actions">
+                    <button type="button" onClick={downloadReport}>
+                      Download HTML Report
+                    </button>
+                    <button type="button" onClick={markSelectedReported} disabled={marking}>
+                      {marking ? "Marking…" : "Mark as Reported to Customer"}
+                    </button>
+                  </div>
+
+                  {markMessage && <p className="admin-lede">{markMessage}</p>}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
