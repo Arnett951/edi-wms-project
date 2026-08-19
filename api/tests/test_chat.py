@@ -243,6 +243,47 @@ def test_explain_error_omits_remediation_when_absent(monkeypatch):
     assert main.explain_error("whatever") == "Just an explanation."
 
 
+class _FakeLocalModelResponse:
+    def __init__(self, content):
+        self._content = content
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return {"choices": [{"message": {"content": self._content, "tool_calls": None}}]}
+
+
+def test_local_model_fallback_falls_back_to_claude_on_leaked_tool_call(monkeypatch):
+    monkeypatch.setattr(main, "LOCAL_MODEL_BASE_URL", "http://fake-local-model")
+    monkeypatch.setattr(
+        main,
+        "_local_model_request",
+        lambda messages, tools, max_tokens: _FakeLocalModelResponse(
+            '<tool_call>\n{"name": "list_failed_orders", "arguments": {"customer": "TGT"}}\n</tool_call>'
+            "assistantHere are the links..."
+        ),
+    )
+
+    result = main.handle_local_model_fallback("give me links to those files", main.AI_TOOLS, main.AI_TOOL_DISPATCH)
+
+    assert result is None
+
+
+def test_local_model_fallback_returns_plain_text_reply(monkeypatch):
+    monkeypatch.setattr(main, "LOCAL_MODEL_BASE_URL", "http://fake-local-model")
+    monkeypatch.setattr(
+        main,
+        "_local_model_request",
+        lambda messages, tools, max_tokens: _FakeLocalModelResponse("I can only help with PO/ISA status."),
+    )
+
+    result = main.handle_local_model_fallback("what's the weather", main.AI_TOOLS, main.AI_TOOL_DISPATCH)
+
+    assert result["reply"] == "I can only help with PO/ISA status."
+    assert result["source"] == "local_ai"
+
+
 def test_dispatch_file_download_prefers_file_name(monkeypatch):
     monkeypatch.setattr(main, "handle_file_download_by_filename", lambda name: {"called_with": name})
     monkeypatch.setattr(main, "handle_file_download_by_isa", lambda isa: {"called_with": isa})

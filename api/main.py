@@ -2149,9 +2149,18 @@ def handle_local_model_fallback(
         tool_calls = message.get("tool_calls") or []
 
         if not tool_calls:
+            content = message.get("content") or ""
+            if "<tool_call>" in content:
+                # The local model's chat template attempted a tool call but the
+                # vLLM server didn't parse it into the structured tool_calls
+                # field -- content is raw <tool_call>{...}</tool_call> markup
+                # (sometimes several, plus hallucinated prose/fake links after
+                # it). Never surface this to a user; fall through to Claude.
+                print("[chat] local model leaked raw <tool_call> text instead of a structured tool call; falling back to Claude")
+                return None
             return {
                 "intent": "ai_unhandled",
-                "reply": message.get("content") or build_unknown_reply(),
+                "reply": content or build_unknown_reply(),
                 "matches": [],
                 "source": "local_ai",
             }
