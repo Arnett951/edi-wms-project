@@ -1560,6 +1560,15 @@ ISA_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# Only catches the explicit "customer <name>" phrasing (matching the style of
+# PO_PATTERN/ISA_PATTERN above) -- used to scope the bulk failed-file-download
+# regex path below to one customer instead of silently ignoring the qualifier
+# and returning the top N failures across all customers.
+CUSTOMER_PATTERN = re.compile(
+    r"\bcustomer\b[\s#:\-]*([a-z0-9\-]+)",
+    re.IGNORECASE
+)
+
 # ---------------------------------------------------------------------------
 # File-request detection: a self-contained fast path, checked before (and
 # independent of) the ISA/PO status-lookup regexes below. It only fires on
@@ -1790,8 +1799,10 @@ def handle_file_download_by_isa(isa_number: str) -> dict:
 MAX_BULK_FILE_DOWNLOADS = 5
 
 
-def handle_failed_file_downloads() -> dict:
-    failed = handle_failed_orders()
+def handle_failed_file_downloads(customer: Optional[str] = None) -> dict:
+    if customer:
+        customer = resolve_customer_alias(customer)
+    failed = handle_failed_orders(customer)
     if not failed.get("matches"):
         return {"intent": "file_download", "reply": failed["reply"], "matches": [], "downloads": []}
 
@@ -1828,7 +1839,9 @@ def detect_file_download_handler(question: str):
         return lambda: handle_file_download_by_filename(filename_match.group(1))
 
     if ERROR_FILES_PATTERN.search(question):
-        return lambda: handle_failed_file_downloads()
+        customer_match = CUSTOMER_PATTERN.search(question)
+        customer = customer_match.group(1).strip() if customer_match else None
+        return lambda: handle_failed_file_downloads(customer)
 
     isa_match = ISA_PATTERN.search(question)
     if isa_match:

@@ -308,6 +308,75 @@ def test_dispatch_file_download_requires_some_input():
     assert "file name or the ISA control number" in result["reply"]
 
 
+def test_handle_failed_file_downloads_filters_by_customer(monkeypatch):
+    captured = {}
+
+    def fake_handle_failed_orders(customer=None):
+        captured["customer"] = customer
+        return {"intent": "failed_orders", "reply": "x", "matches": [{"fileName": "a.edi"}]}
+
+    monkeypatch.setattr(main, "handle_failed_orders", fake_handle_failed_orders)
+    monkeypatch.setattr(main, "resolve_customer_alias", lambda term: "TGT")
+    monkeypatch.setattr(
+        main,
+        "resolve_file_download",
+        lambda name: {"fileName": name, "downloadUrl": f"https://example/{name}", "expiresAt": "x"},
+    )
+
+    result = main.handle_failed_file_downloads(customer="tgt")
+
+    assert captured["customer"] == "TGT"
+    assert result["downloads"] == [{"fileName": "a.edi", "downloadUrl": "https://example/a.edi"}]
+
+
+def test_handle_failed_file_downloads_defaults_to_no_customer_filter(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        main,
+        "handle_failed_orders",
+        lambda customer=None: captured.setdefault("customer", customer) or {
+            "intent": "failed_orders", "reply": "none", "matches": [],
+        },
+    )
+
+    result = main.handle_failed_file_downloads()
+
+    assert captured["customer"] is None
+    assert result["downloads"] == []
+
+
+def test_detect_file_download_handler_scopes_bulk_download_to_customer(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        main,
+        "handle_failed_file_downloads",
+        lambda customer=None: captured.setdefault("customer", customer),
+    )
+
+    handler = main.detect_file_download_handler(
+        "show me what files failed for customer tgt and give download links to files"
+    )
+    assert handler is not None
+    handler()
+
+    assert captured["customer"] == "tgt"
+
+
+def test_detect_file_download_handler_bulk_download_without_customer(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        main,
+        "handle_failed_file_downloads",
+        lambda customer=None: captured.setdefault("customer", customer),
+    )
+
+    handler = main.detect_file_download_handler("give me download links to failed files")
+    assert handler is not None
+    handler()
+
+    assert captured["customer"] is None
+
+
 def test_handle_failed_orders_appends_explanation_when_available(monkeypatch):
     failed_row = {
         "fileName": "bad.edi",
