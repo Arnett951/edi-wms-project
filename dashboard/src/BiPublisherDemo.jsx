@@ -45,7 +45,7 @@ const GAP_STEPS = [
   },
   {
     step: "Make it run live",
-    detail: "With heavy handed AI assistance, got the BI Publisher engine running on a Linux server to rendered live parameterized reports.",
+    detail: "This was the most AI-assisted part of the project: getting the BI Publisher rendering engine running headlessly on Linux and wiring it into the live report flow.",
   },
   {
     step: "Rehearse legacy data",
