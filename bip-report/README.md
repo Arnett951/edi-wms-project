@@ -49,13 +49,18 @@ printf "rptview:%s\n" "$PW" | docker exec -i dhl-db2 chpasswd
 
 ## Updating the template
 
-After editing `WAREHOUSE.rtf` in Word:
+After editing the template in Word, save and close Word, then copy it over. Whatever the local
+filename is, it must land on Skynet as `template/WAREHOUSE.rtf`:
 
 ```bash
-scp "C:/Users/chich/OneDrive/Desktop/O_BI/WAREHOUSE.rtf" skynet:~/bip-report/template/
+scp "C:/Users/chich/OneDrive/Desktop/O_BI/WAREHOUSE_Fix_loop.rtf" skynet:~/bip-report/template/WAREHOUSE.rtf
 ssh skynet 'cd ~/bip-report && docker build -q -t bip-report:latest . && docker rm -f bip-report && docker run -d --name bip-report --restart unless-stopped --env-file .env -p 100.123.161.53:8790:8790 bip-report:latest'
 ssh skynet 'docker logs bip-report 2>&1 | grep -E "SEVERE|compiled"'   # template compile errors show here
 ```
+
+To test a template without touching the live container, run a second one on another port with
+the RTF mounted over `TEMPLATE_RTF`. Set `TEMPLATE_XSL` to skip RTF compilation and render a
+hand-edited XSL-FO instead; that's useful for isolating pagination and keep issues.
 
 ## Routes
 

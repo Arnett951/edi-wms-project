@@ -75,11 +75,17 @@ public class BipReportServer {
         int port = Integer.parseInt(env("PORT", "8790"));
 
         // Compile the RTF layout to XSL-FO once at startup; every request reuses it.
-        xslPath = "/tmp/warehouse.xsl";
-        RTFProcessor rtf = new RTFProcessor(template);
-        rtf.setOutput(xslPath);
-        rtf.process();
-        log("compiled " + template + " -> " + xslPath);
+        // TEMPLATE_XSL skips compilation and uses a pre-built XSL-FO (for layout debugging).
+        xslPath = env("TEMPLATE_XSL", null);
+        if (xslPath == null) {
+            xslPath = "/tmp/warehouse.xsl";
+            RTFProcessor rtf = new RTFProcessor(template);
+            rtf.setOutput(xslPath);
+            rtf.process();
+            log("compiled " + template + " -> " + xslPath);
+        } else {
+            log("using pre-built XSL " + xslPath);
+        }
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/health", ex -> send(ex, 200, "application/json", "{\"status\":\"ok\"}".getBytes(StandardCharsets.UTF_8)));
