@@ -10,6 +10,7 @@ import AdminChangeRequests from "./AdminChangeRequests.jsx";
 import ReportsDashboard from "./ReportsDashboard.jsx";
 import AnalyticsDashboard from "./AnalyticsDashboard.jsx";
 import FunnelDashboard from "./FunnelDashboard.jsx";
+import BiPublisherDemo from "./BiPublisherDemo.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
@@ -103,7 +104,11 @@ export default function App() {
   const [error, setError] = useState(null);
   const [simulateMessage, setSimulateMessage] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("operations");
+  // ?tab=bi-publisher deep-links straight to the reporting demo for sharing
+  // (a query param, since MSAL's redirect handling clears the URL hash).
+  const [activeTab, setActiveTab] = useState(() =>
+    new URLSearchParams(window.location.search).get("tab") === "bi-publisher" ? "bipublisher" : "operations"
+  );
   const [permissions, setPermissions] = useState([]);
   const canDownloadFiles = permissions.includes("files.download");
   const canManageCr = permissions.includes("cr.admin");
@@ -384,6 +389,13 @@ setError(
         Analytics
       </button>
       <button
+        className={activeTab === "bipublisher" ? "tab-active" : ""}
+        onClick={() => setActiveTab("bipublisher")}
+        title="Db2 + Oracle BI Publisher inventory aging report (synthetic data)"
+      >
+        Operational Reporting
+      </button>
+      <button
         className={activeTab === "funnel" ? "tab-active" : ""}
         onClick={() => setActiveTab("funnel")}
       >
@@ -573,6 +585,8 @@ setError(
     {activeTab === "analytics" && <AnalyticsDashboard />}
 
     {activeTab === "funnel" && <FunnelDashboard />}
+
+    {activeTab === "bipublisher" && <BiPublisherDemo />}
 
     {activeTab === "admin" && <AdminChangeRequests canManageCr={canManageCr} />}
   </main></div >;
