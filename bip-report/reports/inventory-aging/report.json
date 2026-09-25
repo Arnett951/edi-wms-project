@@ -3,7 +3,7 @@
   "description": "Aged inventory by SKU and location: lot/DOT manufacturing data, received and product age, on-hand, allocated and available quantity, and inventory value.",
   "order": 10,
   "template": "template.rtf",
-  "keepGroupHeaders": true,
+  "keepGroupHeaders": false,
   "sources": [
     {
       "id": "wms",

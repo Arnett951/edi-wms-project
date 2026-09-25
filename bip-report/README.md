@@ -90,12 +90,20 @@ renders a hand-edited XSL-FO instead of compiling the RTF.
 
 ### Pagination patch (`"keepGroupHeaders": true`)
 
-For templates with "Keep with next" on every paragraph (the aging report's current RTF), every
-SKU group chains to the next one and the engine can't honor any of the keeps. With this option
-the service strips those keeps from the compiled XSL-FO and keeps only each group's header rows
-with the next row, so a header never lands at the bottom of a page without its lots. Once the
-RTF sets this itself (Keep with next on the group header rows only, off on the detail row), set
-it to `false` so the live output matches Template Builder's preview exactly.
+A service-side fallback, now off for the aging report. Word's "Keep with next" doesn't work on
+table rows in BI Publisher: it's applied to the paragraphs inside the cells, and the PDF engine
+only honors keeps on the rows themselves. With this option the service strips those paragraph
+keeps from the compiled XSL-FO and puts keep-with-next on the first group table's header rows.
+
+The template-side fix, which the aging RTF now uses: type this at the start of the first cell of
+each group header row,
+
+    <?attribute@row:keep-with-next.within-page;'always'?>
+
+`@row` makes BI Publisher attach the attribute to the table row. A header then always stays with
+its first lot, however long the group is. To keep a whole group on one page instead (Crystal's
+"keep group together"), nest the group in a one-cell outer table and turn off "Allow row to break
+across pages" on that row; that only works for groups shorter than a page.
 
 ### The Location Aging Heatmap
 
