@@ -135,12 +135,13 @@ across pages" on that row; that only works for groups shorter than a page.
 | Path on Skynet | Source |
 | --- | --- |
 | `vendor/*.jar` (22 jars) | BI Publisher Desktop: `Template Builder for Word\jlib\` (all jars in `RTF2PDFv2.jar`'s manifest Class-Path), plus `db2jcc4.jar` from `docker cp dhl-db2:/opt/ibm/db2/V12.1/java/db2jcc4.jar` |
-| `reports/inventory-aging/template.rtf` | `Desktop\O_BI\WAREHOUSE_Fix_loop.rtf` (Word-built, ~23 MB) |
 | `.env` (mode 600) | `DB2_USER=rptview`, `DB2_PASSWORD=<generated on Skynet>` |
 
 The BI Publisher jars come from Oracle's free BI Publisher Desktop download. This is a personal
-dev/demo lab, not a production deployment. The report folders' JSON and SQL, and the generated
-heatmap RTF, are in git under `reports/`.
+dev/demo lab, not a production deployment. Everything in `reports/` is in git, including both
+templates. The aging RTF (~18 MB, Word-built; working copy at `Desktop\O_BI\RTFS\WAREHOUSE_Fix_loop.rtf`)
+is committed because it rarely changes. Copy it into `reports/inventory-aging/template.rtf`
+after an edit, so git and Skynet stay the same.
 
 `RPTVIEW` is an OS user inside the `dhl-db2` container with `CONNECT` plus `SELECT` on the
 tables the reports read (`WMS.INVENTORY`, `ITEM`, `LOCATION`, `WAREHOUSE`, `LOT_ATTRIBUTE` and
