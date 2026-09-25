@@ -4,3 +4,6 @@
 vendor/
 template/
 .env
+
+# Word lock files created while a template is open
+~$*

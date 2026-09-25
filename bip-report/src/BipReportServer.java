@@ -102,6 +102,7 @@ public class BipReportServer {
         server.createContext("/facilities", BipReportServer::handleFacilities);
         server.createContext("/reports", BipReportServer::handleReports);
         server.createContext("/report.pdf", BipReportServer::handleReport);
+        server.createContext("/report.xml", BipReportServer::handleReportXml);
         server.setExecutor(Executors.newFixedThreadPool(4));
         server.start();
         log("listening on :" + port + ", reports from " + reportsDir);
@@ -278,6 +279,43 @@ public class BipReportServer {
         } catch (Exception e) {
             log("report failed for " + reportId + "/" + facility + ": " + e);
             sendError(ex, 502, "Report generation failed");
+        }
+    }
+
+    /**
+     * The exact XML a report's template receives, for loading into Template Builder as
+     * sample data (like viewing a data model's output in BI Publisher Enterprise). Only
+     * reachable on the tailnet; the public API doesn't proxy it.
+     */
+    private static void handleReportXml(HttpExchange ex) throws IOException {
+        String reportId = orDefault(queryParam(ex, "report"), DEFAULT_REPORT);
+        String facility = queryParam(ex, "facility");
+        String sourceId = queryParam(ex, "source");
+        try {
+            JsonObject report;
+            try {
+                report = loadReport(reportId);
+            } catch (IOException e) {
+                sendError(ex, 400, "Unknown report");
+                return;
+            }
+            JsonObject source = findSource(report, sourceId);
+            if (source == null) {
+                sendError(ex, 400, "Unknown source");
+                return;
+            }
+            if (facility == null || !loadFacilities().containsKey(facility)) {
+                sendError(ex, 400, "Unknown facility");
+                return;
+            }
+            File sqlPath = new File(new File(reportsDir, reportId), source.get("sql").getAsString());
+            byte[] xml = buildXml(new String(Files.readAllBytes(sqlPath.toPath()), StandardCharsets.UTF_8), facility);
+            ex.getResponseHeaders().set("Content-Disposition",
+                "inline; filename=\"" + reportId + "-" + facility + ".xml\"");
+            send(ex, 200, "application/xml; charset=utf-8", xml);
+        } catch (Exception e) {
+            log("xml failed for " + reportId + "/" + facility + ": " + e);
+            sendError(ex, 502, "XML generation failed");
         }
     }
 

@@ -99,8 +99,10 @@ def build():
     L = "\\line "
     p = [
         "{\\rtf1\\ansi\\ansicpg1252\\deff0",
-        # f1 = the barcode font; config/xdo.cfg maps it to the TTF inside the container.
-        "{\\fonttbl{\\f0\\fswiss\\fcharset0 Arial;}{\\f1\\fnil\\fcharset0 Libre Barcode 128;}}",
+        # f1 = the barcode font. Default Code 128 is BI Publisher's built-in family name: Template
+        # Builder's own xdo.cfg maps it to Libre Barcode 128, and so does config/xdo.cfg here, so the
+        # local preview and the live service draw the same barcode.
+        "{\\fonttbl{\\f0\\fswiss\\fcharset0 Arial;}{\\f1\\fnil\\fcharset0 Default Code 128;}}",
         "{\\colortbl;" + "".join(f"\\red{r}\\green{g}\\blue{b};" for r, g, b in COLORS) + "}",
         "{\\stylesheet{\\ql\\f0\\fs15 Normal;}}",
         # An \info group is required for BI Publisher to honor the page size and margins.
