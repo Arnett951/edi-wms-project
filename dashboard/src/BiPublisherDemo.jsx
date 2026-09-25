@@ -45,7 +45,7 @@ const GAP_STEPS = [
   },
   {
     step: "Make it run live",
-    detail: "Rendered with the BI Publisher engine on a Linux server, with a facility parameter like a data model LOV.",
+    detail: "With heavy handed AI assistance, got the BI Publisher engine running on a Linux server to rendered live parameterized reports.",
   },
   {
     step: "Rehearse legacy data",
@@ -54,6 +54,12 @@ const GAP_STEPS = [
 ];
 
 const FINDINGS = [
+    {
+    title: "Crystal Reports was What you See is What you Get, but BI Publisher is not",
+    symptom: "Constant tedious tweaks of the template to get final results lined up.",
+    cause: "The Word > RTF > BI Rendering > PDF pipeline has different behavior that needs to be accounted for.",
+    fix: "AI assistance can help streamline this process, but it's not a silver bullet.",
+  },
   {
     title: "SKU totals didn't match their rows",
     symptom: "A SKU header showed $9,272 of value, but its only printed lot was $6,308.",
@@ -251,8 +257,8 @@ export default function BiPublisherDemo() {
           <p className="bip-sub">Aged inventory by SKU and location, built with Db2 and Oracle BI Publisher</p>
           <span className="bip-synthetic">Synthetic WMS data · portfolio demonstration</span>
           <p>
-            A synthetic warehouse reporting environment built with Db2 and Oracle BI Publisher. The Inventory
-            Aging report identifies aging stock by SKU and location while exposing lot/DOT manufacturing data,
+            My first POC built Db2 and Oracle BI Publisher. The Inventory Aging report identifies
+            aging stock by SKU and location while exposing lot/DOT manufacturing data,
             availability, allocations and inventory value. Built as a hands-on demonstration of operational WMS
             reporting, SQL datasets, XML data models and RTF/PDF report generation.
           </p>
@@ -326,17 +332,6 @@ export default function BiPublisherDemo() {
           naming, library lists and the actual WMi files. My plan on any new system: start from the reports
           Ops runs most, learn their joins, and reconcile old vs new whenever I change one.
         </p>
-      </div>
-
-      <div className="panel">
-        <h2>The business problem</h2>
-        <p className="bip-problem">
-          “Identify inventory that has been sitting too long, where it is located, and how much inventory/value
-          is tied up.”
-        </p>
-        <ul className="bip-list">
-          {FEATURES.map((f) => <li key={f}>{f}</li>)}
-        </ul>
       </div>
 
       <div className="panel">
