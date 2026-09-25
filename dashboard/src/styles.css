@@ -1427,6 +1427,69 @@ td {
   font-size: 12px;
 }
 
+.bip-story h3 {
+  margin: 24px 0 10px;
+  font-size: 16px;
+}
+
+.bip-story > p {
+  line-height: 1.6;
+  max-width: 1100px;
+}
+
+.bip-story-intro {
+  margin-bottom: 16px;
+}
+
+.bip-story-steps {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.bip-findings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.bip-finding {
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #d71920;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.bip-finding h4 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.bip-finding dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.bip-finding dt {
+  font-weight: 700;
+  color: #64748b;
+}
+
+.bip-finding dd {
+  margin: 0;
+  color: #334155;
+}
+
+@media (max-width: 900px) {
+  .bip-story-steps,
+  .bip-findings {
+    grid-template-columns: 1fr;
+  }
+}
+
 .bip-note {
   margin-top: 16px;
   font-size: 13px;

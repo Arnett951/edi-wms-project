@@ -34,6 +34,52 @@ const SCHEMA = [
   "OUTBOUND_ORDER / OUTBOUND_LINE",
 ];
 
+const GAP_STEPS = [
+  {
+    step: "Model the data",
+    detail: "Designed a synthetic tire-distribution WMS schema in Db2 LUW (Docker) and wrote the lot-level aging dataset in DBeaver.",
+  },
+  {
+    step: "Build the report",
+    detail: "Exported the dataset as XML and built the RTF layout in Template Builder for Word: SKU grouping, totals, aging.",
+  },
+  {
+    step: "Make it run live",
+    detail: "Rendered with the BI Publisher engine on a Linux server, with a facility parameter like a data model LOV.",
+  },
+  {
+    step: "Rehearse legacy data",
+    detail: "Rebuilt the dataset against an IBM i-style copy of the data and proved both versions match.",
+  },
+];
+
+const FINDINGS = [
+  {
+    title: "SKU totals didn't match their rows",
+    symptom: "A SKU header showed $9,272 of value, but its only printed lot was $6,308.",
+    cause: "The engine's compile log flagged an unmatched loop tag: the detail row had lost its <?for-each:current-group()?>, so each group printed only its first lot.",
+    fix: "Restored the inner loop. Now every total reconciles to the rows under it.",
+  },
+  {
+    title: "Date math returned zero",
+    symptom: "xdoxslt:minimum on received dates gave 0 instead of the oldest date.",
+    cause: "The XML carries dates as text; the template's aggregate functions are numeric.",
+    fix: "Moved the logic to SQL: MIN(RECEIVED_DATE) OVER (PARTITION BY facility, SKU). Compute in the dataset, format in the template.",
+  },
+  {
+    title: "Group headers stranded at page breaks",
+    symptom: "A SKU header landed at the bottom of a page with its lots on the next.",
+    cause: "\"Keep with next\" was on every row, so every group chained to the next and none of the keeps could be honored.",
+    fix: "Traced it in the compiled XSL-FO: keep-with-next on the group header rows only fixes it.",
+  },
+  {
+    title: "Text hidden under a graphic",
+    symptom: "The report date rendered in the PDF but was invisible.",
+    cause: "Floating images are drawn in anchor order (Word's \"Send to Back\" is ignored), and PNG transparency is flattened.",
+    fix: "Layout-driven fix: trimmed the image so it doesn't overlap text.",
+  },
+];
+
 const FEATURES = [
   "Inventory grouped by SKU with a per-SKU value total",
   "Warehouse age from received date, plus oldest-receipt age per SKU",
@@ -194,6 +240,60 @@ export default function BiPublisherDemo() {
       </div>
 
       <LiveReport />
+
+      <div className="panel bip-story">
+        <h2>Closing the gap: Db2 + BI Publisher in under a week</h2>
+        <p className="bip-story-intro">
+          My production background is SQL Server, Informix, Crystal Reports, Manhattan WMOS and EDI. Db2 and
+          Oracle BI Publisher were new to me, so I built this lab to learn the stack hands-on, including the
+          parts that don't work the way a Crystal or SQL Server habit expects.
+        </p>
+
+        <ol className="bip-flow bip-story-steps">
+          {GAP_STEPS.map((g) => (
+            <li key={g.step}>
+              <b>{g.step}</b>
+              <span>{g.detail}</span>
+            </li>
+          ))}
+        </ol>
+
+        <h3>What the engine taught me</h3>
+        <div className="bip-findings">
+          {FINDINGS.map((f) => (
+            <article key={f.title} className="bip-finding">
+              <h4>{f.title}</h4>
+              <dl>
+                <dt>Symptom</dt>
+                <dd>{f.symptom}</dd>
+                <dt>Cause</dt>
+                <dd>{f.cause}</dd>
+                <dt>Fix</dt>
+                <dd>{f.fix}</dd>
+              </dl>
+            </article>
+          ))}
+        </div>
+
+        <h3>Rehearsing legacy IBM i data</h3>
+        <p>
+          Production WMS data on IBM i rarely looks like a clean relational schema, so I made a copy in legacy
+          conventions: 10-character file names, blank-padded CHAR, numeric YYYYMMDD / CYYMMDD dates and HHMMSS
+          times, one-letter status codes, and natural keys. I rewrote the dataset against it, converting dates
+          safely (0 becomes NULL) and filtering on the raw numeric column so indexes still apply. Then I
+          proved the rewrite: <b>EXCEPT ALL in both directions returns 0 rows, 44 = 44 rows, and $330,816 on
+          both sides</b>. The "Legacy IBM i-style" data source above renders the same report from it.
+        </p>
+
+        <h3>What this lab doesn't cover</h3>
+        <p>
+          It uses Db2 LUW and the BI Publisher core engine, not Db2 for i and the Enterprise server. The
+          template skills carry over directly. On the job I'd still need to learn the server side (data
+          models, LOVs, scheduling, bursting and delivery) and the local IBM i conventions: system vs SQL
+          naming, library lists and the actual WMi files. My plan on any new system: start from the reports
+          Ops runs most, learn their joins, and reconcile old vs new whenever I change one.
+        </p>
+      </div>
 
       <div className="panel">
         <h2>The business problem</h2>
