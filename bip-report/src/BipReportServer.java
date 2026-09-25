@@ -71,6 +71,7 @@ public class BipReportServer {
     private static String dbUser;
     private static String dbPassword;
     private static File reportsDir;
+    private static String xdoConfig;
     private static final Gson GSON = new Gson();
 
     private static final Map<String, byte[]> pdfCache = new HashMap<>();
@@ -84,6 +85,7 @@ public class BipReportServer {
         dbUser = env("DB2_USER", null);
         dbPassword = env("DB2_PASSWORD", null);
         reportsDir = new File(env("REPORTS_DIR", "/app/reports"));
+        xdoConfig = env("XDO_CONFIG", "/app/config/xdo.cfg");
         int port = Integer.parseInt(env("PORT", "8790"));
 
         // Compile every template up front so broken ones show in the startup log.
@@ -311,6 +313,7 @@ public class BipReportServer {
         fo.setTemplate(xslPath);
         fo.setOutput(pdf);
         fo.setOutputFormat(FOProcessor.FORMAT_PDF);
+        if (new File(xdoConfig).isFile()) fo.setConfig(xdoConfig);   // font mappings (barcodes)
         fo.generate();
 
         byte[] bytes = pdf.toByteArray();

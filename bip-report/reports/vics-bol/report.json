@@ -1,0 +1,9 @@
+{
+  "title": "VICS Bill of Lading",
+  "description": "Straight bill of lading in the VICS (GS1 US) layout for the facility's current loaded trailer: ship from/to, carrier, trailer, seal and PRO, customer order information by PO, and carrier information by commodity, with grand totals.",
+  "order": 30,
+  "template": "template.rtf",
+  "sources": [
+    { "id": "wms", "label": "Modern schema (WMS.*)", "sql": "dataset.sql", "note": "" }
+  ]
+}
