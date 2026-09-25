@@ -1,9 +1,7 @@
 -- ============================================================================
--- Reconciliation: prove the legacy-format query returns exactly the same rows
--- as the original WMS query. Both counts must be 0 (and the totals equal).
--- This is the habit to bring to any converted or rewritten report: diff old vs new.
+-- REUSABLE COMPARISON   REPLACE ORIGINAL_DATA WITH REPORT SQL and after COMMA paste new Report SQL/JOINS
 -- ============================================================================
-WITH W AS (   -- original dataset (WMS.* tables, real DATE columns)
+WITH ORIGINAL_DATA AS (   -- original dataset (WMS.* tables, real DATE columns)
     SELECT w.WAREHOUSE_CODE, w.WAREHOUSE_NAME, i.SKU, i.DESCRIPTION, i.TIRE_SIZE,
            l.LOCATION_CODE, l.ZONE, inv.LOT_NUMBER,
            la.DOT_CODE, la.MFG_WEEK, la.MFG_YEAR, la.MFG_DATE, inv.RECEIVED_DATE,
@@ -52,15 +50,15 @@ L AS (
     JOIN LGCYLIB.LOCMSTP lm ON lm.LMWHSE = inv.ILWHSE AND lm.LMLOC = inv.ILLOC
     LEFT JOIN LOT lot ON lot.LASKU = inv.ILSKU AND lot.LALOT = inv.ILLOT
 )
-SELECT 'rows only in original' AS CHECK_NAME, COUNT(*) AS RESULT FROM (SELECT * FROM W EXCEPT ALL SELECT * FROM L) x
+SELECT 'rows only in original' AS CHECK_NAME, COUNT(*) AS RESULT FROM (SELECT * FROM ORIGINAL_DATA EXCEPT ALL SELECT * FROM L) x
 UNION ALL
-SELECT 'rows only in legacy',   COUNT(*) FROM (SELECT * FROM L EXCEPT ALL SELECT * FROM W) x
+SELECT 'rows only in legacy',   COUNT(*) FROM (SELECT * FROM L EXCEPT ALL SELECT * FROM ORIGINAL_DATA) x
 UNION ALL
-SELECT 'original row count',    COUNT(*) FROM W
+SELECT 'original row count',    COUNT(*) FROM ORIGINAL_DATA
 UNION ALL
 SELECT 'legacy row count',      COUNT(*) FROM L
 UNION ALL
-SELECT 'original total value',  BIGINT(SUM(INVENTORY_VALUE)) FROM W
+SELECT 'original total value',  BIGINT(SUM(INVENTORY_VALUE)) FROM ORIGINAL_DATA
 UNION ALL
 SELECT 'legacy total value',    BIGINT(SUM(INVENTORY_VALUE)) FROM L
 WITH UR;
