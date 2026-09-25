@@ -1,0 +1,6 @@
+# Oracle BI Publisher jars and the IBM Db2 JDBC driver are not redistributable
+# from this repo; the RTF template (~23 MB with embedded images) and DB
+# credentials stay on the Skynet host. See README.md for how they get there.
+vendor/
+template/
+.env

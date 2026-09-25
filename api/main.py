@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -822,6 +822,74 @@ def rollback_change_request(cr_number: int, payload: dict = Depends(require_perm
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Public BI Publisher demo: proxies the Db2 + BI Publisher report service on
+# Skynet (bip-report/ in this repo) over the same tailscale sidecar SOCKS5
+# proxy the local-model tier uses. Intentionally unauthenticated so the
+# portfolio page works without sign-in -- it only exposes a read-only report
+# over synthetic data, the facility must be one Skynet itself lists, and
+# per-client requests are rate limited. Unset BI_REPORT_BASE_URL disables it.
+# ---------------------------------------------------------------------------
+BI_REPORT_BASE_URL = os.getenv("BI_REPORT_BASE_URL")
+BI_REPORT_TIMEOUT_SECONDS = (5, 60)  # (connect, read); a render takes ~1-2s once warm
+BI_REPORT_RATE_LIMIT = 10  # PDF renders per client per window
+BI_REPORT_RATE_WINDOW_SECONDS = 300
+_bi_report_hits: dict = {}
+
+
+def _bi_report_get(path: str, params: Optional[dict] = None):
+    if not BI_REPORT_BASE_URL:
+        raise HTTPException(status_code=503, detail="Live report service is not configured.")
+    try:
+        return requests.get(
+            f"{BI_REPORT_BASE_URL.rstrip('/')}{path}",
+            params=params,
+            proxies={"http": LOCAL_MODEL_PROXY, "https": LOCAL_MODEL_PROXY} if LOCAL_MODEL_PROXY else None,
+            timeout=BI_REPORT_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as exc:
+        print(f"[bi-report] upstream error: {exc}")
+        raise HTTPException(status_code=503, detail="Live report server is offline.")
+
+
+def _bi_report_rate_limited(client_id: str) -> bool:
+    now = time.time()
+    recent = [t for t in _bi_report_hits.get(client_id, []) if now - t < BI_REPORT_RATE_WINDOW_SECONDS]
+    limited = len(recent) >= BI_REPORT_RATE_LIMIT
+    if not limited:
+        recent.append(now)
+    _bi_report_hits[client_id] = recent
+    return limited
+
+
+@app.get("/api/public/bi-report/facilities")
+def bi_report_facilities():
+    res = _bi_report_get("/facilities")
+    if res.status_code != 200:
+        raise HTTPException(status_code=502, detail="Live report server could not list facilities.")
+    return res.json()
+
+
+@app.get("/api/public/bi-report/pdf")
+def bi_report_pdf(facility: str, request: Request):
+    if not re.fullmatch(r"[A-Z0-9-]{1,20}", facility):
+        raise HTTPException(status_code=400, detail="Invalid facility code.")
+    forwarded = request.headers.get("x-forwarded-for", "")
+    client_id = forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    if _bi_report_rate_limited(client_id):
+        raise HTTPException(status_code=429, detail="Too many report requests - try again in a few minutes.")
+    res = _bi_report_get("/report.pdf", params={"facility": facility})
+    if res.status_code == 400:
+        raise HTTPException(status_code=400, detail="Unknown facility.")
+    if res.status_code != 200:
+        raise HTTPException(status_code=502, detail="Live report generation failed.")
+    return Response(
+        content=res.content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="inventory-aging-{facility}.pdf"'},
+    )
 
 OPERATIONAL_ALERTS_QUERY = """
 SELECT *
