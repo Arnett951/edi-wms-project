@@ -81,7 +81,7 @@ Save and close Word, then copy the RTF over the report's `template.rtf`. It reco
 next request:
 
 ```bash
-scp "C:/Users/chich/OneDrive/Desktop/O_BI/WAREHOUSE_Fix_loop.rtf" skynet:~/bip-report/reports/inventory-aging/template.rtf
+scp "C:/Users/chich/OneDrive/Desktop/O_BI/RTFS/WAREHOUSE_Fix_loop.rtf" skynet:~/bip-report/reports/inventory-aging/template.rtf
 ```
 
 To try a template without touching the live report, put it in a new folder under another id
