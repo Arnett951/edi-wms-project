@@ -4,3 +4,5 @@
 vendor/
 template/
 .env
+# Oracle-built RTFs (Word/Template Builder, ~23 MB) stay on Skynet; generated ones are tracked.
+reports/inventory-aging/*.rtf

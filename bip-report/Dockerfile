@@ -9,7 +9,8 @@ FROM eclipse-temurin:8-jre
 WORKDIR /app
 COPY vendor/ /app/vendor/
 COPY --from=build /out/ /app/classes/
-COPY template/ /app/template/
+# Reports (report.json + SQL + RTF per folder) are mounted at /app/reports at run
+# time, not baked in: adding a report is a file copy, no rebuild.
 RUN useradd -r -s /usr/sbin/nologin bip
 USER bip
 EXPOSE 8790

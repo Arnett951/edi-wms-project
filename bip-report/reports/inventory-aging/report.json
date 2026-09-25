@@ -1,0 +1,21 @@
+{
+  "title": "Warehouse Inventory Aging",
+  "description": "Aged inventory by SKU and location: lot/DOT manufacturing data, received and product age, on-hand, allocated and available quantity, and inventory value.",
+  "order": 10,
+  "template": "template.rtf",
+  "keepGroupHeaders": true,
+  "sources": [
+    {
+      "id": "wms",
+      "label": "Modern schema (WMS.*)",
+      "sql": "dataset.sql",
+      "note": "Relational lab schema: surrogate keys, DATE columns, descriptive status values."
+    },
+    {
+      "id": "legacy",
+      "label": "Legacy IBM i-style (LGCYLIB)",
+      "sql": "dataset_legacy.sql",
+      "note": "Same data in legacy IBM i conventions: 10-character file names, blank-padded CHAR, numeric YYYYMMDD / CYYMMDD dates, one-letter status codes, natural keys. The SQL converts it back, so the same RTF template renders it unchanged, and a reconciliation query proves both sources match."
+    }
+  ]
+}

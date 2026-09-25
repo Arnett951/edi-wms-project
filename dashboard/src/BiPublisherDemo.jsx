@@ -89,31 +89,31 @@ const FEATURES = [
   "Inventory value by line and by SKU group",
 ];
 
-const SOURCES = [
+// Used until the report registry loads (or if the home lab is offline).
+const FALLBACK_REPORTS = [
   {
-    value: "wms",
-    label: "Modern schema (WMS.*)",
-    note: "Relational lab schema: surrogate keys, DATE columns, descriptive status values.",
-  },
-  {
-    value: "legacy",
-    label: "Legacy IBM i-style (LGCYLIB)",
-    note:
-      "Same data in legacy IBM i conventions: 10-character file names, blank-padded CHAR, numeric " +
-      "YYYYMMDD / CYYMMDD dates, one-letter status codes, natural keys. The SQL converts it back, so the " +
-      "same RTF template renders it unchanged, and a reconciliation query proves both sources match.",
+    id: "inventory-aging",
+    title: "Warehouse Inventory Aging",
+    description: "Aged inventory by SKU and location with lot/DOT data, availability and value.",
+    sources: [{ id: "wms", label: "Modern schema (WMS.*)", note: "" }],
   },
 ];
 
 function LiveReport() {
+  const [reports, setReports] = useState(FALLBACK_REPORTS);
+  const [reportId, setReportId] = useState(FALLBACK_REPORTS[0].id);
   const [facilities, setFacilities] = useState(FALLBACK_FACILITIES);
   const [facility, setFacility] = useState(FALLBACK_FACILITIES[0].code);
   const [source, setSource] = useState("wms");
   const [status, setStatus] = useState("idle"); // idle | loading | done | error
   const [slow, setSlow] = useState(false);
   const [error, setError] = useState(null);
-  const [pdf, setPdf] = useState(null); // { url, facility, at }
+  const [pdf, setPdf] = useState(null); // { url, reportTitle, facility, sourceLabel, at }
   const pdfUrlRef = useRef(null);
+
+  const report = reports.find((r) => r.id === reportId) || reports[0];
+  const sources = report.sources.length ? report.sources : [{ id: "wms", label: "Default", note: "" }];
+  const currentSource = sources.find((src) => src.id === source) || sources[0];
 
   useEffect(() => {
     // Also warms the scale-to-zero API before the visitor clicks Run.
@@ -123,8 +123,21 @@ function LiveReport() {
         if (Array.isArray(list) && list.length) setFacilities(list);
       })
       .catch(() => {});
+    // The report registry: every folder of report.json + SQL + RTF on the report server.
+    fetch(`${API_BASE}/api/public/bi-report/reports`)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((list) => {
+        if (Array.isArray(list) && list.length) setReports(list);
+      })
+      .catch(() => {});
     return () => pdfUrlRef.current && URL.revokeObjectURL(pdfUrlRef.current);
   }, []);
+
+  function chooseReport(id) {
+    setReportId(id);
+    const next = reports.find((r) => r.id === id);
+    setSource(next && next.sources.length ? next.sources[0].id : "wms");
+  }
 
   async function runReport() {
     setStatus("loading");
@@ -132,9 +145,8 @@ function LiveReport() {
     setError(null);
     const slowTimer = setTimeout(() => setSlow(true), SLOW_NOTICE_MS);
     try {
-      const res = await fetch(
-        `${API_BASE}/api/public/bi-report/pdf?facility=${encodeURIComponent(facility)}&source=${source}`
-      );
+      const params = new URLSearchParams({ report: report.id, facility, source: currentSource.id });
+      const res = await fetch(`${API_BASE}/api/public/bi-report/pdf?${params}`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.detail || `Report request failed (HTTP ${res.status}).`);
@@ -142,7 +154,13 @@ function LiveReport() {
       const blob = await res.blob();
       if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
       pdfUrlRef.current = URL.createObjectURL(blob);
-      setPdf({ url: pdfUrlRef.current, facility, source, at: new Date() });
+      setPdf({
+        url: pdfUrlRef.current,
+        reportTitle: report.title,
+        facility,
+        sourceLabel: sources.length > 1 ? currentSource.label : null,
+        at: new Date(),
+      });
       setStatus("done");
     } catch (err) {
       setError(err.message && err.message !== "Failed to fetch" ? err.message : "Couldn't reach the live report server.");
@@ -156,10 +174,20 @@ function LiveReport() {
     <div className="panel bip-live">
       <h2>Run it live</h2>
       <p>
-        Pick a facility to query the Db2 lab database and render the same RTF template with the BI Publisher
-        engine, on demand. Runs on a home-lab server (Docker on Linux) reached through the API over Tailscale.
+        Pick a report and a facility to query the Db2 lab database and render the report's RTF template with the
+        BI Publisher engine, on demand. Runs on a home-lab server (Docker on Linux) reached through the API over
+        Tailscale. Each report is a folder of report.json + SQL + RTF on that server, so a new report shows up
+        here as soon as its folder is copied in.
       </p>
       <div className="bip-live-controls">
+        <label>
+          <span>Report</span>
+          <select value={report.id} onChange={(e) => chooseReport(e.target.value)} disabled={status === "loading"}>
+            {reports.map((r) => (
+              <option key={r.id} value={r.id}>{r.title}</option>
+            ))}
+          </select>
+        </label>
         <label>
           <span>Facility</span>
           <select value={facility} onChange={(e) => setFacility(e.target.value)} disabled={status === "loading"}>
@@ -168,19 +196,24 @@ function LiveReport() {
             ))}
           </select>
         </label>
-        <label>
-          <span>Data source</span>
-          <select value={source} onChange={(e) => setSource(e.target.value)} disabled={status === "loading"}>
-            {SOURCES.map((src) => (
-              <option key={src.value} value={src.value}>{src.label}</option>
-            ))}
-          </select>
-        </label>
+        {sources.length > 1 && (
+          <label>
+            <span>Data source</span>
+            <select value={currentSource.id} onChange={(e) => setSource(e.target.value)} disabled={status === "loading"}>
+              {sources.map((src) => (
+                <option key={src.id} value={src.id}>{src.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <button type="button" onClick={runReport} disabled={status === "loading"}>
           {status === "loading" ? "Generating..." : "Run Live Report"}
         </button>
       </div>
-      <p className="bip-live-source">{SOURCES.find((src) => src.value === source).note}</p>
+      <p className="bip-live-source">
+        {report.description}
+        {sources.length > 1 && currentSource.note ? ` ${currentSource.note}` : ""}
+      </p>
       {status === "loading" && slow && (
         <p className="bip-live-note">
           Waking the API (it scales to zero when idle) - the first request can take a few minutes.
@@ -196,12 +229,12 @@ function LiveReport() {
         <div className="bip-live-result">
           <div className="bip-live-meta">
             <span>
-              Live render: <b>{pdf.facility}</b> from{" "}
-              <b>{SOURCES.find((src) => src.value === pdf.source).label}</b> at {pdf.at.toLocaleTimeString()}
+              Live render: <b>{pdf.reportTitle}</b> for <b>{pdf.facility}</b>
+              {pdf.sourceLabel ? <> from <b>{pdf.sourceLabel}</b></> : null} at {pdf.at.toLocaleTimeString()}
             </span>
             <a href={pdf.url} target="_blank" rel="noopener noreferrer">Open PDF in new tab</a>
           </div>
-          <iframe title={`Live inventory aging report for ${pdf.facility}`} src={pdf.url} />
+          <iframe title={`Live ${pdf.reportTitle} for ${pdf.facility}`} src={pdf.url} />
         </div>
       )}
     </div>

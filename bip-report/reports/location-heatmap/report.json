@@ -1,0 +1,9 @@
+{
+  "title": "Location Aging Heatmap",
+  "description": "Every rack location and floor area, empty ones included, shaded by the age of its oldest lot: the oldest 10% of occupied locations red, the next 10% yellow, the rest green. Percentiles computed in SQL, colors applied by BI Publisher conditional formatting.",
+  "order": 20,
+  "template": "template.rtf",
+  "sources": [
+    { "id": "wms", "label": "Modern schema (WMS.*)", "sql": "dataset.sql", "note": "" }
+  ]
+}

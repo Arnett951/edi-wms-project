@@ -1,0 +1,22 @@
+-- Inventory Aging dataset (lot level), one facility.
+-- :P_FACILITY is bound by the report service, like a BI Publisher data model parameter.
+SELECT w.WAREHOUSE_CODE, w.WAREHOUSE_NAME, i.SKU, i.DESCRIPTION, i.TIRE_SIZE,
+       l.LOCATION_CODE, l.ZONE, inv.LOT_NUMBER,
+       la.DOT_CODE, la.MFG_WEEK, la.MFG_YEAR, la.MFG_DATE, inv.RECEIVED_DATE,
+       -- Oldest receipt per facility + SKU, so the group header can print it directly
+       -- (xdoxslt:minimum only works on numbers, not the XML's string dates).
+       MIN(inv.RECEIVED_DATE) OVER (PARTITION BY w.WAREHOUSE_CODE, i.SKU) AS OLDEST_RECEIVED_DATE,
+       DAYS(CURRENT DATE) - DAYS(inv.RECEIVED_DATE) AS WAREHOUSE_AGE_DAYS,
+       DAYS(CURRENT DATE) - DAYS(la.MFG_DATE) AS TIRE_AGE_DAYS,
+       inv.STOCK_STATUS, inv.ON_HAND_QTY, inv.RESERVED_QTY,
+       CASE WHEN inv.STOCK_STATUS = 'AVAILABLE' THEN inv.ON_HAND_QTY - inv.RESERVED_QTY ELSE 0 END AS AVAILABLE_QTY,
+       DECIMAL(inv.ON_HAND_QTY * i.UNIT_COST, 14, 2) AS INVENTORY_VALUE
+FROM WMS.INVENTORY inv
+JOIN WMS.ITEM i ON i.ITEM_ID = inv.ITEM_ID
+JOIN WMS.LOCATION l ON l.LOCATION_ID = inv.LOCATION_ID
+JOIN WMS.WAREHOUSE w ON w.WAREHOUSE_ID = l.WAREHOUSE_ID
+LEFT JOIN WMS.LOT_ATTRIBUTE la ON la.ITEM_ID = inv.ITEM_ID AND la.LOT_NUMBER = inv.LOT_NUMBER
+WHERE DAYS(CURRENT DATE) - DAYS(inv.RECEIVED_DATE) >= 7
+  AND w.WAREHOUSE_CODE = :P_FACILITY
+ORDER BY w.WAREHOUSE_CODE, i.SKU, la.MFG_DATE, inv.RECEIVED_DATE
+WITH UR;

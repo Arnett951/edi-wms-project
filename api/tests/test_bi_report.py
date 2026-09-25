@@ -43,7 +43,7 @@ def test_pdf_passes_facility_through_and_returns_pdf(unauthenticated_client, mon
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
     assert response.content.startswith(b"%PDF")
-    assert calls == [("http://skynet.test:8790/report.pdf", {"facility": "DEMO-WEST", "source": "wms"})]
+    assert calls == [("http://skynet.test:8790/report.pdf", {"report": "inventory-aging", "facility": "DEMO-WEST"})]
 
 
 def test_pdf_passes_legacy_source_through(unauthenticated_client, monkeypatch):
@@ -59,7 +59,7 @@ def test_pdf_passes_legacy_source_through(unauthenticated_client, monkeypatch):
 
     assert response.status_code == 200
     assert "legacy" in response.headers["content-disposition"]
-    assert calls == [{"facility": "PERRIS", "source": "legacy"}]
+    assert calls == [{"report": "inventory-aging", "facility": "PERRIS", "source": "legacy"}]
 
 
 def test_pdf_rejects_unknown_source_without_calling_upstream(unauthenticated_client, monkeypatch):
@@ -68,7 +68,7 @@ def test_pdf_rejects_unknown_source_without_calling_upstream(unauthenticated_cli
 
     _configure(monkeypatch, fail)
 
-    response = unauthenticated_client.get("/api/public/bi-report/pdf?facility=PERRIS&source=oracle")
+    response = unauthenticated_client.get("/api/public/bi-report/pdf?facility=PERRIS&source=Bad Source")
 
     assert response.status_code == 400
 
@@ -114,3 +114,49 @@ def test_unconfigured_service_returns_503(unauthenticated_client, monkeypatch):
     response = unauthenticated_client.get("/api/public/bi-report/facilities")
 
     assert response.status_code == 503
+
+
+def test_reports_listing_is_public_and_proxied(unauthenticated_client, monkeypatch):
+    reports = [{"id": "location-heatmap", "title": "Location Aging Heatmap", "description": "", "sources": []}]
+    _configure(monkeypatch, lambda url, **kw: FakeResponse(200, payload=reports))
+
+    response = unauthenticated_client.get("/api/public/bi-report/reports")
+
+    assert response.status_code == 200
+    assert response.json() == reports
+
+
+def test_pdf_passes_report_id_through(unauthenticated_client, monkeypatch):
+    calls = []
+
+    def fake_get(url, **kw):
+        calls.append(kw["params"])
+        return FakeResponse(200, content=b"%PDF-1.4 fake")
+
+    _configure(monkeypatch, fake_get)
+
+    response = unauthenticated_client.get("/api/public/bi-report/pdf?facility=ATLANTA&report=location-heatmap")
+
+    assert response.status_code == 200
+    assert "location-heatmap-ATLANTA" in response.headers["content-disposition"]
+    assert calls == [{"report": "location-heatmap", "facility": "ATLANTA"}]
+
+
+def test_pdf_rejects_path_like_report_without_calling_upstream(unauthenticated_client, monkeypatch):
+    def fail(url, **kw):
+        raise AssertionError("upstream should not be called")
+
+    _configure(monkeypatch, fail)
+
+    response = unauthenticated_client.get("/api/public/bi-report/pdf?facility=PERRIS&report=../etc")
+
+    assert response.status_code == 400
+
+
+def test_pdf_surfaces_upstream_unknown_report(unauthenticated_client, monkeypatch):
+    _configure(monkeypatch, lambda url, **kw: FakeResponse(400, payload={"detail": "Unknown report"}))
+
+    response = unauthenticated_client.get("/api/public/bi-report/pdf?facility=PERRIS&report=not-there")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Unknown report."

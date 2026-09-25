@@ -872,26 +872,48 @@ def bi_report_facilities():
     return res.json()
 
 
+@app.get("/api/public/bi-report/reports")
+def bi_report_reports():
+    # The report registry: each report is a folder (report.json + SQL + RTF) on Skynet.
+    res = _bi_report_get("/reports")
+    if res.status_code != 200:
+        raise HTTPException(status_code=502, detail="Live report server could not list reports.")
+    return res.json()
+
+
 @app.get("/api/public/bi-report/pdf")
-def bi_report_pdf(facility: str, request: Request, source: str = "wms"):
-    # source=legacy renders the same report from the IBM i-style LGCYLIB copy of the data.
+def bi_report_pdf(
+    facility: str, request: Request, report: str = "inventory-aging", source: Optional[str] = None
+):
+    # report = a registry id; source = one of that report's data sources (e.g. "legacy" renders
+    # the aging report from the IBM i-style LGCYLIB copy). Skynet checks both exist.
     if not re.fullmatch(r"[A-Z0-9-]{1,20}", facility):
         raise HTTPException(status_code=400, detail="Invalid facility code.")
-    if source not in ("wms", "legacy"):
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,39}", report):
+        raise HTTPException(status_code=400, detail="Invalid report.")
+    if source is not None and not re.fullmatch(r"[a-z0-9-]{1,20}", source):
         raise HTTPException(status_code=400, detail="Invalid source.")
     forwarded = request.headers.get("x-forwarded-for", "")
     client_id = forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
     if _bi_report_rate_limited(client_id):
         raise HTTPException(status_code=429, detail="Too many report requests - try again in a few minutes.")
-    res = _bi_report_get("/report.pdf", params={"facility": facility, "source": source})
+    params = {"report": report, "facility": facility}
+    if source is not None:
+        params["source"] = source
+    res = _bi_report_get("/report.pdf", params=params)
     if res.status_code == 400:
-        raise HTTPException(status_code=400, detail="Unknown facility.")
+        try:
+            detail = res.json().get("detail", "Unknown report, source or facility.")
+        except ValueError:
+            detail = "Unknown report, source or facility."
+        raise HTTPException(status_code=400, detail=detail + ".")
     if res.status_code != 200:
         raise HTTPException(status_code=502, detail="Live report generation failed.")
+    suffix = f"-{source}" if source and source != "wms" else ""
     return Response(
         content=res.content,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="inventory-aging-{facility}{"-legacy" if source == "legacy" else ""}.pdf"'},
+        headers={"Content-Disposition": f'inline; filename="{report}-{facility}{suffix}.pdf"'},
     )
 
 OPERATIONAL_ALERTS_QUERY = """
