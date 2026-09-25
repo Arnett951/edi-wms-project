@@ -257,7 +257,7 @@ export default function BiPublisherDemo() {
           <p className="bip-sub">Aged inventory by SKU and location, built with Db2 and Oracle BI Publisher</p>
           <span className="bip-synthetic">Synthetic WMS data · portfolio demonstration</span>
           <p>
-            My first POC built Db2 and Oracle BI Publisher. The Inventory Aging report identifies
+            I built this POC to get hands-on with Db2 and Oracle BI Publisher. The Inventory Aging report identifies
             aging stock by SKU and location while exposing lot/DOT manufacturing data,
             availability, allocations and inventory value. Built as a hands-on demonstration of operational WMS
             reporting, SQL datasets, XML data models and RTF/PDF report generation.
