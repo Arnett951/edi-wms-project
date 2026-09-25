@@ -8,8 +8,8 @@ const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const PDF_URL = "/bi-publisher/inventory-aging-report.pdf";
 const PREVIEW_URL = "/bi-publisher/inventory-aging-preview.jpg";
 const FALLBACK_FACILITIES = [
-  { code: "DEMO-EAST", name: "Demo East Tire Distribution" },
-  { code: "DEMO-WEST", name: "Demo West Tire Distribution" },
+  { code: "ATLANTA", name: "Demo West Tire Distribution" },
+  { code: "PERRIS", name: "Demo East Tire Distribution" },
 ];
 // After this long, tell the visitor the API is probably cold-starting.
 const SLOW_NOTICE_MS = 5000;

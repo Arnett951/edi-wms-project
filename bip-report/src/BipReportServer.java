@@ -11,6 +11,9 @@ import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -86,6 +89,9 @@ public class BipReportServer {
             rtf.setOutput(xslPath);
             rtf.process();
             log("compiled " + template + " -> " + xslPath);
+            if (!"false".equalsIgnoreCase(env("KEEP_GROUP_HEADERS", "true"))) {
+                keepGroupHeadersWithRows(xslPath);
+            }
         } else {
             log("using pre-built XSL " + xslPath);
         }
@@ -97,6 +103,37 @@ public class BipReportServer {
         server.setExecutor(Executors.newFixedThreadPool(4));
         server.start();
         log("listening on :" + port);
+    }
+
+    /**
+     * Stops a SKU group's header from being stranded at the bottom of a page.
+     *
+     * The RTF has "Keep with next" on nearly every paragraph, including the detail
+     * row, so every group chains to the next one and the engine can't honor the keeps
+     * at all. This strips those keeps and puts keep-with-next only on the group
+     * table's header rows (the rows before the current-group() detail loop): the
+     * header stays with its first lot, and the group can still break between lots.
+     * Equivalent to setting it in Word on just the three header rows; turn off with
+     * KEEP_GROUP_HEADERS=false once the template does that itself.
+     */
+    private static void keepGroupHeadersWithRows(String path) throws IOException {
+        Path file = Paths.get(path);
+        String xsl = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+        String stripped = xsl.replaceAll("\\s*keep-with-next(\\.within-page)?=\"always\"", "");
+
+        int group = stripped.indexOf("<xsl:for-each-group");
+        int table = group < 0 ? -1 : stripped.indexOf("<fo:table ", group);
+        int detail = table < 0 ? -1 : stripped.indexOf("<xsl:for-each select=\"current-group()\"", table);
+        if (detail < 0) {
+            log("KEEP_GROUP_HEADERS: group table / detail loop not found; XSL left unchanged");
+            return;
+        }
+        String headerRows = stripped.substring(table, detail)
+            .replace("<fo:table-row ", "<fo:table-row keep-with-next.within-page=\"always\" ");
+        int kept = headerRows.split("keep-with-next", -1).length - 1;
+        Files.write(file, (stripped.substring(0, table) + headerRows + stripped.substring(detail))
+            .getBytes(StandardCharsets.UTF_8));
+        log("KEEP_GROUP_HEADERS: keep-with-next on " + kept + " group header rows");
     }
 
     private static void handleFacilities(HttpExchange ex) throws IOException {

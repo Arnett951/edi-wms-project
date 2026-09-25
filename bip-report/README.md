@@ -62,6 +62,15 @@ To test a template without touching the live container, run a second one on anot
 the RTF mounted over `TEMPLATE_RTF`. Set `TEMPLATE_XSL` to skip RTF compilation and render a
 hand-edited XSL-FO instead; that's useful for isolating pagination and keep issues.
 
+### Pagination patch (`KEEP_GROUP_HEADERS`)
+
+By default the service post-processes the compiled XSL-FO at startup. It strips the template's
+blanket "Keep with next" settings, which chain every SKU group to the next one so the engine
+can't honor any of them, and puts keep-with-next only on each group's header rows. A SKU header
+then never lands at the bottom of a page without its lots. Once `WAREHOUSE.rtf` sets this itself
+(Keep with next on the three group header rows only, off on the detail row), run the container
+with `-e KEEP_GROUP_HEADERS=false` so the live output matches Template Builder's preview exactly.
+
 ## Routes
 
 - `GET /health`
