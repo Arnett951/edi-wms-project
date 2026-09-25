@@ -281,7 +281,7 @@ export default function BiPublisherDemo() {
       <LiveReport />
 
       <div className="panel bip-story">
-        <h2>Closing the gap: Db2 + BI Publisher in under a week</h2>
+        <h2>Closing the gap: Db2 + BI Publisher</h2>
         <p className="bip-story-intro">
           My production background is SQL Server, Informix, Crystal Reports, Manhattan WMOS and EDI. Db2 and
           Oracle BI Publisher were new to me, so I built this lab to learn the stack hands-on, including the
