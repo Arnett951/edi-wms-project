@@ -873,14 +873,17 @@ def bi_report_facilities():
 
 
 @app.get("/api/public/bi-report/pdf")
-def bi_report_pdf(facility: str, request: Request):
+def bi_report_pdf(facility: str, request: Request, source: str = "wms"):
+    # source=legacy renders the same report from the IBM i-style LGCYLIB copy of the data.
     if not re.fullmatch(r"[A-Z0-9-]{1,20}", facility):
         raise HTTPException(status_code=400, detail="Invalid facility code.")
+    if source not in ("wms", "legacy"):
+        raise HTTPException(status_code=400, detail="Invalid source.")
     forwarded = request.headers.get("x-forwarded-for", "")
     client_id = forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
     if _bi_report_rate_limited(client_id):
         raise HTTPException(status_code=429, detail="Too many report requests - try again in a few minutes.")
-    res = _bi_report_get("/report.pdf", params={"facility": facility})
+    res = _bi_report_get("/report.pdf", params={"facility": facility, "source": source})
     if res.status_code == 400:
         raise HTTPException(status_code=400, detail="Unknown facility.")
     if res.status_code != 200:
@@ -888,7 +891,7 @@ def bi_report_pdf(facility: str, request: Request):
     return Response(
         content=res.content,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="inventory-aging-{facility}.pdf"'},
+        headers={"Content-Disposition": f'inline; filename="inventory-aging-{facility}{"-legacy" if source == "legacy" else ""}.pdf"'},
     )
 
 OPERATIONAL_ALERTS_QUERY = """

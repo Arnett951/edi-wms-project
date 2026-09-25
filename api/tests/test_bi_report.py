@@ -43,7 +43,34 @@ def test_pdf_passes_facility_through_and_returns_pdf(unauthenticated_client, mon
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
     assert response.content.startswith(b"%PDF")
-    assert calls == [("http://skynet.test:8790/report.pdf", {"facility": "DEMO-WEST"})]
+    assert calls == [("http://skynet.test:8790/report.pdf", {"facility": "DEMO-WEST", "source": "wms"})]
+
+
+def test_pdf_passes_legacy_source_through(unauthenticated_client, monkeypatch):
+    calls = []
+
+    def fake_get(url, **kw):
+        calls.append(kw["params"])
+        return FakeResponse(200, content=b"%PDF-1.4 fake")
+
+    _configure(monkeypatch, fake_get)
+
+    response = unauthenticated_client.get("/api/public/bi-report/pdf?facility=PERRIS&source=legacy")
+
+    assert response.status_code == 200
+    assert "legacy" in response.headers["content-disposition"]
+    assert calls == [{"facility": "PERRIS", "source": "legacy"}]
+
+
+def test_pdf_rejects_unknown_source_without_calling_upstream(unauthenticated_client, monkeypatch):
+    def fail(url, **kw):
+        raise AssertionError("upstream should not be called")
+
+    _configure(monkeypatch, fail)
+
+    response = unauthenticated_client.get("/api/public/bi-report/pdf?facility=PERRIS&source=oracle")
+
+    assert response.status_code == 400
 
 
 def test_pdf_rejects_malformed_facility_without_calling_upstream(unauthenticated_client, monkeypatch):

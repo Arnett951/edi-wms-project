@@ -74,8 +74,8 @@ with `-e KEEP_GROUP_HEADERS=false` so the live output matches Template Builder's
 ## Routes
 
 - `GET /health`
-- `GET /facilities`: `[{"code":"DEMO-EAST","name":"..."}, ...]` from `WMS.WAREHOUSE`
-- `GET /report.pdf?facility=DEMO-EAST`: `application/pdf`. Unknown codes return 400.
+- `GET /facilities`: `[{"code":"PERRIS","name":"..."}, ...]` from `WMS.WAREHOUSE`
+- `GET /report.pdf?facility=PERRIS[&source=wms|legacy]`: `application/pdf`. `source=legacy` renders from the IBM i-style `LGCYLIB` copy (see `sql/legacy/`). Unknown codes or sources return 400.
 
 ## API configuration
 

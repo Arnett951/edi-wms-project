@@ -33,7 +33,12 @@ import java.util.concurrent.Executors;
  * Publisher core engine -- the same RTFProcessor -> FOProcessor path Template
  * Builder for Word uses for its local preview.
  *
- * Routes: GET /health, GET /facilities (JSON), GET /report.pdf?facility=CODE
+ * Routes: GET /health, GET /facilities (JSON), GET /report.pdf?facility=CODE[&source=wms|legacy]
+ *
+ * source=legacy runs the same report from LGCYLIB, a copy of the data in legacy IBM
+ * i conventions (numeric YYYYMMDD/CYYMMDD dates, CHAR padding, status codes, natural
+ * keys; see bip-report/sql/legacy/). The query converts back to the same column
+ * names, so the RTF template is unchanged.
  */
 public class BipReportServer {
 
@@ -61,6 +66,44 @@ public class BipReportServer {
 
     private static final String FACILITIES_SQL =
         "SELECT WAREHOUSE_CODE, WAREHOUSE_NAME FROM WMS.WAREHOUSE ORDER BY WAREHOUSE_CODE WITH UR";
+
+    // Same as sql/legacy/02_inventory_aging_legacy.sql, plus the facility parameter.
+    private static final String LEGACY_DATASET_SQL =
+        "WITH INV AS ("
+      + "  SELECT il.*, CASE WHEN il.ILRCVD = 0 THEN NULL"
+      + "              ELSE DATE(TIMESTAMP_FORMAT(DIGITS(il.ILRCVD), 'YYYYMMDD')) END AS RCV_DATE"
+      + "  FROM LGCYLIB.INVLOTP il"
+      + "  WHERE il.ILRCVD > 0"
+      + "    AND il.ILRCVD <= INTEGER(VARCHAR_FORMAT(CURRENT DATE - 7 DAYS, 'YYYYMMDD'))"
+      + "    AND il.ILWHSE = ?"
+      + "), LOT AS ("
+      + "  SELECT la.*, CASE WHEN la.LAMFGD = 0 THEN NULL"
+      + "              ELSE DATE(TIMESTAMP_FORMAT(DIGITS(DECIMAL(la.LAMFGD + 19000000, 8, 0)), 'YYYYMMDD')) END AS MFG_DT"
+      + "  FROM LGCYLIB.LOTATRP la"
+      + ")"
+      + " SELECT TRIM(inv.ILWHSE) AS WAREHOUSE_CODE, TRIM(wh.WHNAME) AS WAREHOUSE_NAME,"
+      + " TRIM(im.IMSKU) AS SKU, TRIM(im.IMDESC) AS DESCRIPTION, TRIM(im.IMSIZE) AS TIRE_SIZE,"
+      + " TRIM(inv.ILLOC) AS LOCATION_CODE, TRIM(lm.LMZONE) AS ZONE, TRIM(inv.ILLOT) AS LOT_NUMBER,"
+      + " TRIM(lot.LADOT) AS DOT_CODE, lot.LAMFWK AS MFG_WEEK, lot.LAMFYR AS MFG_YEAR,"
+      + " lot.MFG_DT AS MFG_DATE, inv.RCV_DATE AS RECEIVED_DATE,"
+      + " MIN(inv.RCV_DATE) OVER (PARTITION BY inv.ILWHSE, inv.ILSKU) AS OLDEST_RECEIVED_DATE,"
+      + " DAYS(CURRENT DATE) - DAYS(inv.RCV_DATE) AS WAREHOUSE_AGE_DAYS,"
+      + " DAYS(CURRENT DATE) - DAYS(lot.MFG_DT) AS TIRE_AGE_DAYS,"
+      + " CASE inv.ILSTAT WHEN 'A' THEN 'AVAILABLE' WHEN 'H' THEN 'HOLD' WHEN 'D' THEN 'DAMAGED'"
+      + "                 ELSE 'UNKNOWN' END AS STOCK_STATUS,"
+      + " INTEGER(inv.ILOHQT) AS ON_HAND_QTY, INTEGER(inv.ILRSQT) AS RESERVED_QTY,"
+      + " CASE WHEN inv.ILSTAT = 'A' THEN INTEGER(inv.ILOHQT - inv.ILRSQT) ELSE 0 END AS AVAILABLE_QTY,"
+      + " DECIMAL(inv.ILOHQT * im.IMUCST, 14, 2) AS INVENTORY_VALUE"
+      + " FROM INV inv"
+      + " JOIN LGCYLIB.WHSMSTP wh ON wh.WHWHSE = inv.ILWHSE"
+      + " JOIN LGCYLIB.ITMMSTP im ON im.IMSKU = inv.ILSKU"
+      + " JOIN LGCYLIB.LOCMSTP lm ON lm.LMWHSE = inv.ILWHSE AND lm.LMLOC = inv.ILLOC"
+      + " LEFT JOIN LOT lot ON lot.LASKU = inv.ILSKU AND lot.LALOT = inv.ILLOT"
+      + " ORDER BY 1, 3, 12, 13"
+      + " WITH UR";
+
+    private static final String LEGACY_FACILITIES_SQL =
+        "SELECT TRIM(WHWHSE), TRIM(WHNAME) FROM LGCYLIB.WHSMSTP ORDER BY 1 WITH UR";
 
     // Re-rendering the same facility within this window just returns the last PDF.
     private static final long PDF_CACHE_MS = 60_000;
@@ -139,7 +182,7 @@ public class BipReportServer {
     private static void handleFacilities(HttpExchange ex) throws IOException {
         try {
             StringBuilder json = new StringBuilder("[");
-            for (Map.Entry<String, String> f : loadFacilities().entrySet()) {
+            for (Map.Entry<String, String> f : loadFacilities(FACILITIES_SQL).entrySet()) {
                 if (json.length() > 1) json.append(',');
                 json.append("{\"code\":\"").append(jsonEscape(f.getKey()))
                     .append("\",\"name\":\"").append(jsonEscape(f.getValue())).append("\"}");
@@ -154,14 +197,21 @@ public class BipReportServer {
 
     private static void handleReport(HttpExchange ex) throws IOException {
         String facility = queryParam(ex, "facility");
+        String source = queryParam(ex, "source");
+        boolean legacy = "legacy".equals(source);
+        if (source != null && !legacy && !"wms".equals(source)) {
+            send(ex, 400, "application/json", "{\"detail\":\"Unknown source\"}".getBytes(StandardCharsets.UTF_8));
+            return;
+        }
         try {
-            // Only codes that actually exist in WMS.WAREHOUSE are accepted.
-            if (facility == null || !loadFacilities().containsKey(facility)) {
+            // Only codes that exist in the chosen source's warehouse table are accepted.
+            if (facility == null || !loadFacilities(legacy ? LEGACY_FACILITIES_SQL : FACILITIES_SQL).containsKey(facility)) {
                 send(ex, 400, "application/json", "{\"detail\":\"Unknown facility\"}".getBytes(StandardCharsets.UTF_8));
                 return;
             }
-            byte[] pdf = renderCached(facility);
-            ex.getResponseHeaders().set("Content-Disposition", "inline; filename=\"inventory-aging-" + facility + ".pdf\"");
+            byte[] pdf = renderCached(facility, legacy);
+            ex.getResponseHeaders().set("Content-Disposition",
+                "inline; filename=\"inventory-aging-" + facility + (legacy ? "-legacy" : "") + ".pdf\"");
             send(ex, 200, "application/pdf", pdf);
         } catch (Exception e) {
             log("report failed for " + facility + ": " + e);
@@ -169,12 +219,13 @@ public class BipReportServer {
         }
     }
 
-    private static synchronized byte[] renderCached(String facility) throws Exception {
-        Long at = pdfCacheAt.get(facility);
-        if (at != null && System.currentTimeMillis() - at < PDF_CACHE_MS) return pdfCache.get(facility);
+    private static synchronized byte[] renderCached(String facility, boolean legacy) throws Exception {
+        String key = (legacy ? "legacy:" : "wms:") + facility;
+        Long at = pdfCacheAt.get(key);
+        if (at != null && System.currentTimeMillis() - at < PDF_CACHE_MS) return pdfCache.get(key);
 
         long start = System.currentTimeMillis();
-        byte[] xml = buildXml(facility);
+        byte[] xml = buildXml(facility, legacy ? LEGACY_DATASET_SQL : DATASET_SQL);
         ByteArrayOutputStream pdf = new ByteArrayOutputStream();
         FOProcessor fo = new FOProcessor();
         fo.setData(new ByteArrayInputStream(xml));
@@ -184,17 +235,17 @@ public class BipReportServer {
         fo.generate();
 
         byte[] bytes = pdf.toByteArray();
-        pdfCache.put(facility, bytes);
-        pdfCacheAt.put(facility, System.currentTimeMillis());
-        log("rendered " + facility + " (" + xml.length + " B xml -> " + bytes.length + " B pdf) in "
+        pdfCache.put(key, bytes);
+        pdfCacheAt.put(key, System.currentTimeMillis());
+        log("rendered " + key + " (" + xml.length + " B xml -> " + bytes.length + " B pdf) in "
             + (System.currentTimeMillis() - start) + " ms");
         return bytes;
     }
 
     /** Same element names as the Template Builder sample XML (Inventory.xml). */
-    private static byte[] buildXml(String facility) throws Exception {
+    private static byte[] buildXml(String facility, String datasetSql) throws Exception {
         StringBuilder xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DATA>\n");
-        try (Connection c = connect(); PreparedStatement ps = c.prepareStatement(DATASET_SQL)) {
+        try (Connection c = connect(); PreparedStatement ps = c.prepareStatement(datasetSql)) {
             ps.setString(1, facility);
             try (ResultSet rs = ps.executeQuery()) {
                 ResultSetMetaData md = rs.getMetaData();
@@ -227,9 +278,9 @@ public class BipReportServer {
         return s == null ? null : s.trim();
     }
 
-    private static Map<String, String> loadFacilities() throws Exception {
+    private static Map<String, String> loadFacilities(String sql) throws Exception {
         Map<String, String> out = new LinkedHashMap<>();
-        try (Connection c = connect(); PreparedStatement ps = c.prepareStatement(FACILITIES_SQL);
+        try (Connection c = connect(); PreparedStatement ps = c.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) out.put(rs.getString(1).trim(), rs.getString(2).trim());
         }

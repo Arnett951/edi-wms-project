@@ -1484,6 +1484,13 @@ td {
   background: #b3141a;
 }
 
+.bip-live-source {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #64748b;
+  max-width: 900px;
+}
+
 .bip-live-note {
   margin-top: 12px;
   font-size: 13px;
