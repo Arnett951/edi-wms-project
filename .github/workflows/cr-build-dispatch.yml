@@ -75,3 +75,84 @@ jobs:
           else
             python pipeline/implement_change_request.py "${{ inputs.cr_number }}" --repo .
           fi
+
+  # If the build job dies before implement_change_request.py gets to handle
+  # its own failure (checkout, setup, a crash in the script itself), the CR
+  # stays at "Approved (Gate 1) by ..." forever -- the dashboard shows it as
+  # implementing and has no button for that status. This sends it back to
+  # Pending Build Approval, same as the script's own failure path, so Admin
+  # can hit Start Build again once whatever broke is fixed.
+  #
+  # Deliberately no checkout: a broken checkout is one of the failures this
+  # has to cover, so the SQL update is inline rather than via cr_lib. The
+  # WHERE clause only touches a CR still at "Approved (Gate 1)" -- if the
+  # script already reset it, or got as far as "Implemented", it's left alone.
+  mark-failed:
+    needs: build
+    if: ${{ failure() || cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install ODBC Driver 18 for SQL Server
+        run: |
+          curl -sSL -O https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+          sudo dpkg -i packages-microsoft-prod.deb
+          sudo apt-get update
+          ACCEPT_EULA=Y sudo apt-get install -y msodbcsql18
+
+      - run: pip install pyodbc
+
+      - name: Return CR to Pending Build Approval
+        env:
+          SQL_SERVER: ${{ secrets.SQL_SERVER }}
+          SQL_DATABASE: ${{ secrets.SQL_DATABASE }}
+          SQL_USER: ${{ secrets.SQL_USER }}
+          SQL_PASSWORD: ${{ secrets.SQL_PASSWORD }}
+          CR_NUMBER: ${{ inputs.cr_number }}
+          RUN_ID: ${{ github.run_id }}
+        shell: python
+        run: |
+          import os, time, pyodbc
+
+          conn_str = (
+              "Driver={ODBC Driver 18 for SQL Server};"
+              f"Server=tcp:{os.environ['SQL_SERVER']},1433;"
+              f"Database={os.environ['SQL_DATABASE']};"
+              f"Uid={os.environ['SQL_USER']};Pwd={os.environ['SQL_PASSWORD']};"
+              "Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+          )
+          # Azure SQL serverless may be auto-paused (40613) -- same retry
+          # as cr_lib.get_conn().
+          for attempt in range(6):
+              try:
+                  conn = pyodbc.connect(conn_str)
+                  break
+              except pyodbc.Error as exc:
+                  if "40613" not in str(exc) or attempt == 5:
+                      raise
+                  time.sleep(10)
+
+          cr_number = int(os.environ["CR_NUMBER"])
+          status = (
+              "Pending Build Approval -- previous attempt failed "
+              f"(build workflow error, see Actions run {os.environ['RUN_ID']}), retry below"
+          )
+          cur = conn.cursor()
+          cur.execute(
+              """
+              UPDATE dbo.ChangeRequests
+              SET Status = ?, ProgressStatus = 'failed',
+                  LastAction = 'Build workflow failed before implementation finished',
+                  UpdatedDateTime = sysutcdatetime()
+              WHERE CRNumber = ? AND Status LIKE 'Approved (Gate 1)%'
+              """,
+              status, cr_number,
+          )
+          conn.commit()
+          if cur.rowcount:
+              print(f"CR-{cr_number:03d} returned to Pending Build Approval.")
+          else:
+              print(f"CR-{cr_number:03d} was not at 'Approved (Gate 1)' -- left unchanged.")
