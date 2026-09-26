@@ -615,6 +615,17 @@ td {
   vertical-align: middle;
 }
 
+.skynet-badge {
+  background: #111;
+  color: #fff;
+  font-family: "Orbitron", "Eurostile", "Arial Black", sans-serif;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .14em;
+  padding: 2px 8px;
+  border: 1px solid #444;
+}
+
 .chat-bubble.bot {
   background: #f1f5f9;
   color: #0f172a;

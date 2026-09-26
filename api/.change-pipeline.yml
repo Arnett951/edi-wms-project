@@ -6,6 +6,16 @@ stack_summary: >
   FastAPI (Python) API + React/Vite dashboard, Azure SQL Database,
   Azure Blob Storage, Azure Data Factory, deployed via GitHub Actions
   to Azure Static Web Apps + App Service.
+  Separately, bip-report/ is a BI Publisher report service on a home-lab
+  server (Skynet) over IBM Db2 LUW (database TIREWMS, schema WMS). Its
+  reports are folders under bip-report/reports/<id>/ (report.json +
+  dataset.sql + template.rtf) and the Operational Reporting page lists them
+  at runtime, so a new report needs no dashboard or API change. Nothing in
+  bip-report/ is deployed by CI: after merge a human copies the folder to
+  Skynet. The Db2 tables are NOT in Azure SQL, so list_schema_columns can't
+  see them; use grep_repo on bip-report/ SQL files instead (the deployed
+  API's grep_repo only sees api/, so there it finds nothing). Rules for
+  implementing report CRs: bip-report/CLAUDE.md.
 
 # Lives inside api/ (not repo root) so it deploys with the FastAPI backend --
 # .github/workflows/deploy-api-appservice.yml only packages the api/ folder.
@@ -18,6 +28,7 @@ tiers:
       - New SQL view or query
       - New dashboard chart on existing tables
       - New read-only API GET endpoint
+      - New BI Publisher report folder in bip-report/reports/ (SELECT-only Db2 SQL + RTF; deployed to Skynet manually after merge)
   B:
     label: Semi-automated — extra reviewer attention at Gate 1
     examples:

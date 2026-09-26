@@ -175,7 +175,9 @@ Instructions:
 1. Implement exactly the requirements listed above. Do not touch anything
    listed under "Out of scope". Follow the existing code style and patterns
    already used in this repo -- look at neighboring files before writing new
-   ones.
+   ones. If a folder you change has a CLAUDE.md (e.g. bip-report/CLAUDE.md),
+   read it first and follow it; some parts of this repo are deployed by hand
+   outside CI, and that file says what to hand back instead.
 2. If tests already exist for the affected area, run them. Add tests for new
    behavior where the existing codebase has a pattern for doing so.
 3. Commit your changes with a message that starts with "CR-{cr_number:03d}:".

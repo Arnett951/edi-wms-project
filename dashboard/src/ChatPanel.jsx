@@ -218,7 +218,9 @@ export default function ChatPanel({ onClose, canDownloadFiles = false }) {
           return (
             <div key={m.id ?? i} className={`chat-bubble ${m.role}`}>
               {(m.source === "ai" || m.source === "local_ai") && (
-                <span className="ai-badge">{m.source === "local_ai" ? "AI-L" : "AI"}</span>
+                m.source === "local_ai"
+                  ? <span className="ai-badge skynet-badge">SKYNET</span>
+                  : <span className="ai-badge">AI</span>
               )}
               {m.text}
               {m.downloads?.length > 0 && (
