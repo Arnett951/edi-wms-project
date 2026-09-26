@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 .env
 .venv/
+
+# Built by deploy-api-containerapp.yml for the container image only
+api/_repo_snapshot/

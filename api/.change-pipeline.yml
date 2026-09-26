@@ -13,8 +13,9 @@ stack_summary: >
   at runtime, so a new report needs no dashboard or API change. Nothing in
   bip-report/ is deployed by CI: after merge a human copies the folder to
   Skynet. The Db2 tables are NOT in Azure SQL, so list_schema_columns can't
-  see them; use grep_repo on bip-report/ SQL files instead (the deployed
-  API's grep_repo only sees api/, so there it finds nothing). Rules for
+  see them; use grep_repo on bip-report/ SQL files instead (e.g. search
+  "vics-bol" or a Db2 table name to find an existing report's dataset.sql
+  and model a new one on it). Rules for
   implementing report CRs: bip-report/CLAUDE.md.
 
 # Lives inside api/ (not repo root) so it deploys with the FastAPI backend --

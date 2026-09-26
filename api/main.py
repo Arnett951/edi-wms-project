@@ -237,8 +237,12 @@ CR_INTAKE_SYSTEM_PROMPT = cr_lib.build_system_prompt(CR_PIPELINE_CONFIG)
 # cr_lib.find_forced_tier_c_keyword(), which doesn't trust the model at all.
 # ---------------------------------------------------------------------------
 
-GREP_REPO_ALLOWED_EXTENSIONS = {".py", ".ts", ".tsx", ".js", ".jsx", ".sql", ".yml", ".yaml", ".json", ".md"}
-GREP_REPO_EXCLUDED_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"}
+GREP_REPO_ALLOWED_EXTENSIONS = {".py", ".java", ".ts", ".tsx", ".js", ".jsx", ".sql", ".yml", ".yaml", ".json", ".md"}
+GREP_REPO_EXCLUDED_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build", "_repo_snapshot"}
+API_DIR = Path(__file__).resolve().parent
+# Populated only by .github/workflows/deploy-api-containerapp.yml before the
+# image build; never exists (and isn't needed) in a local checkout.
+GREP_REPO_SNAPSHOT_DIR = API_DIR / "_repo_snapshot"
 GREP_REPO_MAX_MATCHES = 20
 GREP_REPO_MAX_FILES_SCANNED = 3000
 
@@ -255,34 +259,50 @@ def grep_repo(query: str) -> dict:
     # REPO_ROOT (main.py's parent.parent) resolves to the container's
     # filesystem root there, and rglob'ing it walks the entire OS image.
     # Same "no .git = not a real checkout" signal require_git_repo() already
-    # uses; fall back to just this file's own directory, the one thing
-    # guaranteed to exist and be scoped correctly in every environment.
-    search_root = REPO_ROOT if (REPO_ROOT / ".git").exists() else Path(__file__).resolve().parent
+    # uses. In the container, search api/ itself plus the source snapshot
+    # the deploy workflow copies in (bip-report/, sql/, dashboard/src/ --
+    # see GREP_REPO_SNAPSHOT_DIR), so the intake model can still find e.g.
+    # an existing BI Publisher report's dataset.sql. Both are reported with
+    # repo-relative paths, same as local dev.
+    if (REPO_ROOT / ".git").exists():
+        search_roots = [(REPO_ROOT, "")]
+    else:
+        search_roots = [(API_DIR, "api/")]
+        if GREP_REPO_SNAPSHOT_DIR.exists():
+            search_roots.append((GREP_REPO_SNAPSHOT_DIR, ""))
 
     pattern = re.compile(re.escape(query), re.IGNORECASE)
     matches = []
     scanned = 0
-    for path in search_root.rglob("*"):
-        if len(matches) >= GREP_REPO_MAX_MATCHES or scanned >= GREP_REPO_MAX_FILES_SCANNED:
-            break
-        if path.is_dir() or path.suffix not in GREP_REPO_ALLOWED_EXTENSIONS:
-            continue
-        if GREP_REPO_EXCLUDED_DIRS & set(path.parts):
-            continue
-        scanned += 1
-        try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        for line_number, line in enumerate(text.splitlines(), start=1):
-            if pattern.search(line):
-                matches.append({
-                    "file": str(path.relative_to(search_root)),
-                    "line": line_number,
-                    "snippet": line.strip()[:200],
-                })
+    for search_root, prefix in search_roots:
+        for path in search_root.rglob("*"):
+            if len(matches) >= GREP_REPO_MAX_MATCHES or scanned >= GREP_REPO_MAX_FILES_SCANNED:
+                break
+            if path.is_dir() or path.suffix not in GREP_REPO_ALLOWED_EXTENSIONS:
+                continue
+            relative = path.relative_to(search_root)
+            if GREP_REPO_EXCLUDED_DIRS & set(relative.parts):
+                continue
+            scanned += 1
+            # Match the path too, so a folder/report id lookup ("vics-bol")
+            # finds the files in it, not just other files that mention it.
+            if pattern.search(relative.as_posix()):
+                matches.append({"file": prefix + relative.as_posix(), "line": 0, "snippet": "(path match)"})
                 if len(matches) >= GREP_REPO_MAX_MATCHES:
                     break
+            try:
+                text = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            for line_number, line in enumerate(text.splitlines(), start=1):
+                if pattern.search(line):
+                    matches.append({
+                        "file": prefix + relative.as_posix(),
+                        "line": line_number,
+                        "snippet": line.strip()[:200],
+                    })
+                    if len(matches) >= GREP_REPO_MAX_MATCHES:
+                        break
     return {"matches": matches}
 
 
@@ -322,7 +342,7 @@ CR_INTAKE_TOOLS = [
     {
         "name": "grep_repo",
         "description": (
-            "Case-insensitive text search across this repo's source files (.py, .ts, .tsx, "
+            "Case-insensitive text search across this repo's source files (.py, .java, .ts, .tsx, "
             ".sql, .yml, .json, .md). Use this to verify whether a request actually touches "
             "auth/security code, a specific table, or an existing feature, instead of "
             "guessing. Returns up to 20 matching file:line snippets."

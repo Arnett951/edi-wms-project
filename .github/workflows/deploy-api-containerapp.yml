@@ -5,6 +5,9 @@ on:
     branches: [ main ]
     paths:
       - 'api/**'
+      - 'bip-report/**'
+      - 'sql/**'
+      - 'dashboard/src/**'
       - '.github/workflows/deploy-api-containerapp.yml'
   workflow_dispatch:
 
@@ -30,6 +33,21 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # The image is built from ./api only, so the CR intake chat's grep_repo
+      # tool would otherwise see nothing outside api/ -- e.g. it couldn't find
+      # an existing BI Publisher report to model a new one on. Copy just the
+      # searchable source files (same extensions grep_repo reads, no fonts/
+      # RTFs/PDFs) into api/_repo_snapshot/ so they land in the image.
+      - name: Snapshot searchable source for grep_repo
+        run: |
+          mkdir -p api/_repo_snapshot
+          find bip-report sql dashboard/src -type f \
+            \( -name '*.py' -o -name '*.java' -o -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \
+               -o -name '*.sql' -o -name '*.yml' -o -name '*.yaml' -o -name '*.json' -o -name '*.md' \) \
+            -not -path '*/node_modules/*' -not -path '*/__pycache__/*' \
+            -exec cp --parents {} api/_repo_snapshot/ \;
+          echo "Snapshot: $(find api/_repo_snapshot -type f | wc -l) files, $(du -sh api/_repo_snapshot | cut -f1)"
 
       # Builds remotely in ACR (no local Docker needed) and tags with the
       # commit SHA -- a floating `:latest` tag silently failed to trigger a
