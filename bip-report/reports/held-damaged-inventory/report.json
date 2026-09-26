@@ -1,0 +1,10 @@
+{
+  "title": "Held & Damaged Inventory",
+  "description": "Every lot at the facility whose stock status is not AVAILABLE (HOLD, DAMAGED, QC and any other status), grouped by status and oldest receipt first: location, SKU, lot, on-hand quantity, received date, age in days and extended value, with a subtotal per status and a grand total.",
+  "order": 15,
+  "template": "template.rtf",
+  "formats": ["pdf"],
+  "sources": [
+    { "id": "wms", "label": "Modern schema (WMS.*)", "sql": "dataset.sql", "note": "" }
+  ]
+}
