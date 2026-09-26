@@ -9,6 +9,7 @@
 --   On-time ship %  shipped orders with actual ship date on or before promised ship date
 --   Unit fill rate  units shipped / units ordered, on orders shipped in the period
 --   Past due        orders not shipped whose promised ship date is before period end
+--   Shipments       distinct BOLs on orders shipped in the period; trailers = distinct pickup trailers
 --   Dock-to-stock   hours from receipt to first putaway of the same item and lot
 --   Aged > 180 days share of on-hand units received more than 180 days before period end
 -- ============================================================================
@@ -26,7 +27,7 @@ PERIOD AS (
 ),
 SHIPPED AS (
     -- One row per order shipped in the period, with its week bucket (0 = most recent)
-    SELECT o.ORDER_ID,
+    SELECT o.ORDER_ID, o.SHIPMENT_ID,
            CASE WHEN o.ACTUAL_SHIP_DATE <= o.PROMISED_SHIP_DATE THEN 1 ELSE 0 END AS ON_TIME,
            SUM(l.ORDERED_QTY) AS UNITS_ORDERED, SUM(l.SHIPPED_QTY) AS UNITS_SHIPPED,
            (DAYS(p.P_END) - DAYS(o.ACTUAL_SHIP_DATE)) / 7 AS WK
@@ -36,7 +37,7 @@ SHIPPED AS (
     CROSS JOIN PERIOD p
     WHERE o.ORDER_STATUS = 'SHIPPED'
       AND o.ACTUAL_SHIP_DATE BETWEEN p.P_START AND p.P_END
-    GROUP BY o.ORDER_ID, o.ACTUAL_SHIP_DATE, o.PROMISED_SHIP_DATE, p.P_END
+    GROUP BY o.ORDER_ID, o.SHIPMENT_ID, o.ACTUAL_SHIP_DATE, o.PROMISED_SHIP_DATE, p.P_END
 ),
 RECEIPTS AS (
     -- Receipts into this facility in the period, with hours until first putaway
@@ -70,6 +71,9 @@ M AS (
     -- Every metric as a number, in one row
     SELECT (SELECT COUNT(*) FROM SHIPPED) AS ORDERS_SHIPPED,
            (SELECT COALESCE(SUM(UNITS_SHIPPED), 0) FROM SHIPPED) AS UNITS_SHIPPED,
+           (SELECT COUNT(DISTINCT SHIPMENT_ID) FROM SHIPPED) AS SHIPMENTS,
+           (SELECT COUNT(DISTINCT sh.TRAILER_NUMBER) FROM SHIPPED x
+             JOIN WMS.SHIPMENT sh ON sh.SHIPMENT_ID = x.SHIPMENT_ID) AS TRAILERS,
            (SELECT ROUND(100.0 * SUM(ON_TIME) / NULLIF(COUNT(*), 0), 1) FROM SHIPPED) AS ON_TIME_PCT,
            (SELECT ROUND(100.0 * SUM(UNITS_SHIPPED) / NULLIF(SUM(UNITS_ORDERED), 0), 1) FROM SHIPPED) AS FILL_PCT,
            (SELECT COUNT(*) FROM WMS.OUTBOUND_ORDER o JOIN FAC f ON f.WAREHOUSE_ID = o.WAREHOUSE_ID
@@ -89,22 +93,24 @@ KPI AS (
     SELECT 1 AS SEQ, 'Outbound' AS SECTION, 'Orders shipped' AS KPI_NAME,
            VARCHAR(ORDERS_SHIPPED) AS KPI_VALUE, '' AS KPI_TARGET, 'INFO' AS KPI_STATUS FROM M
     UNION ALL SELECT 2, 'Outbound', 'Units shipped', TRIM(VARCHAR_FORMAT(UNITS_SHIPPED, '999,999,990')), '', 'INFO' FROM M
-    UNION ALL SELECT 3, 'Outbound', 'On-time ship %', TRIM(VARCHAR_FORMAT(ON_TIME_PCT, '990.0')) || '%', '>= 98.0%',
+    UNION ALL SELECT 3, 'Outbound', 'Shipments (BOLs)', VARCHAR(SHIPMENTS), '', 'INFO' FROM M
+    UNION ALL SELECT 4, 'Outbound', 'Trailers dispatched', VARCHAR(TRAILERS), '', 'INFO' FROM M
+    UNION ALL SELECT 5, 'Outbound', 'On-time ship %', TRIM(VARCHAR_FORMAT(ON_TIME_PCT, '990.0')) || '%', '>= 98.0%',
            CASE WHEN ON_TIME_PCT >= 98 THEN 'MET' ELSE 'MISSED' END FROM M
-    UNION ALL SELECT 4, 'Outbound', 'Unit fill rate', TRIM(VARCHAR_FORMAT(FILL_PCT, '990.0')) || '%', '>= 99.5%',
+    UNION ALL SELECT 6, 'Outbound', 'Unit fill rate', TRIM(VARCHAR_FORMAT(FILL_PCT, '990.0')) || '%', '>= 99.5%',
            CASE WHEN FILL_PCT >= 99.5 THEN 'MET' ELSE 'MISSED' END FROM M
-    UNION ALL SELECT 5, 'Outbound', 'Open orders past due', VARCHAR(PAST_DUE), '0',
+    UNION ALL SELECT 7, 'Outbound', 'Open orders past due', VARCHAR(PAST_DUE), '0',
            CASE WHEN PAST_DUE = 0 THEN 'MET' ELSE 'MISSED' END FROM M
-    UNION ALL SELECT 6, 'Inbound', 'Receipts', VARCHAR(RECEIPT_COUNT), '', 'INFO' FROM M
-    UNION ALL SELECT 7, 'Inbound', 'Units received', TRIM(VARCHAR_FORMAT(UNITS_RECEIVED, '999,999,990')), '', 'INFO' FROM M
-    UNION ALL SELECT 8, 'Inbound', 'Avg dock-to-stock (hours)',
+    UNION ALL SELECT 8, 'Inbound', 'Receipts', VARCHAR(RECEIPT_COUNT), '', 'INFO' FROM M
+    UNION ALL SELECT 9, 'Inbound', 'Units received', TRIM(VARCHAR_FORMAT(UNITS_RECEIVED, '999,999,990')), '', 'INFO' FROM M
+    UNION ALL SELECT 10, 'Inbound', 'Avg dock-to-stock (hours)',
            COALESCE(TRIM(VARCHAR_FORMAT(DOCK_TO_STOCK_HRS, '990.0')), 'n/a'), '<= 24.0',
            CASE WHEN DOCK_TO_STOCK_HRS IS NULL THEN 'INFO' WHEN DOCK_TO_STOCK_HRS <= 24 THEN 'MET' ELSE 'MISSED' END FROM M
-    UNION ALL SELECT 9, 'Inventory', 'Units on hand', TRIM(VARCHAR_FORMAT(ON_HAND, '999,999,990')), '', 'INFO' FROM M
-    UNION ALL SELECT 10, 'Inventory', 'Inventory value', '$' || TRIM(VARCHAR_FORMAT(VALUE_ON_HAND, '999,999,990')), '', 'INFO' FROM M
-    UNION ALL SELECT 11, 'Inventory', 'Units aged over 180 days', TRIM(VARCHAR_FORMAT(AGED_180_PCT, '990.0')) || '%', '<= 10.0%',
+    UNION ALL SELECT 11, 'Inventory', 'Units on hand', TRIM(VARCHAR_FORMAT(ON_HAND, '999,999,990')), '', 'INFO' FROM M
+    UNION ALL SELECT 12, 'Inventory', 'Inventory value', '$' || TRIM(VARCHAR_FORMAT(VALUE_ON_HAND, '999,999,990')), '', 'INFO' FROM M
+    UNION ALL SELECT 13, 'Inventory', 'Units aged over 180 days', TRIM(VARCHAR_FORMAT(AGED_180_PCT, '990.0')) || '%', '<= 10.0%',
            CASE WHEN AGED_180_PCT <= 10 THEN 'MET' ELSE 'MISSED' END FROM M
-    UNION ALL SELECT 12, 'Inventory', 'Units on hold or damaged', TRIM(VARCHAR_FORMAT(NOT_AVAILABLE, '999,999,990')), '', 'INFO' FROM M
+    UNION ALL SELECT 14, 'Inventory', 'Units on hold or damaged', TRIM(VARCHAR_FORMAT(NOT_AVAILABLE, '999,999,990')), '', 'INFO' FROM M
 ),
 W (WK) AS (VALUES 0, 1, 2, 3),
 WEEKS AS (

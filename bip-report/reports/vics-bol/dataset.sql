@@ -1,5 +1,5 @@
 -- ============================================================================
--- VICS Bill of Lading dataset: the most recent loaded trailer for one facility.
+-- VICS Bill of Lading dataset: the facility's trailer at the dock (LOADED), else its latest shipment.
 --
 -- Two kinds of rows, like the heatmap:
 --   ROW_TYPE = ORDER      one per customer PO   (Customer Order Information)
@@ -16,7 +16,8 @@ WITH SHIP AS (
     JOIN WMS.WAREHOUSE w ON w.WAREHOUSE_ID = s.WAREHOUSE_ID
     WHERE w.WAREHOUSE_CODE = :P_FACILITY
       AND s.SHIPMENT_STATUS IN ('LOADED', 'SHIPPED')
-    ORDER BY s.SHIP_DATE DESC, s.SHIPMENT_ID DESC
+    -- The trailer still at the dock (LOADED) first; otherwise the most recent shipment
+    ORDER BY CASE WHEN s.SHIPMENT_STATUS = 'LOADED' THEN 0 ELSE 1 END, s.SHIP_DATE DESC, s.SHIPMENT_ID DESC
     FETCH FIRST 1 ROW ONLY
 ),
 BARCODE AS (
