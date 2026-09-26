@@ -141,11 +141,11 @@
       <div class="phase-grid">
         <div class="col shipped">
           <div class="col-label">What shipped</div>
-          <div class="col-body">Claude-driven chat intake that clarifies scope, classifies Tier A/B/C, and writes a structured change request — built essentially as scoped.</div>
+          <div class="col-body">Claude-driven chat intake that clarifies scope, classifies blast radius as Tier A/B/C, and writes a structured change request — built essentially as scoped. The model can check its own call with read-only repo and schema lookups, but it doesn't get the final word on risk: a deterministic keyword floor scans the request, title, risk notes, requirements, and touch points for terms like <code class="mono">auth</code>, <code class="mono">password</code>, <code class="mono">secret</code>, <code class="mono">credential</code>, <code class="mono">token</code>, <code class="mono">role</code>, <code class="mono">permission</code>, <code class="mono">drop table</code>, <code class="mono">connection string</code>, and <code class="mono">api key</code>. Any hit hard-forces Tier C and auto-denies the CR, whatever tier the model chose.</div>
         </div>
         <div class="col cut">
           <div class="col-label">What was cut</div>
-          <div class="col-body">Nothing significant. Closest phase to the original spec.</div>
+          <div class="col-body">Nothing significant. Closest phase to the original spec. The keyword floor is a plain substring match on purpose, so it errs toward over-blocking: "author" trips <code class="mono">auth</code>, and "does not touch auth" still escalates. A false Tier C costs one manual review. A missed one could let the agent touch security code.</div>
         </div>
       </div>
     </li>
