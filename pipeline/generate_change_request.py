@@ -118,7 +118,13 @@ def main():
         sys.exit(1)
     from anthropic import Anthropic
     client = Anthropic(api_key=api_key)
-    system_prompt = cr_lib.build_system_prompt(config)
+    # The shared prompt tells the model to verify with grep_repo etc., but this
+    # CLI passes no tools -- without this note it writes fake tool calls as
+    # plain text and the interactive loop treats them as questions.
+    system_prompt = cr_lib.build_system_prompt(config) + (
+        "\n\nNo tools are available in this session: skip step 3 and base "
+        "touch_points on the request and the stack description above."
+    )
     cr_data, transcript = run_intake(client, system_prompt, initial_request)
 
     dollars, ratio_pct = cr_lib.compute_cost(cr_data.get("estimated_tokens", 0), config)
