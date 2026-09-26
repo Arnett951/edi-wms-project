@@ -1,0 +1,10 @@
+{
+  "title": "Client KPI Scorecard",
+  "description": "One-page client scorecard for the facility's last 4 shipping weeks: outbound (orders, units, on-time ship %, fill rate, past due), inbound (receipts, dock-to-stock) and inventory (on hand, value, aging, holds), each against an SLA target, plus a weekly trend. PDF for the client meeting or Excel for the client's own analysis.",
+  "order": 5,
+  "template": "template.rtf",
+  "formats": ["pdf", "xlsx"],
+  "sources": [
+    { "id": "wms", "label": "Modern schema (WMS.*)", "sql": "dataset.sql", "note": "" }
+  ]
+}

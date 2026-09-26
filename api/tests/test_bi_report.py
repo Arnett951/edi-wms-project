@@ -160,3 +160,33 @@ def test_pdf_surfaces_upstream_unknown_report(unauthenticated_client, monkeypatc
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Unknown report."
+
+
+def test_pdf_passes_xlsx_format_through(unauthenticated_client, monkeypatch):
+    calls = []
+
+    def fake_get(url, **kw):
+        calls.append(kw["params"])
+        return FakeResponse(200, content=b"PK fake xlsx")
+
+    _configure(monkeypatch, fake_get)
+
+    response = unauthenticated_client.get(
+        "/api/public/bi-report/pdf?facility=PERRIS&report=client-kpi-scorecard&format=xlsx")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/vnd.openxmlformats")
+    assert "attachment" in response.headers["content-disposition"]
+    assert "client-kpi-scorecard-PERRIS.xlsx" in response.headers["content-disposition"]
+    assert calls == [{"report": "client-kpi-scorecard", "facility": "PERRIS", "format": "xlsx"}]
+
+
+def test_pdf_rejects_unknown_format_without_calling_upstream(unauthenticated_client, monkeypatch):
+    def fail(url, **kw):
+        raise AssertionError("upstream should not be called")
+
+    _configure(monkeypatch, fail)
+
+    response = unauthenticated_client.get("/api/public/bi-report/pdf?facility=PERRIS&format=docx")
+
+    assert response.status_code == 400

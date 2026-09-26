@@ -883,7 +883,11 @@ def bi_report_reports():
 
 @app.get("/api/public/bi-report/pdf")
 def bi_report_pdf(
-    facility: str, request: Request, report: str = "inventory-aging", source: Optional[str] = None
+    facility: str,
+    request: Request,
+    report: str = "inventory-aging",
+    source: Optional[str] = None,
+    format: str = "pdf",
 ):
     # report = a registry id; source = one of that report's data sources (e.g. "legacy" renders
     # the aging report from the IBM i-style LGCYLIB copy). Skynet checks both exist.
@@ -893,6 +897,9 @@ def bi_report_pdf(
         raise HTTPException(status_code=400, detail="Invalid report.")
     if source is not None and not re.fullmatch(r"[a-z0-9-]{1,20}", source):
         raise HTTPException(status_code=400, detail="Invalid source.")
+    # Output format; Skynet checks the report actually offers it (report.json "formats").
+    if format not in ("pdf", "xlsx"):
+        raise HTTPException(status_code=400, detail="Invalid format.")
     forwarded = request.headers.get("x-forwarded-for", "")
     client_id = forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
     if _bi_report_rate_limited(client_id):
@@ -900,6 +907,8 @@ def bi_report_pdf(
     params = {"report": report, "facility": facility}
     if source is not None:
         params["source"] = source
+    if format != "pdf":
+        params["format"] = format
     res = _bi_report_get("/report.pdf", params=params)
     if res.status_code == 400:
         try:
@@ -910,6 +919,12 @@ def bi_report_pdf(
     if res.status_code != 200:
         raise HTTPException(status_code=502, detail="Live report generation failed.")
     suffix = f"-{source}" if source and source != "wms" else ""
+    if format == "xlsx":
+        return Response(
+            content=res.content,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{report}-{facility}{suffix}.xlsx"'},
+        )
     return Response(
         content=res.content,
         media_type="application/pdf",

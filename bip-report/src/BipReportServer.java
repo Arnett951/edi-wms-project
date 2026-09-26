@@ -52,7 +52,7 @@ import java.util.regex.Pattern;
  * Routes: GET /health
  *         GET /facilities                          facilities from WMS.WAREHOUSE
  *         GET /reports                             the registry, for the report picker
- *         GET /report.pdf?report=ID&facility=CODE[&source=ID]
+ *         GET /report.pdf?report=ID&facility=CODE[&source=ID][&format=pdf|xlsx]
  */
 public class BipReportServer {
 
@@ -243,6 +243,7 @@ public class BipReportServer {
                 sources.add(p);
             }
             pub.add("sources", sources);
+            pub.add("formats", formatsOf(r));
             out.add(pub);
         }
         send(ex, 200, "application/json", GSON.toJson(out).getBytes(StandardCharsets.UTF_8));
@@ -270,12 +271,21 @@ public class BipReportServer {
                 sendError(ex, 400, "Unknown facility");
                 return;
             }
-            byte[] pdf = renderCached(reportId, source, facility);
+            String format = orDefault(queryParam(ex, "format"), "pdf");
+            if (!formatsOf(report).contains(new com.google.gson.JsonPrimitive(format))) {
+                sendError(ex, 400, "Unsupported format");
+                return;
+            }
+            boolean xlsx = format.equals("xlsx");
+            byte[] out = renderCached(reportId, source, facility, format);
             String suffix = source == report.getAsJsonArray("sources").get(0).getAsJsonObject()
                 ? "" : "-" + source.get("id").getAsString();
+            // Excel downloads as an attachment; PDF opens inline in the browser.
             ex.getResponseHeaders().set("Content-Disposition",
-                "inline; filename=\"" + reportId + "-" + facility + suffix + ".pdf\"");
-            send(ex, 200, "application/pdf", pdf);
+                (xlsx ? "attachment" : "inline") + "; filename=\"" + reportId + "-" + facility + suffix
+                + (xlsx ? ".xlsx" : ".pdf") + "\"");
+            send(ex, 200, xlsx ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                : "application/pdf", out);
         } catch (Exception e) {
             log("report failed for " + reportId + "/" + facility + ": " + e);
             sendError(ex, 502, "Report generation failed");
@@ -331,13 +341,22 @@ public class BipReportServer {
 
     // ------------------------------------------------------------------ rendering
 
-    private static synchronized byte[] renderCached(String reportId, JsonObject source, String facility) throws Exception {
+    /** Output formats a report offers: report.json "formats", default PDF only. */
+    private static JsonArray formatsOf(JsonObject report) {
+        if (report.has("formats")) return report.getAsJsonArray("formats");
+        JsonArray pdfOnly = new JsonArray();
+        pdfOnly.add("pdf");
+        return pdfOnly;
+    }
+
+    private static synchronized byte[] renderCached(String reportId, JsonObject source, String facility,
+                                                    String format) throws Exception {
         String sqlFile = source.get("sql").getAsString();
         String xslPath = compiledXsl(reportId);
         File sqlPath = new File(new File(reportsDir, reportId), sqlFile);
         // Template and SQL modification times are part of the key, so an edited report
         // renders fresh immediately instead of serving the cached PDF.
-        String key = reportId + "|" + source.get("id").getAsString() + "|" + facility
+        String key = reportId + "|" + source.get("id").getAsString() + "|" + facility + "|" + format
             + "|" + xslCompiledFrom.get(reportId) + "|" + sqlPath.lastModified();
         Long at = pdfCacheAt.get(key);
         if (at != null && System.currentTimeMillis() - at < PDF_CACHE_MS) return pdfCache.get(key);
@@ -350,17 +369,18 @@ public class BipReportServer {
         fo.setData(new ByteArrayInputStream(xml));
         fo.setTemplate(xslPath);
         fo.setOutput(pdf);
-        fo.setOutputFormat(FOProcessor.FORMAT_PDF);
+        // Same template, same XML: the engine renders PDF or a native .xlsx workbook.
+        fo.setOutputFormat(format.equals("xlsx") ? FOProcessor.FORMAT_XLSX : FOProcessor.FORMAT_PDF);
         if (new File(xdoConfig).isFile()) fo.setConfig(xdoConfig);   // font mappings (barcodes)
         fo.generate();
 
         byte[] bytes = pdf.toByteArray();
-        String prefix = reportId + "|" + source.get("id").getAsString() + "|" + facility + "|";
+        String prefix = reportId + "|" + source.get("id").getAsString() + "|" + facility + "|" + format + "|";
         pdfCache.keySet().removeIf(k -> k.startsWith(prefix));   // drop renders of older versions
         pdfCacheAt.keySet().removeIf(k -> k.startsWith(prefix));
         pdfCache.put(key, bytes);
         pdfCacheAt.put(key, System.currentTimeMillis());
-        log("rendered " + key + " (" + xml.length + " B xml -> " + bytes.length + " B pdf) in "
+        log("rendered " + key + " (" + xml.length + " B xml -> " + bytes.length + " B out) in "
             + (System.currentTimeMillis() - start) + " ms");
         return bytes;
     }

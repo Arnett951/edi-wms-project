@@ -111,15 +111,20 @@ function LiveReport() {
   const [facilities, setFacilities] = useState(FALLBACK_FACILITIES);
   const [facility, setFacility] = useState(FALLBACK_FACILITIES[0].code);
   const [source, setSource] = useState("wms");
+  const [format, setFormat] = useState("pdf");
   const [status, setStatus] = useState("idle"); // idle | loading | done | error
   const [slow, setSlow] = useState(false);
   const [error, setError] = useState(null);
   const [pdf, setPdf] = useState(null); // { url, reportTitle, facility, sourceLabel, at }
+  const [download, setDownload] = useState(null); // { filename, reportTitle, facility, at } for Excel
   const pdfUrlRef = useRef(null);
 
   const report = reports.find((r) => r.id === reportId) || reports[0];
   const sources = report.sources.length ? report.sources : [{ id: "wms", label: "Default", note: "" }];
   const currentSource = sources.find((src) => src.id === source) || sources[0];
+  // Output formats the report offers (report.json "formats"); PDF only unless it lists Excel.
+  const formats = Array.isArray(report.formats) && report.formats.length ? report.formats : ["pdf"];
+  const currentFormat = formats.includes(format) ? format : "pdf";
 
   useEffect(() => {
     // Also warms the scale-to-zero API before the visitor clicks Run.
@@ -143,6 +148,7 @@ function LiveReport() {
     setReportId(id);
     const next = reports.find((r) => r.id === id);
     setSource(next && next.sources.length ? next.sources[0].id : "wms");
+    setFormat("pdf");
   }
 
   async function runReport() {
@@ -152,14 +158,31 @@ function LiveReport() {
     const slowTimer = setTimeout(() => setSlow(true), SLOW_NOTICE_MS);
     try {
       const params = new URLSearchParams({ report: report.id, facility, source: currentSource.id });
+      if (currentFormat !== "pdf") params.set("format", currentFormat);
       const res = await fetch(`${API_BASE}/api/public/bi-report/pdf?${params}`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.detail || `Report request failed (HTTP ${res.status}).`);
       }
       const blob = await res.blob();
+      if (currentFormat === "xlsx") {
+        // Excel is a download, not an inline preview.
+        const filename = `${report.id}-${facility}.xlsx`;
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        setDownload({ filename, reportTitle: report.title, facility, at: new Date() });
+        setStatus("done");
+        return;
+      }
       if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
       pdfUrlRef.current = URL.createObjectURL(blob);
+      setDownload(null);
       setPdf({
         url: pdfUrlRef.current,
         reportTitle: report.title,
@@ -212,8 +235,18 @@ function LiveReport() {
             </select>
           </label>
         )}
+        {formats.length > 1 && (
+          <label>
+            <span>Output</span>
+            <select value={currentFormat} onChange={(e) => setFormat(e.target.value)} disabled={status === "loading"}>
+              {formats.map((f) => (
+                <option key={f} value={f}>{f === "xlsx" ? "Excel (.xlsx)" : "PDF"}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <button type="button" onClick={runReport} disabled={status === "loading"}>
-          {status === "loading" ? "Generating..." : "Run Live Report"}
+          {status === "loading" ? "Generating..." : currentFormat === "xlsx" ? "Download Excel" : "Run Live Report"}
         </button>
       </div>
       <p className="bip-live-source">
@@ -223,6 +256,12 @@ function LiveReport() {
       {status === "loading" && slow && (
         <p className="bip-live-note">
           Waking the API (it scales to zero when idle) - the first request can take a few minutes.
+        </p>
+      )}
+      {download && status !== "loading" && (
+        <p className="bip-live-note">
+          Downloaded <b>{download.filename}</b>: {download.reportTitle} for {download.facility}, rendered to Excel by
+          the BI Publisher engine at {download.at.toLocaleTimeString()}.
         </p>
       )}
       {status === "error" && (
