@@ -1,0 +1,9 @@
+{
+  "title": "Trailer Manifest",
+  "description": "Manifest for the facility's single most recent trailer (same scope as the VICS BOL): trailer, seal and PRO number, then customer POs with quantity and weight, grouped by customer with a subtotal per PO and per customer and a grand total that reconciles with the VICS BOL.",
+  "order": 35,
+  "template": "template.rtf",
+  "sources": [
+    { "id": "wms", "label": "Modern schema (WMS.*)", "sql": "dataset.sql", "note": "" }
+  ]
+}
