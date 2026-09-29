@@ -38,10 +38,12 @@ PO_ROWS AS (
     GROUP BY CUSTOMER_NAME, CUSTOMER_PO
 ),
 TOT AS (
-    -- Grand total; INTEGER(SUM(WEIGHT)) matches the VICS BOL TOTAL_WEIGHT.
+    -- Grand total over the order lines, not PO_ROWS: summing the already
+    -- truncated PO_WEIGHTs could drift from the VICS BOL TOTAL_WEIGHT, which
+    -- is INTEGER(SUM(WEIGHT)) over LINES.
     SELECT SUM(QTY) AS TOTAL_QTY, INTEGER(SUM(WEIGHT)) AS TOTAL_WEIGHT,
-           COUNT(*) AS PO_COUNT
-    FROM PO_ROWS
+           (SELECT COUNT(*) FROM PO_ROWS) AS PO_COUNT
+    FROM LINES
 ),
 HDR AS (
     SELECT s.TRAILER_NUMBER, s.SEAL_NUMBER, s.PRO_NUMBER, s.BOL_NUMBER,
