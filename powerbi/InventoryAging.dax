@@ -1,0 +1,127 @@
+// Inventory Aging: DAX for the InventoryAging table (from InventoryAging.pq).
+// Calculated columns: Table view > New column. Measures: New measure.
+// Ages come from the SQL view and are as of the last Power BI refresh.
+
+// ===================== Calculated columns =====================
+
+Warehouse Age Bucket =
+SWITCH (
+    TRUE (),
+    InventoryAging[WAREHOUSE_AGE_DAYS] <= 30, "7-30 days",
+    InventoryAging[WAREHOUSE_AGE_DAYS] <= 60, "31-60 days",
+    InventoryAging[WAREHOUSE_AGE_DAYS] <= 90, "61-90 days",
+    InventoryAging[WAREHOUSE_AGE_DAYS] <= 180, "91-180 days",
+    "180+ days"
+)
+
+// Sort helper: select [Warehouse Age Bucket] > Column tools > Sort by column > this.
+Warehouse Age Bucket Sort =
+SWITCH (
+    TRUE (),
+    InventoryAging[WAREHOUSE_AGE_DAYS] <= 30, 1,
+    InventoryAging[WAREHOUSE_AGE_DAYS] <= 60, 2,
+    InventoryAging[WAREHOUSE_AGE_DAYS] <= 90, 3,
+    InventoryAging[WAREHOUSE_AGE_DAYS] <= 180, 4,
+    5
+)
+
+// Tire (DOT) age in years from the manufacture date; blank if the lot has no DOT row.
+Tire Age Years =
+IF (
+    ISBLANK ( InventoryAging[TIRE_AGE_DAYS] ),
+    BLANK (),
+    ROUNDDOWN ( InventoryAging[TIRE_AGE_DAYS] / 365.25, 0 )
+)
+
+Tire Age Bucket =
+VAR y = InventoryAging[TIRE_AGE_DAYS] / 365.25
+RETURN
+    SWITCH (
+        TRUE (),
+        ISBLANK ( InventoryAging[TIRE_AGE_DAYS] ), "No DOT data",
+        y < 1, "Under 1 yr",
+        y < 3, "1-3 yrs",
+        y < 6, "3-6 yrs",
+        "6+ yrs"
+    )
+
+Tire Age Bucket Sort =
+VAR y = InventoryAging[TIRE_AGE_DAYS] / 365.25
+RETURN
+    SWITCH (
+        TRUE (),
+        ISBLANK ( InventoryAging[TIRE_AGE_DAYS] ), 5,
+        y < 1, 1,
+        y < 3, 2,
+        y < 6, 3,
+        4
+    )
+
+// ===================== Measures =====================
+
+On Hand Qty = SUM ( InventoryAging[ON_HAND_QTY] )
+
+Reserved Qty = SUM ( InventoryAging[RESERVED_QTY] )
+
+Available Qty = SUM ( InventoryAging[AVAILABLE_QTY] )
+
+Inventory Value = SUM ( InventoryAging[INVENTORY_VALUE] )
+
+Lot Count = COUNTROWS ( InventoryAging )
+
+SKU Count = DISTINCTCOUNT ( InventoryAging[SKU] )
+
+// Unit-weighted, so a 400-tire lot counts more than a 4-tire lot.
+Avg Warehouse Age (Days) =
+DIVIDE (
+    SUMX ( InventoryAging, InventoryAging[WAREHOUSE_AGE_DAYS] * InventoryAging[ON_HAND_QTY] ),
+    [On Hand Qty]
+)
+
+Max Warehouse Age (Days) = MAX ( InventoryAging[WAREHOUSE_AGE_DAYS] )
+
+Oldest Received Date = MIN ( InventoryAging[RECEIVED_DATE] )
+
+Avg Tire Age (Years) =
+DIVIDE (
+    SUMX (
+        FILTER ( InventoryAging, NOT ISBLANK ( InventoryAging[TIRE_AGE_DAYS] ) ),
+        InventoryAging[TIRE_AGE_DAYS] * InventoryAging[ON_HAND_QTY]
+    ),
+    CALCULATE ( [On Hand Qty], NOT ISBLANK ( InventoryAging[TIRE_AGE_DAYS] ) )
+) / 365.25
+
+// Over 90 days in the building: the slow-mover exposure number.
+Value Aged 90+ =
+CALCULATE ( [Inventory Value], InventoryAging[WAREHOUSE_AGE_DAYS] > 90 )
+
+% Value Aged 90+ = DIVIDE ( [Value Aged 90+], [Inventory Value] )
+
+Qty Aged 90+ =
+CALCULATE ( [On Hand Qty], InventoryAging[WAREHOUSE_AGE_DAYS] > 90 )
+
+// Tires 6+ years past manufacture: the common sell-by risk line for tire stock.
+Qty DOT 6+ Yrs =
+CALCULATE ( [On Hand Qty], InventoryAging[TIRE_AGE_DAYS] >= 6 * 365.25 )
+
+Value DOT 6+ Yrs =
+CALCULATE ( [Inventory Value], InventoryAging[TIRE_AGE_DAYS] >= 6 * 365.25 )
+
+// Held / damaged / anything not AVAILABLE.
+Qty Not Available =
+CALCULATE ( [On Hand Qty], InventoryAging[STOCK_STATUS] <> "AVAILABLE" )
+
+// Share of each bucket in the current filter context (use with the bucket on an axis).
+% of Total Value =
+DIVIDE (
+    [Inventory Value],
+    CALCULATE ( [Inventory Value], REMOVEFILTERS ( InventoryAging[Warehouse Age Bucket], InventoryAging[Warehouse Age Bucket Sort] ) )
+)
+
+// Card subtitle, e.g. "Data as of 2026-10-01 14:05 UTC" (LoadInfo query).
+Data As Of =
+"Data as of " & FORMAT ( MAX ( LoadInfo[LOADED_AT] ), "yyyy-mm-dd hh:nn" ) & " UTC"
+
+Report Title =
+VAR f = SELECTEDVALUE ( InventoryAging[WAREHOUSE_CODE], "All facilities" )
+RETURN "Warehouse Inventory Aging - " & f

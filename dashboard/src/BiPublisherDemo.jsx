@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import PowerBiReport from "./PowerBiReport";
 
 // Portfolio section for the Db2 + Oracle BI Publisher lab. The static sample
 // PDF/preview live in public/bi-publisher/; the "Run it live" panel calls the
@@ -318,6 +319,8 @@ export default function BiPublisherDemo() {
       </div>
 
       <LiveReport />
+
+      <PowerBiReport />
 
       <div className="panel bip-story">
         <h2>Closing the gap: Db2 + BI Publisher</h2>
