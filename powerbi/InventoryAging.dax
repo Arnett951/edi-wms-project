@@ -101,8 +101,9 @@ Qty Aged 90+ =
 CALCULATE ( [On Hand Qty], InventoryAging[WAREHOUSE_AGE_DAYS] > 90 )
 
 // Tires 6+ years past manufacture: the common sell-by risk line for tire stock.
+// + 0 so the card shows 0 instead of "--" when nothing qualifies.
 Qty DOT 6+ Yrs =
-CALCULATE ( [On Hand Qty], InventoryAging[TIRE_AGE_DAYS] >= 6 * 365.25 )
+CALCULATE ( [On Hand Qty], InventoryAging[TIRE_AGE_DAYS] >= 6 * 365.25 ) + 0
 
 Value DOT 6+ Yrs =
 CALCULATE ( [Inventory Value], InventoryAging[TIRE_AGE_DAYS] >= 6 * 365.25 )
@@ -121,6 +122,17 @@ DIVIDE (
 // Card subtitle, e.g. "Data as of 2026-10-01 14:05 UTC" (LoadInfo query).
 Data As Of =
 "Data as of " & FORMAT ( MAX ( LoadInfo[LOADED_AT] ), "yyyy-mm-dd hh:nn" ) & " UTC"
+
+// Bar color by age: Bars > Color > fx > Format style "Field value" > this measure.
+Age Bucket Color =
+SWITCH (
+    MAX ( InventoryAging[Warehouse Age Bucket Sort] ),
+    1, "#94A3B8",
+    2, "#64748B",
+    3, "#F59E0B",
+    4, "#EA580C",
+    "#D71920"
+)
 
 Report Title =
 VAR f = SELECTEDVALUE ( InventoryAging[WAREHOUSE_CODE], "All facilities" )

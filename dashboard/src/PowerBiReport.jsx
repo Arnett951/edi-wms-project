@@ -4,7 +4,8 @@ import React from "react";
 // Reporting tab. Data path: Db2 (Skynet) -> powerbi/copy_db2_to_azuresql.py ->
 // Azure SQL wmslab.vw_InventoryAging -> Power BI (import) -> Publish to web.
 // Paste the "Publish to web" iframe src here; until then a placeholder shows.
-const POWERBI_EMBED_URL = "";
+const POWERBI_EMBED_URL =
+  "https://app.powerbi.com/view?r=eyJrIjoiOWZjY2VjOTEtN2JlNS00YTIxLWJkNmYtODQ2OGQyODRkZmQ5IiwidCI6ImMxZDk2ZGJhLTcyOTAtNDk2ZC04YTlmLTNmNzQ1YjI0OTJkNCJ9";
 
 const PBI_FLOW = [
   { step: "Db2 WMS", detail: "Same TIREWMS lab tables the BI Publisher report reads" },
