@@ -79,7 +79,7 @@ table InventoryAging
 
 	measure 'Qty DOT 6+ Yrs' =
 			
-			CALCULATE ( [On Hand Qty], InventoryAging[TIRE_AGE_DAYS] >= 6 * 365.25 )
+			CALCULATE ( [On Hand Qty], InventoryAging[TIRE_AGE_DAYS] >= 6 * 365.25 ) + 0
 		formatString: 0
 		lineageTag: 87ff2825-45bf-4cdb-8205-78467e1c8416
 
@@ -117,6 +117,47 @@ table InventoryAging
 			VAR f = SELECTEDVALUE ( InventoryAging[WAREHOUSE_CODE], "All facilities" )
 			RETURN "Warehouse Inventory Aging - " & f
 		lineageTag: b6f6e918-6c97-4c18-a7c3-3e449274e25e
+
+	/// On hand that is held, damaged or reserved.
+	measure 'Unavailable Qty' = [On Hand Qty] - [Available Qty]
+		formatString: 0
+		lineageTag: 5e1aa119-cefd-41df-85a4-3d008d814542
+
+	/// Bar color by warehouse age: Bars > Color > fx > Field value.
+	measure 'Age Bucket Color' =
+			SWITCH (
+			    MAX ( InventoryAging[Warehouse Age Bucket Sort] ),
+			    1, "#94A3B8",
+			    2, "#64748B",
+			    3, "#F59E0B",
+			    4, "#EA580C",
+			    "#D71920"
+			)
+		lineageTag: 0c762a9f-6c3c-4adf-b926-a96c3a085a9c
+
+	measure 'Item Description' = SELECTEDVALUE ( InventoryAging[DESCRIPTION] )
+		lineageTag: 6fe1a2ff-b993-4838-be58-a28b3734f1dd
+
+	measure 'Tire Size' = SELECTEDVALUE ( InventoryAging[TIRE_SIZE] )
+		lineageTag: 90cad10b-6c44-4030-a4d1-a731b8dd17f7
+
+	/// Lot rows show the location; SKU rows with several lots show Multiple.
+	measure 'Location' = SELECTEDVALUE ( InventoryAging[LOCATION_CODE], "Multiple" )
+		lineageTag: 27e813f2-b15f-4ebb-9711-fdd4de0a7e18
+
+	measure 'Location Zone' = SELECTEDVALUE ( InventoryAging[ZONE], "Multiple" )
+		lineageTag: 66595c75-5c5f-48b0-8c63-0479a9867153
+
+	measure 'Stock Status' = SELECTEDVALUE ( InventoryAging[STOCK_STATUS], "Mixed" )
+		lineageTag: 76fce4de-6c46-4fb1-ac43-506b1c47d1f2
+
+	measure 'DOT Code' = SELECTEDVALUE ( InventoryAging[DOT_CODE] )
+		lineageTag: b99b2b3a-10b0-4439-b3fb-8fddbcfc5615
+
+	/// Oldest manufacture date in context.
+	measure 'Mfg Date' = MIN ( InventoryAging[MFG_DATE] )
+		formatString: Short Date
+		lineageTag: 16d0e5d1-6af9-43fc-8709-18a09c24e695
 
 	column WAREHOUSE_CODE
 		dataType: string
