@@ -1,0 +1,62 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
+  "name": "ed9a3d3bec7192755829",
+  "position": {
+    "x": 856,
+    "y": 254,
+    "z": 7000,
+    "height": 330,
+    "width": 704,
+    "tabOrder": 7000
+  },
+  "visual": {
+    "visualType": "clusteredBarChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "InventoryAging"
+                    }
+                  },
+                  "Property": "Tire Age Bucket"
+                }
+              },
+              "queryRef": "InventoryAging.Tire Age Bucket",
+              "nativeQueryRef": "Tire Age Bucket",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "InventoryAging"
+                        }
+                      },
+                      "Property": "ON_HAND_QTY"
+                    }
+                  },
+                  "Function": 0
+                }
+              },
+              "queryRef": "Sum(InventoryAging.ON_HAND_QTY)",
+              "nativeQueryRef": "Sum of ON_HAND_QTY"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

@@ -1,0 +1,25 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-US
+	valueFilterBehavior: independent
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation __PBI_TimeIntelligenceEnabled = 1
+
+annotation PBI_QueryOrder = ["LoadInfo","InventoryAging"]
+
+annotation PBI_ProTooling = ["DevMode"]
+
+ref table LoadInfo
+ref table DateTableTemplate_a49e1a4c-9d61-4902-88da-b770beb57f1c
+ref table LocalDateTable_09118457-d83d-428d-832d-1e07cd980e79
+ref table InventoryAging
+ref table LocalDateTable_cc0ec757-9987-4a20-8ccc-a6b726cfffa9
+ref table LocalDateTable_b1d02aab-ac03-42c7-bc62-9f09acaa96cf
+ref table LocalDateTable_5bc32968-2cbe-46a8-93a3-64983fc0377d
+
+ref cultureInfo en-US
+

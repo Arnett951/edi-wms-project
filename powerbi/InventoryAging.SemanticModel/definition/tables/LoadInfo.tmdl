@@ -1,0 +1,49 @@
+table LoadInfo
+	lineageTag: ecd35ee4-42f0-4fbd-903a-e749e56bb7b7
+
+	column LOADED_AT
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 7c4fcb1e-d00a-4bc4-a34a-2bfb65742a12
+		summarizeBy: none
+		sourceColumn: LOADED_AT
+
+		variation Variation
+			isDefault
+			relationship: ac6f4f79-e9f1-4fa9-98e7-791c0595107a
+			defaultHierarchy: LocalDateTable_09118457-d83d-428d-832d-1e07cd980e79.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+	column SOURCE
+		dataType: string
+		lineageTag: 7e172990-0b06-4120-a3c4-8d867e7f5c07
+		summarizeBy: none
+		sourceColumn: SOURCE
+
+		annotation SummarizationSetBy = Automatic
+
+	column ROW_COUNTS
+		dataType: string
+		lineageTag: 902c211e-6289-4910-9ee8-f17a88f2869d
+		summarizeBy: none
+		sourceColumn: ROW_COUNTS
+
+		annotation SummarizationSetBy = Automatic
+
+	partition LoadInfo = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("sql-lab-data-eng-baby.database.windows.net", "free-sql-db-5402162"),
+				    Log = Source{[Schema = "wmslab", Item = "LOAD_LOG"]}[Data],
+				    Latest = Table.FirstN(Table.Sort(Log, {{"LOADED_AT", Order.Descending}}), 1),
+				    Kept = Table.SelectColumns(Latest, {"LOADED_AT", "SOURCE", "ROW_COUNTS"}),
+				    Typed = Table.TransformColumnTypes(Kept, {{"LOADED_AT", type datetime}})
+				in
+				    Typed
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "SemanticModel",
+    "displayName": "InventoryAging"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "55e56b22-a4d3-48fd-ba6a-9e2d47e69821"
+  }
+}

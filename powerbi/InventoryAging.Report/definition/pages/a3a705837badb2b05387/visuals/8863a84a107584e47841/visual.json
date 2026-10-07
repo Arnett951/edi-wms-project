@@ -1,0 +1,74 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
+  "name": "8863a84a107584e47841",
+  "position": {
+    "x": 1268,
+    "y": 114,
+    "z": 5000,
+    "height": 140,
+    "width": 292,
+    "tabOrder": 5000
+  },
+  "visual": {
+    "visualType": "cardVisual",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "InventoryAging"
+                    }
+                  },
+                  "Property": "Qty DOT 6+ Yrs"
+                }
+              },
+              "queryRef": "InventoryAging.Qty DOT 6+ Yrs",
+              "nativeQueryRef": "Qty DOT 6+ Yrs"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Measure": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "InventoryAging"
+                  }
+                },
+                "Property": "Qty DOT 6+ Yrs"
+              }
+            },
+            "direction": "Descending"
+          }
+        ],
+        "isDefaultSort": true
+      }
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "187c9ff0bb4cd7930e50",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "InventoryAging"
+              }
+            },
+            "Property": "Qty DOT 6+ Yrs"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

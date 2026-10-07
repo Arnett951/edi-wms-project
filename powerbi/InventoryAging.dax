@@ -137,3 +137,23 @@ SWITCH (
 Report Title =
 VAR f = SELECTEDVALUE ( InventoryAging[WAREHOUSE_CODE], "All facilities" )
 RETURN "Warehouse Inventory Aging - " & f
+
+// ===================== Matrix detail columns =====================
+// SELECTEDVALUE shows the value when the row has exactly one (a lot row, or a
+// one-description SKU) and stays blank on totals, so text can sit in Values.
+
+Unavailable Qty = [On Hand Qty] - [Available Qty]
+
+Description = SELECTEDVALUE ( InventoryAging[DESCRIPTION] )
+
+Tire Size = SELECTEDVALUE ( InventoryAging[TIRE_SIZE] )
+
+Location = SELECTEDVALUE ( InventoryAging[LOCATION_CODE], "Multiple" )
+
+Zone = SELECTEDVALUE ( InventoryAging[ZONE], "Multiple" )
+
+Stock Status = SELECTEDVALUE ( InventoryAging[STOCK_STATUS], "Mixed" )
+
+DOT Code = SELECTEDVALUE ( InventoryAging[DOT_CODE] )
+
+Mfg Date = MIN ( InventoryAging[MFG_DATE] )

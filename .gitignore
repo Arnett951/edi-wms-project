@@ -7,3 +7,8 @@ __pycache__/
 
 # Built by deploy-api-containerapp.yml for the container image only
 api/_repo_snapshot/
+
+# Power BI project (.pbip): keep the TMDL/JSON definitions, skip local state and data caches
+**/.pbi/localSettings.json
+**/.pbi/cache.abf
+*.pbix

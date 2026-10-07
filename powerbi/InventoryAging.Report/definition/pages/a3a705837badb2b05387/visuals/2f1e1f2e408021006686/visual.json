@@ -1,0 +1,116 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
+  "name": "2f1e1f2e408021006686",
+  "position": {
+    "x": 284,
+    "y": 254,
+    "z": 6000,
+    "height": 330,
+    "width": 572,
+    "tabOrder": 6000
+  },
+  "visual": {
+    "visualType": "clusteredBarChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "InventoryAging"
+                    }
+                  },
+                  "Property": "Warehouse Age Bucket"
+                }
+              },
+              "queryRef": "InventoryAging.Warehouse Age Bucket",
+              "nativeQueryRef": "Warehouse Age Bucket",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "InventoryAging"
+                        }
+                      },
+                      "Property": "INVENTORY_VALUE"
+                    }
+                  },
+                  "Function": 0
+                }
+              },
+              "queryRef": "Sum(InventoryAging.INVENTORY_VALUE)",
+              "nativeQueryRef": "Sum of INVENTORY_VALUE"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "InventoryAging"
+                  }
+                },
+                "Property": "Warehouse Age Bucket"
+              }
+            },
+            "direction": "Ascending"
+          }
+        ]
+      }
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "52771888eac430e89550",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "InventoryAging"
+              }
+            },
+            "Property": "Warehouse Age Bucket"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "7012396e4ea5a7290264",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "InventoryAging"
+                  }
+                },
+                "Property": "INVENTORY_VALUE"
+              }
+            },
+            "Function": 0
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

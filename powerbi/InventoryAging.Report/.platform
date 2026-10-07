@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Report",
+    "displayName": "InventoryAging"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "34886494-637a-42a9-9519-4824cbbe9f67"
+  }
+}

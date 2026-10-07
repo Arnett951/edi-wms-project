@@ -1,0 +1,20 @@
+relationship ac6f4f79-e9f1-4fa9-98e7-791c0595107a
+	joinOnDateBehavior: datePartOnly
+	fromColumn: LoadInfo.LOADED_AT
+	toColumn: LocalDateTable_09118457-d83d-428d-832d-1e07cd980e79.Date
+
+relationship 10a91755-5ed3-493d-afd8-aea7b84d861a
+	joinOnDateBehavior: datePartOnly
+	fromColumn: InventoryAging.MFG_DATE
+	toColumn: LocalDateTable_cc0ec757-9987-4a20-8ccc-a6b726cfffa9.Date
+
+relationship a50560e2-2b57-48d7-81b8-f9cf9b5d00a8
+	joinOnDateBehavior: datePartOnly
+	fromColumn: InventoryAging.RECEIVED_DATE
+	toColumn: LocalDateTable_b1d02aab-ac03-42c7-bc62-9f09acaa96cf.Date
+
+relationship 18a15b15-535c-4c57-bb2a-1476270e83a4
+	joinOnDateBehavior: datePartOnly
+	fromColumn: InventoryAging.OLDEST_RECEIVED_DATE
+	toColumn: LocalDateTable_5bc32968-2cbe-46a8-93a3-64983fc0377d.Date
+

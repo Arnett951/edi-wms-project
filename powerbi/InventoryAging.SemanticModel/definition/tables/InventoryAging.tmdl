@@ -1,0 +1,433 @@
+table InventoryAging
+	lineageTag: 9cb507dd-8954-4ac5-8b7a-9e2349d5af9e
+
+	measure 'On Hand Qty' = SUM ( InventoryAging[ON_HAND_QTY] )
+		formatString: 0
+		lineageTag: f9fb3661-7974-4b67-8b15-6c8b49ad733d
+
+	measure 'Reserved Qty' = SUM ( InventoryAging[RESERVED_QTY] )
+		formatString: 0
+		lineageTag: 5cf6584a-3deb-4751-86b3-dde9ea65345c
+
+	measure 'Available Qty' = SUM ( InventoryAging[AVAILABLE_QTY] )
+		formatString: 0
+		lineageTag: 190d661f-768e-46e2-9eab-b7cd7996b5aa
+
+	measure 'Inventory Value' = SUM ( InventoryAging[INVENTORY_VALUE] )
+		formatString: \$#,0.###############;(\$#,0.###############);\$#,0.###############
+		lineageTag: a8c6d0ca-7d46-48d0-9c58-231a6c312159
+
+		annotation PBI_FormatHint = {"currencyCulture":"en-US"}
+
+	measure 'Lot Count' = COUNTROWS ( InventoryAging )
+		formatString: 0
+		lineageTag: e756553d-44b9-4d50-9e19-658efada57bf
+
+	measure 'SKU Count' = DISTINCTCOUNT ( InventoryAging[SKU] )
+		formatString: 0
+		lineageTag: d8617096-1ec9-4fdb-bbbd-bbbd01194526
+
+	measure 'Avg Warehouse Age (Days)' =
+			
+			DIVIDE (
+			    SUMX ( InventoryAging, InventoryAging[WAREHOUSE_AGE_DAYS] * InventoryAging[ON_HAND_QTY] ),
+			    [On Hand Qty]
+			)
+		lineageTag: 7eb8c7c4-4d9c-4794-b00c-0c37572ce0b6
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Max Warehouse Age (Days)' = MAX ( InventoryAging[WAREHOUSE_AGE_DAYS] )
+		formatString: 0
+		lineageTag: 6795fcc5-1aa6-4277-8827-3d2b20cbde13
+
+	measure 'Oldest Received Date' = MIN ( InventoryAging[RECEIVED_DATE] )
+		formatString: General Date
+		lineageTag: 5a5dd7e4-ee81-44e2-8590-ef925847935f
+
+	measure 'Avg Tire Age (Years)' =
+			
+			DIVIDE (
+			    SUMX (
+			        FILTER ( InventoryAging, NOT ISBLANK ( InventoryAging[TIRE_AGE_DAYS] ) ),
+			        InventoryAging[TIRE_AGE_DAYS] * InventoryAging[ON_HAND_QTY]
+			    ),
+			    CALCULATE ( [On Hand Qty], NOT ISBLANK ( InventoryAging[TIRE_AGE_DAYS] ) )
+			) / 365.25
+		lineageTag: 16fdb58f-ee99-4913-be76-719c14d272fe
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Value Aged 90+' =
+			
+			CALCULATE ( [Inventory Value], InventoryAging[WAREHOUSE_AGE_DAYS] > 90 )
+		formatString: \$#,0.###############;(\$#,0.###############);\$#,0.###############
+		lineageTag: 687c60e2-12df-44ab-86dc-933b3268c9b2
+
+		annotation PBI_FormatHint = {"currencyCulture":"en-US"}
+
+	measure '% Value Aged 90+' = DIVIDE ( [Value Aged 90+], [Inventory Value] )
+		lineageTag: 9f78ea95-dd08-4e82-9103-4c69f4933ae2
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Qty Aged 90+' =
+			
+			CALCULATE ( [On Hand Qty], InventoryAging[WAREHOUSE_AGE_DAYS] > 90 )
+		formatString: 0
+		lineageTag: 8b5dc8fb-59fb-4474-9ddf-4f4bded4bc73
+
+	measure 'Qty DOT 6+ Yrs' =
+			
+			CALCULATE ( [On Hand Qty], InventoryAging[TIRE_AGE_DAYS] >= 6 * 365.25 )
+		formatString: 0
+		lineageTag: 87ff2825-45bf-4cdb-8205-78467e1c8416
+
+	measure 'Value DOT 6+ Yrs' =
+			
+			CALCULATE ( [Inventory Value], InventoryAging[TIRE_AGE_DAYS] >= 6 * 365.25 )
+		formatString: \$#,0.###############;(\$#,0.###############);\$#,0.###############
+		lineageTag: e29747ad-4662-4657-ba80-f9eb7eb86fb1
+
+		annotation PBI_FormatHint = {"currencyCulture":"en-US"}
+
+	measure 'Qty Not Available' =
+			
+			CALCULATE ( [On Hand Qty], InventoryAging[STOCK_STATUS] <> "AVAILABLE" )
+		formatString: 0
+		lineageTag: 7104c44c-6d3e-4b17-855e-9655616de0e5
+
+	measure '% of Total Value' =
+			
+			DIVIDE (
+			    [Inventory Value],
+			    CALCULATE ( [Inventory Value], REMOVEFILTERS ( InventoryAging[Warehouse Age Bucket], InventoryAging[Warehouse Age Bucket Sort] ) )
+			)
+		lineageTag: 52318728-70dd-40af-81fa-c55a57dc4433
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Data As Of' =
+			
+			"Data as of " & FORMAT ( MAX ( LoadInfo[LOADED_AT] ), "yyyy-mm-dd hh:nn" ) & " UTC"
+		lineageTag: d597b9dd-2309-4848-abed-4d21b7b2f07a
+
+	measure 'Report Title' =
+			
+			VAR f = SELECTEDVALUE ( InventoryAging[WAREHOUSE_CODE], "All facilities" )
+			RETURN "Warehouse Inventory Aging - " & f
+		lineageTag: b6f6e918-6c97-4c18-a7c3-3e449274e25e
+
+	column WAREHOUSE_CODE
+		dataType: string
+		lineageTag: d715af11-522f-4527-be5b-366a481c86ff
+		summarizeBy: none
+		sourceColumn: WAREHOUSE_CODE
+
+		annotation SummarizationSetBy = Automatic
+
+	column WAREHOUSE_NAME
+		dataType: string
+		lineageTag: 9e14f1d1-eae5-43a3-8116-4929003da2b6
+		summarizeBy: none
+		sourceColumn: WAREHOUSE_NAME
+
+		annotation SummarizationSetBy = Automatic
+
+	column SKU
+		dataType: string
+		lineageTag: 0e76b078-4986-43bd-81ba-02759e108099
+		summarizeBy: none
+		sourceColumn: SKU
+
+		annotation SummarizationSetBy = Automatic
+
+	column DESCRIPTION
+		dataType: string
+		lineageTag: 950361f0-ee7c-4457-9768-de61caf7fbdb
+		summarizeBy: none
+		sourceColumn: DESCRIPTION
+
+		annotation SummarizationSetBy = Automatic
+
+	column TIRE_SIZE
+		dataType: string
+		lineageTag: d6b6297f-55c2-45a8-9cb7-024d80f36817
+		summarizeBy: none
+		sourceColumn: TIRE_SIZE
+
+		annotation SummarizationSetBy = Automatic
+
+	column LOCATION_CODE
+		dataType: string
+		lineageTag: cab0d6d5-40dd-4163-b6ae-9972018710d7
+		summarizeBy: none
+		sourceColumn: LOCATION_CODE
+
+		annotation SummarizationSetBy = Automatic
+
+	column ZONE
+		dataType: string
+		lineageTag: be86f0fc-bea3-4afd-9804-783d6d94aa14
+		summarizeBy: none
+		sourceColumn: ZONE
+
+		annotation SummarizationSetBy = Automatic
+
+	column LOT_NUMBER
+		dataType: string
+		lineageTag: f2160139-3523-448f-bbbb-b40be259ddad
+		summarizeBy: none
+		sourceColumn: LOT_NUMBER
+
+		annotation SummarizationSetBy = Automatic
+
+	column DOT_CODE
+		dataType: string
+		lineageTag: 4282562d-6fd1-430a-bdf7-2fdfaac96cca
+		summarizeBy: none
+		sourceColumn: DOT_CODE
+
+		annotation SummarizationSetBy = Automatic
+
+	column MFG_WEEK
+		dataType: int64
+		formatString: 0
+		lineageTag: e2ddaa0d-bf01-481f-80ee-8afe36e222e8
+		summarizeBy: sum
+		sourceColumn: MFG_WEEK
+
+		annotation SummarizationSetBy = Automatic
+
+	column MFG_YEAR
+		dataType: int64
+		formatString: 0
+		lineageTag: 396a60c9-1816-4c64-a78f-1ed98bc3dd5a
+		summarizeBy: sum
+		sourceColumn: MFG_YEAR
+
+		annotation SummarizationSetBy = Automatic
+
+	column MFG_DATE
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 14103209-983b-4ba2-aeaa-662928643bc7
+		summarizeBy: none
+		sourceColumn: MFG_DATE
+
+		variation Variation
+			isDefault
+			relationship: 10a91755-5ed3-493d-afd8-aea7b84d861a
+			defaultHierarchy: LocalDateTable_cc0ec757-9987-4a20-8ccc-a6b726cfffa9.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column RECEIVED_DATE
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: f2fadcb1-9a30-40ec-bcc3-8821100a8082
+		summarizeBy: none
+		sourceColumn: RECEIVED_DATE
+
+		variation Variation
+			isDefault
+			relationship: a50560e2-2b57-48d7-81b8-f9cf9b5d00a8
+			defaultHierarchy: LocalDateTable_b1d02aab-ac03-42c7-bc62-9f09acaa96cf.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column OLDEST_RECEIVED_DATE
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: ed183cf3-91de-4e9f-ad6c-c7b617cbb939
+		summarizeBy: none
+		sourceColumn: OLDEST_RECEIVED_DATE
+
+		variation Variation
+			isDefault
+			relationship: 18a15b15-535c-4c57-bb2a-1476270e83a4
+			defaultHierarchy: LocalDateTable_5bc32968-2cbe-46a8-93a3-64983fc0377d.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column WAREHOUSE_AGE_DAYS
+		dataType: int64
+		formatString: 0
+		lineageTag: 6fcd042a-602d-4a2c-b652-6f9a891ea686
+		summarizeBy: sum
+		sourceColumn: WAREHOUSE_AGE_DAYS
+
+		annotation SummarizationSetBy = Automatic
+
+	column TIRE_AGE_DAYS
+		dataType: int64
+		formatString: 0
+		lineageTag: 1d6f9ce4-db9c-4032-85ff-016e2d94c098
+		summarizeBy: sum
+		sourceColumn: TIRE_AGE_DAYS
+
+		annotation SummarizationSetBy = Automatic
+
+	column STOCK_STATUS
+		dataType: string
+		lineageTag: b1ce4c35-bd17-442a-b43a-bfc380dad914
+		summarizeBy: none
+		sourceColumn: STOCK_STATUS
+
+		annotation SummarizationSetBy = Automatic
+
+	column ON_HAND_QTY
+		dataType: int64
+		formatString: 0
+		lineageTag: 1ccb68db-deed-4d1c-aed9-c65a77fd2977
+		summarizeBy: sum
+		sourceColumn: ON_HAND_QTY
+
+		annotation SummarizationSetBy = Automatic
+
+	column RESERVED_QTY
+		dataType: int64
+		formatString: 0
+		lineageTag: aaef0aba-1dc0-4691-96e8-c94c2280d0e7
+		summarizeBy: sum
+		sourceColumn: RESERVED_QTY
+
+		annotation SummarizationSetBy = Automatic
+
+	column AVAILABLE_QTY
+		dataType: int64
+		formatString: 0
+		lineageTag: 6ffc1e4a-0237-43c5-bc59-9e4635b21902
+		summarizeBy: sum
+		sourceColumn: AVAILABLE_QTY
+
+		annotation SummarizationSetBy = Automatic
+
+	column INVENTORY_VALUE
+		dataType: decimal
+		formatString: \$#,0.###############;(\$#,0.###############);\$#,0.###############
+		lineageTag: 08c9d230-d0b7-418a-bd2a-1790a0720058
+		summarizeBy: sum
+		sourceColumn: INVENTORY_VALUE
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"currencyCulture":"en-US"}
+
+	column 'Warehouse Age Bucket Sort' =
+			
+			SWITCH (
+			    TRUE (),
+			    InventoryAging[WAREHOUSE_AGE_DAYS] <= 30, 1,
+			    InventoryAging[WAREHOUSE_AGE_DAYS] <= 60, 2,
+			    InventoryAging[WAREHOUSE_AGE_DAYS] <= 90, 3,
+			    InventoryAging[WAREHOUSE_AGE_DAYS] <= 180, 4,
+			    5
+			)
+		formatString: 0
+		lineageTag: 5c5450fc-e57f-47a2-ac06-a51331889552
+		summarizeBy: sum
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Warehouse Age Bucket' =
+			
+			SWITCH (
+			    TRUE (),
+			    InventoryAging[WAREHOUSE_AGE_DAYS] <= 30, "7-30 days",
+			    InventoryAging[WAREHOUSE_AGE_DAYS] <= 60, "31-60 days",
+			    InventoryAging[WAREHOUSE_AGE_DAYS] <= 90, "61-90 days",
+			    InventoryAging[WAREHOUSE_AGE_DAYS] <= 180, "91-180 days",
+			    "180+ days"
+			)
+		lineageTag: 5b3d8b3e-2a16-497f-a704-01768a17e063
+		summarizeBy: none
+		sortByColumn: 'Warehouse Age Bucket Sort'
+
+		changedProperty = SortByColumn
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Tire Age Years' =
+			
+			IF (
+			    ISBLANK ( InventoryAging[TIRE_AGE_DAYS] ),
+			    BLANK (),
+			    ROUNDDOWN ( InventoryAging[TIRE_AGE_DAYS] / 365.25, 0 )
+			)
+		lineageTag: bc6be33b-1fa5-485d-9246-91b06afaca68
+		summarizeBy: sum
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column 'Tire Age Bucket Sort' =
+			
+			VAR y = InventoryAging[TIRE_AGE_DAYS] / 365.25
+			RETURN
+			    SWITCH (
+			        TRUE (),
+			        ISBLANK ( InventoryAging[TIRE_AGE_DAYS] ), 5,
+			        y < 1, 1,
+			        y < 3, 2,
+			        y < 6, 3,
+			        4
+			    )
+		formatString: 0
+		lineageTag: 54bcefa4-358c-4e64-ada7-b897b02db0c9
+		summarizeBy: sum
+
+		changedProperty = SortByColumn
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Tire Age Bucket' =
+			
+			VAR y = InventoryAging[TIRE_AGE_DAYS] / 365.25
+			RETURN
+			    SWITCH (
+			        TRUE (),
+			        ISBLANK ( InventoryAging[TIRE_AGE_DAYS] ), "No DOT data",
+			        y < 1, "Under 1 yr",
+			        y < 3, "1-3 yrs",
+			        y < 6, "3-6 yrs",
+			        "6+ yrs"
+			    )
+		lineageTag: 5e6cf306-411d-4e7d-9cea-89ace2ecac94
+		summarizeBy: none
+		sortByColumn: 'Tire Age Bucket Sort'
+
+		changedProperty = SortByColumn
+
+		annotation SummarizationSetBy = Automatic
+
+	partition InventoryAging = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("sql-lab-data-eng-baby.database.windows.net", "free-sql-db-5402162"),
+				    Aging = Source{[Schema = "wmslab", Item = "vw_InventoryAging"]}[Data],
+				    Typed = Table.TransformColumnTypes(Aging, {
+				        {"WAREHOUSE_CODE", type text}, {"WAREHOUSE_NAME", type text},
+				        {"SKU", type text}, {"DESCRIPTION", type text}, {"TIRE_SIZE", type text},
+				        {"LOCATION_CODE", type text}, {"ZONE", type text}, {"LOT_NUMBER", type text},
+				        {"DOT_CODE", type text}, {"MFG_WEEK", Int64.Type}, {"MFG_YEAR", Int64.Type},
+				        {"MFG_DATE", type date}, {"RECEIVED_DATE", type date}, {"OLDEST_RECEIVED_DATE", type date},
+				        {"WAREHOUSE_AGE_DAYS", Int64.Type}, {"TIRE_AGE_DAYS", Int64.Type},
+				        {"STOCK_STATUS", type text}, {"ON_HAND_QTY", Int64.Type}, {"RESERVED_QTY", Int64.Type},
+				        {"AVAILABLE_QTY", Int64.Type}, {"INVENTORY_VALUE", Currency.Type}
+				    })
+				in
+				    Typed
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
