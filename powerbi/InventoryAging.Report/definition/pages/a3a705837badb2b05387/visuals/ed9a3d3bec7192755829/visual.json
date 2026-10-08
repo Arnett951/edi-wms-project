@@ -2,15 +2,15 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
   "name": "ed9a3d3bec7192755829",
   "position": {
-    "x": 856,
-    "y": 254,
+    "x": 646,
+    "y": 200,
     "z": 7000,
-    "height": 330,
-    "width": 704,
+    "height": 240,
+    "width": 618,
     "tabOrder": 7000
   },
   "visual": {
-    "visualType": "clusteredBarChart",
+    "visualType": "barChart",
     "query": {
       "queryState": {
         "Category": {
@@ -23,11 +23,11 @@
                       "Entity": "InventoryAging"
                     }
                   },
-                  "Property": "Tire Age Bucket"
+                  "Property": "SKU"
                 }
               },
-              "queryRef": "InventoryAging.Tire Age Bucket",
-              "nativeQueryRef": "Tire Age Bucket",
+              "queryRef": "InventoryAging.SKU",
+              "nativeQueryRef": "SKU",
               "active": true
             }
           ]
@@ -36,27 +36,137 @@
           "projections": [
             {
               "field": {
-                "Aggregation": {
+                "Measure": {
                   "Expression": {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "InventoryAging"
-                        }
-                      },
-                      "Property": "ON_HAND_QTY"
+                    "SourceRef": {
+                      "Entity": "InventoryAging"
                     }
                   },
-                  "Function": 0
+                  "Property": "Available Qty"
                 }
               },
-              "queryRef": "Sum(InventoryAging.ON_HAND_QTY)",
-              "nativeQueryRef": "Sum of ON_HAND_QTY"
+              "queryRef": "InventoryAging.Available Qty",
+              "nativeQueryRef": "Available Qty",
+              "displayName": "Available"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "InventoryAging"
+                    }
+                  },
+                  "Property": "Unavailable Qty"
+                }
+              },
+              "queryRef": "InventoryAging.Unavailable Qty",
+              "nativeQueryRef": "Unavailable Qty",
+              "displayName": "Held / reserved"
             }
           ]
         }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "InventoryAging"
+                  }
+                },
+                "Property": "SKU"
+              }
+            },
+            "direction": "Ascending"
+          }
+        ]
       }
     },
-    "drillFilterOtherVisuals": true
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "legend": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "position": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Top'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "dataPoint": [
+        {
+          "properties": {
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#334155'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "InventoryAging.Available Qty"
+          }
+        },
+        {
+          "properties": {
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#F09595'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "InventoryAging.Unavailable Qty"
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'On hand by SKU: available vs held / reserved'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
   }
 }

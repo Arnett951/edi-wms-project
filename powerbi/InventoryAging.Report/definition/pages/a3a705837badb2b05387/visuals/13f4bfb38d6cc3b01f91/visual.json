@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
   "name": "13f4bfb38d6cc3b01f91",
   "position": {
-    "x": 290,
-    "y": 114,
+    "x": 16,
+    "y": 84,
     "z": 9001,
-    "height": 140,
-    "width": 228,
+    "height": 104,
+    "width": 240,
     "tabOrder": 9001
   },
   "visual": {
@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "InventoryAging.Inventory Value",
-              "nativeQueryRef": "Inventory Value"
+              "nativeQueryRef": "Inventory Value",
+              "displayName": "Inventory value"
             }
           ]
         }

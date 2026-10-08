@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
   "name": "13ac38b78e22a45603eb",
   "position": {
-    "x": 764,
-    "y": 112,
+    "x": 520,
+    "y": 84,
     "z": 3000,
-    "height": 140,
-    "width": 246,
+    "height": 104,
+    "width": 240,
     "tabOrder": 3000
   },
   "visual": {
@@ -28,7 +28,7 @@
               },
               "queryRef": "InventoryAging.% Value Aged 90+",
               "nativeQueryRef": "% Value Aged 90+",
-              "format": "0.00%;-0.00%;0.00%"
+              "displayName": "% value aged 90+"
             }
           ]
         }

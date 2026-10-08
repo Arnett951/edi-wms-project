@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
   "name": "8863a84a107584e47841",
   "position": {
-    "x": 1268,
-    "y": 114,
+    "x": 1024,
+    "y": 84,
     "z": 5000,
-    "height": 140,
-    "width": 292,
+    "height": 104,
+    "width": 240,
     "tabOrder": 5000
   },
   "visual": {
@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "InventoryAging.Qty DOT 6+ Yrs",
-              "nativeQueryRef": "Qty DOT 6+ Yrs"
+              "nativeQueryRef": "Qty DOT 6+ Yrs",
+              "displayName": "Tires with DOT 6+ yrs"
             }
           ]
         }

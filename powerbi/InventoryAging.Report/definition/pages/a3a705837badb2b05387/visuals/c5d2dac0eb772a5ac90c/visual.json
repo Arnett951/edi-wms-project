@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
   "name": "c5d2dac0eb772a5ac90c",
   "position": {
-    "x": 1010,
-    "y": 114,
+    "x": 772,
+    "y": 84,
     "z": 4000,
-    "height": 140,
-    "width": 258,
+    "height": 104,
+    "width": 240,
     "tabOrder": 4000
   },
   "visual": {
@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "InventoryAging.Avg Warehouse Age (Days)",
-              "nativeQueryRef": "Avg Warehouse Age (Days)"
+              "nativeQueryRef": "Avg Warehouse Age (Days)",
+              "displayName": "Avg warehouse age (days)"
             }
           ]
         }

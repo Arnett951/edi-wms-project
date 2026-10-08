@@ -1,2 +1,272 @@
 cultureInfo en-US
 
+	linguisticMetadata =
+			{
+			  "Version": "2.0.0",
+			  "Language": "en-US",
+			  "Entities": {
+			    "inventoryaging.value_aged_90": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "InventoryAging",
+			          "ConceptualProperty": "% Value Aged 90+"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "% value aged 90+": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        },
+			        {
+			          "% 90+": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "inventoryaging.inventory_value": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "InventoryAging",
+			          "ConceptualProperty": "Inventory Value"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Inventory value": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        },
+			        {
+			          "Value": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "inventoryaging.qty_dot_6_yrs": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "InventoryAging",
+			          "ConceptualProperty": "Qty DOT 6+ Yrs"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Tires with DOT 6+ yrs": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "inventoryaging.value_aged_901": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "InventoryAging",
+			          "ConceptualProperty": "Value Aged 90+"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Value aged 90+": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        },
+			        {
+			          "Value 90+": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "inventoryaging.avg_warehouse_age_days": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "InventoryAging",
+			          "ConceptualProperty": "Avg Warehouse Age (Days)"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Avg warehouse age (days)": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "inventoryaging.item_description": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "InventoryAging",
+			          "ConceptualProperty": "Item Description"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Description": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "inventoryaging.lot_count": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "InventoryAging",
+			          "ConceptualProperty": "Lot Count"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Lots": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "inventoryaging.on_hand_qty": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "InventoryAging",
+			          "ConceptualProperty": "On Hand Qty"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "On hand": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "inventoryaging.available_qty": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "InventoryAging",
+			          "ConceptualProperty": "Available Qty"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Available": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "inventoryaging.unavailable_qty": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "InventoryAging",
+			          "ConceptualProperty": "Unavailable Qty"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Held / reserved": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "inventoryaging.max_warehouse_age_days": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "InventoryAging",
+			          "ConceptualProperty": "Max Warehouse Age (Days)"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Oldest (days)": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    }
+			  }
+			}
+		contentType: json
+

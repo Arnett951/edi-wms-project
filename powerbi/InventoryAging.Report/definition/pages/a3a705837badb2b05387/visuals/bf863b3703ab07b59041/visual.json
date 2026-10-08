@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
   "name": "bf863b3703ab07b59041",
   "position": {
-    "x": 518,
-    "y": 112,
+    "x": 268,
+    "y": 84,
     "z": 2000,
-    "height": 140,
-    "width": 244,
+    "height": 104,
+    "width": 240,
     "tabOrder": 2000
   },
   "visual": {
@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "InventoryAging.Value Aged 90+",
-              "nativeQueryRef": "Value Aged 90+"
+              "nativeQueryRef": "Value Aged 90+",
+              "displayName": "Value aged 90+"
             }
           ]
         }
@@ -51,7 +52,25 @@
         "isDefaultSort": true
       }
     },
-    "drillFilterOtherVisuals": true
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "value": [
+        {
+          "properties": {
+            "labelPrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "1L"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "InventoryAging.Value Aged 90+"
+          }
+        }
+      ]
+    }
   },
   "filterConfig": {
     "filters": [

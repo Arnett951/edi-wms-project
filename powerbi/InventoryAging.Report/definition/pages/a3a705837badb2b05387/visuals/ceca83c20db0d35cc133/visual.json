@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
   "name": "ceca83c20db0d35cc133",
   "position": {
-    "x": 444,
-    "y": 584,
+    "x": 16,
+    "y": 452,
     "z": 8000,
-    "height": 358,
-    "width": 970,
+    "height": 252,
+    "width": 1248,
     "tabOrder": 8000
   },
   "visual": {
@@ -57,49 +57,117 @@
                       "Entity": "InventoryAging"
                     }
                   },
+                  "Property": "Item Description"
+                }
+              },
+              "queryRef": "InventoryAging.Item Description",
+              "nativeQueryRef": "Item Description",
+              "displayName": "Description"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "InventoryAging"
+                    }
+                  },
+                  "Property": "Lot Count"
+                }
+              },
+              "queryRef": "InventoryAging.Lot Count",
+              "nativeQueryRef": "Lot Count",
+              "displayName": "Lots"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "InventoryAging"
+                    }
+                  },
                   "Property": "On Hand Qty"
                 }
               },
               "queryRef": "InventoryAging.On Hand Qty",
-              "nativeQueryRef": "On Hand Qty"
+              "nativeQueryRef": "On Hand Qty",
+              "displayName": "On hand"
             },
             {
               "field": {
-                "Aggregation": {
+                "Measure": {
                   "Expression": {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "InventoryAging"
-                        }
-                      },
-                      "Property": "AVAILABLE_QTY"
+                    "SourceRef": {
+                      "Entity": "InventoryAging"
                     }
                   },
-                  "Function": 0
+                  "Property": "Available Qty"
                 }
               },
-              "queryRef": "Sum(InventoryAging.AVAILABLE_QTY)",
-              "nativeQueryRef": "Sum of AVAILABLE_QTY"
+              "queryRef": "InventoryAging.Available Qty",
+              "nativeQueryRef": "Available Qty",
+              "displayName": "Available"
             },
             {
               "field": {
-                "Aggregation": {
+                "Measure": {
                   "Expression": {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "InventoryAging"
-                        }
-                      },
-                      "Property": "INVENTORY_VALUE"
+                    "SourceRef": {
+                      "Entity": "InventoryAging"
                     }
                   },
-                  "Function": 0
+                  "Property": "Unavailable Qty"
                 }
               },
-              "queryRef": "Sum(InventoryAging.INVENTORY_VALUE)",
-              "nativeQueryRef": "Sum of INVENTORY_VALUE"
+              "queryRef": "InventoryAging.Unavailable Qty",
+              "nativeQueryRef": "Unavailable Qty",
+              "displayName": "Held / reserved"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "InventoryAging"
+                    }
+                  },
+                  "Property": "Inventory Value"
+                }
+              },
+              "queryRef": "InventoryAging.Inventory Value",
+              "nativeQueryRef": "Inventory Value",
+              "displayName": "Value"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "InventoryAging"
+                    }
+                  },
+                  "Property": "Value Aged 90+"
+                }
+              },
+              "queryRef": "InventoryAging.Value Aged 90+",
+              "nativeQueryRef": "Value Aged 90+",
+              "displayName": "Value 90+"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "InventoryAging"
+                    }
+                  },
+                  "Property": "% Value Aged 90+"
+                }
+              },
+              "queryRef": "InventoryAging.% Value Aged 90+",
+              "nativeQueryRef": "% Value Aged 90+",
+              "displayName": "% 90+"
             },
             {
               "field": {
@@ -113,7 +181,8 @@
                 }
               },
               "queryRef": "InventoryAging.Max Warehouse Age (Days)",
-              "nativeQueryRef": "Max Warehouse Age (Days)"
+              "nativeQueryRef": "Max Warehouse Age (Days)",
+              "displayName": "Oldest (days)"
             }
           ]
         }
@@ -122,21 +191,16 @@
         "sort": [
           {
             "field": {
-              "Aggregation": {
+              "Measure": {
                 "Expression": {
-                  "Column": {
-                    "Expression": {
-                      "SourceRef": {
-                        "Entity": "InventoryAging"
-                      }
-                    },
-                    "Property": "AVAILABLE_QTY"
+                  "SourceRef": {
+                    "Entity": "InventoryAging"
                   }
                 },
-                "Function": 0
+                "Property": "Inventory Value"
               }
             },
-            "direction": "Ascending"
+            "direction": "Descending"
           }
         ]
       }
@@ -184,13 +248,13 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "221.00102514712884D"
+                  "Value": "110D"
                 }
               }
             }
           },
           "selector": {
-            "metadata": "Sum(InventoryAging.INVENTORY_VALUE)"
+            "metadata": "InventoryAging.SKU"
           }
         },
         {
@@ -198,13 +262,13 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "218D"
+                  "Value": "300D"
                 }
               }
             }
           },
           "selector": {
-            "metadata": "Sum(InventoryAging.AVAILABLE_QTY)"
+            "metadata": "InventoryAging.Item Description"
           }
         },
         {
@@ -212,7 +276,21 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "137.00109734759536D"
+                  "Value": "70D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "InventoryAging.Lot Count"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "95D"
                 }
               }
             }
@@ -226,13 +304,13 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "218.00128576745655D"
+                  "Value": "95D"
                 }
               }
             }
           },
           "selector": {
-            "metadata": "InventoryAging.Max Warehouse Age (Days)"
+            "metadata": "InventoryAging.Available Qty"
           }
         },
         {
@@ -240,13 +318,69 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "130.00542232073317D"
+                  "Value": "120D"
                 }
               }
             }
           },
           "selector": {
-            "metadata": "InventoryAging.SKU"
+            "metadata": "InventoryAging.Unavailable Qty"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "115D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "InventoryAging.Inventory Value"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "115D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "InventoryAging.Value Aged 90+"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "80D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "InventoryAging.% Value Aged 90+"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "110D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "InventoryAging.Max Warehouse Age (Days)"
           }
         }
       ],
@@ -269,14 +403,14 @@
             "rowPadding": {
               "expr": {
                 "Literal": {
-                  "Value": "5D"
+                  "Value": "3D"
                 }
               }
             },
             "textSize": {
               "expr": {
                 "Literal": {
-                  "Value": "11D"
+                  "Value": "10D"
                 }
               }
             }
@@ -284,6 +418,28 @@
         }
       ]
     },
-    "drillFilterOtherVisuals": true
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Aging detail by SKU (expand a row for its lots)'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
   }
 }

@@ -33,9 +33,8 @@ table InventoryAging
 			    SUMX ( InventoryAging, InventoryAging[WAREHOUSE_AGE_DAYS] * InventoryAging[ON_HAND_QTY] ),
 			    [On Hand Qty]
 			)
+		formatString: 0
 		lineageTag: 7eb8c7c4-4d9c-4794-b00c-0c37572ce0b6
-
-		annotation PBI_FormatHint = {"isGeneralNumber":true}
 
 	measure 'Max Warehouse Age (Days)' = MAX ( InventoryAging[WAREHOUSE_AGE_DAYS] )
 		formatString: 0
@@ -67,9 +66,8 @@ table InventoryAging
 		annotation PBI_FormatHint = {"currencyCulture":"en-US"}
 
 	measure '% Value Aged 90+' = DIVIDE ( [Value Aged 90+], [Inventory Value] )
+		formatString: 0%
 		lineageTag: 9f78ea95-dd08-4e82-9103-4c69f4933ae2
-
-		annotation PBI_FormatHint = {"isGeneralNumber":true}
 
 	measure 'Qty Aged 90+' =
 			
@@ -142,7 +140,7 @@ table InventoryAging
 		lineageTag: 90cad10b-6c44-4030-a4d1-a731b8dd17f7
 
 	/// Lot rows show the location; SKU rows with several lots show Multiple.
-	measure 'Location' = SELECTEDVALUE ( InventoryAging[LOCATION_CODE], "Multiple" )
+	measure Location = SELECTEDVALUE ( InventoryAging[LOCATION_CODE], "Multiple" )
 		lineageTag: 27e813f2-b15f-4ebb-9711-fdd4de0a7e18
 
 	measure 'Location Zone' = SELECTEDVALUE ( InventoryAging[ZONE], "Multiple" )
